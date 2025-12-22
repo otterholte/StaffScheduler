@@ -42,11 +42,11 @@ _current_policies = {
     'min_shift_length': 2,
     'max_hours_per_day': 8,
     'max_splits': 2,
-    'max_split_shifts_per_week': 2,
+    'max_split_shifts_per_week': 1,
     'scheduling_strategy': 'balanced',  # 'minimize', 'balanced', 'maximize'
     'max_days_ft': 5,
     'max_days_ft_mode': 'required',
-    'max_days_pt': 3,
+    'max_days_pt': 4,
     'max_days_pt_mode': 'required'
 }
 
