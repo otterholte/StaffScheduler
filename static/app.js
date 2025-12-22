@@ -224,6 +224,11 @@ function switchTab(tabId) {
             renderShiftTemplates();
         });
     }
+    
+    // Render availability page when switching to settings (availability) tab
+    if (tabId === 'settings') {
+        renderAvailabilityPage();
+    }
 }
 
 // ==================== TOAST NOTIFICATIONS ====================
@@ -1552,10 +1557,21 @@ function renderEmployeesGrid() {
             </div>
         `;
         
-        // Click to expand/collapse
+        // Click to expand/collapse (only one at a time)
         card.querySelector('.employee-card-header').addEventListener('click', (e) => {
             // Don't expand if clicking on a button
             if (e.target.closest('button')) return;
+            
+            const isExpanding = !card.classList.contains('expanded');
+            
+            // Collapse all other cards first
+            document.querySelectorAll('.employee-card.expanded').forEach(otherCard => {
+                if (otherCard !== card) {
+                    otherCard.classList.remove('expanded');
+                }
+            });
+            
+            // Toggle this card
             card.classList.toggle('expanded');
         });
         
@@ -1876,6 +1892,349 @@ async function saveAvailability() {
         }
     } catch (error) {
         showToast('Error saving availability', 'error');
+    }
+}
+
+// ==================== AVAILABILITY PAGE ====================
+let selectedAvailabilityEmpId = null;
+
+function renderAvailabilityPage() {
+    const staffList = document.getElementById('availabilityStaffList');
+    if (!staffList) return;
+    
+    staffList.innerHTML = '';
+    
+    // Sort employees by name
+    const sorted = [...state.employees].sort((a, b) => a.name.localeCompare(b.name));
+    
+    sorted.forEach(emp => {
+        const availHours = calculateAvailableHours(emp);
+        const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+        const isSelected = selectedAvailabilityEmpId === emp.id;
+        
+        const item = document.createElement('div');
+        item.className = `avail-staff-item${isSelected ? ' selected' : ''}`;
+        item.dataset.id = emp.id;
+        item.innerHTML = `
+            <div class="avail-staff-avatar" style="background: ${emp.color || '#467df6'}">${initials}</div>
+            <div class="avail-staff-info">
+                <div class="avail-staff-name">
+                    ${emp.name}
+                    <span class="badge badge-${emp.classification === 'full_time' ? 'ft' : 'pt'}">${emp.classification === 'full_time' ? 'FT' : 'PT'}</span>
+                </div>
+                <div class="avail-staff-hours">${availHours} hrs/week available</div>
+            </div>
+        `;
+        
+        item.addEventListener('click', () => selectAvailabilityEmployee(emp.id));
+        staffList.appendChild(item);
+    });
+    
+    // If we have a selected employee, show their availability
+    if (selectedAvailabilityEmpId) {
+        showAvailabilityPanel(selectedAvailabilityEmpId);
+    }
+}
+
+function calculateAvailableHours(emp) {
+    // Count unique hours in availability
+    const uniqueSlots = new Set();
+    emp.availability.forEach(slot => {
+        uniqueSlots.add(`${slot.day}-${slot.hour}`);
+    });
+    return uniqueSlots.size;
+}
+
+function selectAvailabilityEmployee(empId) {
+    selectedAvailabilityEmpId = empId;
+    
+    // Update selection UI
+    document.querySelectorAll('.avail-staff-item').forEach(item => {
+        item.classList.toggle('selected', item.dataset.id === empId);
+    });
+    
+    showAvailabilityPanel(empId);
+}
+
+function showAvailabilityPanel(empId) {
+    const emp = employeeMap[empId];
+    if (!emp) return;
+    
+    const emptyPanel = document.getElementById('availabilityPanelEmpty');
+    const contentPanel = document.getElementById('availabilityPanelContent');
+    
+    emptyPanel.style.display = 'none';
+    contentPanel.style.display = 'block';
+    
+    // Update header
+    const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    document.getElementById('availPanelAvatar').textContent = initials;
+    document.getElementById('availPanelAvatar').style.background = emp.color || '#467df6';
+    document.getElementById('availPanelName').textContent = emp.name;
+    
+    const availHours = calculateAvailableHours(emp);
+    document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
+    
+    // Render the grid
+    renderAvailabilityGrid(emp);
+    
+    // Setup preset buttons
+    setupAvailabilityPresets(emp);
+}
+
+function renderAvailabilityGrid(emp) {
+    const tbody = document.getElementById('availabilityTableBody');
+    tbody.innerHTML = '';
+    
+    // Days start from Sunday (0) to Saturday (6) for display
+    const dayOrder = [0, 1, 2, 3, 4, 5, 6]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+    
+    for (let h = state.startHour; h <= state.endHour; h++) {
+        const tr = document.createElement('tr');
+        
+        // Time label
+        const timeCell = document.createElement('td');
+        const hour12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        timeCell.textContent = `${hour12} ${ampm}`;
+        tr.appendChild(timeCell);
+        
+        // Day cells - reorder for Sun-Sat display
+        dayOrder.forEach(displayDay => {
+            // Map display day to data day (our data uses Mon=0, so Sun=6)
+            const dataDay = displayDay === 0 ? 6 : displayDay - 1;
+            
+            const td = document.createElement('td');
+            td.className = 'avail-cell';
+            td.dataset.day = dataDay;
+            td.dataset.hour = h;
+            
+            // Check current state
+            const isAvailable = emp.availability.some(s => s.day === dataDay && s.hour === h);
+            const isPreferred = emp.preferences.some(s => s.day === dataDay && s.hour === h);
+            const isTimeOff = emp.time_off.some(s => s.day === dataDay && s.hour === h);
+            
+            if (isTimeOff) {
+                td.classList.add('time-off');
+            } else if (isPreferred) {
+                td.classList.add('preferred');
+            } else if (isAvailable) {
+                td.classList.add('available');
+            }
+            
+            // Click handlers
+            td.addEventListener('click', () => toggleAvailabilityCell(td, emp.id, 'click'));
+            td.addEventListener('dblclick', () => toggleAvailabilityCell(td, emp.id, 'dblclick'));
+            td.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                toggleAvailabilityCell(td, emp.id, 'rightclick');
+            });
+            
+            tr.appendChild(td);
+        });
+        
+        tbody.appendChild(tr);
+    }
+}
+
+async function toggleAvailabilityCell(cell, empId, action) {
+    const day = parseInt(cell.dataset.day);
+    const hour = parseInt(cell.dataset.hour);
+    const emp = employeeMap[empId];
+    if (!emp) return;
+    
+    // Determine new state based on action
+    const isAvailable = cell.classList.contains('available');
+    const isPreferred = cell.classList.contains('preferred');
+    const isTimeOff = cell.classList.contains('time-off');
+    
+    // Remove all classes first
+    cell.classList.remove('available', 'preferred', 'time-off');
+    
+    let newState = 'none';
+    
+    if (action === 'click') {
+        // Click: none -> available -> none
+        if (!isAvailable && !isPreferred && !isTimeOff) {
+            cell.classList.add('available');
+            newState = 'available';
+        }
+    } else if (action === 'dblclick') {
+        // Double-click: set to preferred
+        cell.classList.add('preferred');
+        newState = 'preferred';
+    } else if (action === 'rightclick') {
+        // Right-click: set to time-off
+        if (!isTimeOff) {
+            cell.classList.add('time-off');
+            newState = 'time-off';
+        }
+    }
+    
+    // Save to server
+    await saveAvailabilityCell(empId, day, hour, newState);
+    
+    // Update hours display
+    const availHours = calculateAvailableHoursFromGrid();
+    document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
+    
+    // Update sidebar
+    updateSidebarHours(empId, availHours);
+}
+
+function calculateAvailableHoursFromGrid() {
+    const cells = document.querySelectorAll('#availabilityTableBody .avail-cell');
+    let count = 0;
+    cells.forEach(cell => {
+        if (cell.classList.contains('available') || cell.classList.contains('preferred')) {
+            count++;
+        }
+    });
+    return count;
+}
+
+function updateSidebarHours(empId, hours) {
+    const item = document.querySelector(`.avail-staff-item[data-id="${empId}"]`);
+    if (item) {
+        const hoursEl = item.querySelector('.avail-staff-hours');
+        if (hoursEl) {
+            hoursEl.textContent = `${hours} hrs/week available`;
+        }
+    }
+}
+
+async function saveAvailabilityCell(empId, day, hour, state) {
+    try {
+        await fetch(`/api/employees/${empId}/availability-cell`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ day, hour, state })
+        });
+        
+        // Update local state
+        const emp = employeeMap[empId];
+        if (emp) {
+            // Remove from all arrays
+            emp.availability = emp.availability.filter(s => !(s.day === day && s.hour === hour));
+            emp.preferences = emp.preferences.filter(s => !(s.day === day && s.hour === hour));
+            emp.time_off = emp.time_off.filter(s => !(s.day === day && s.hour === hour));
+            
+            // Add to appropriate array
+            if (state === 'available') {
+                emp.availability.push({ day, hour });
+            } else if (state === 'preferred') {
+                emp.availability.push({ day, hour });
+                emp.preferences.push({ day, hour });
+            } else if (state === 'time-off') {
+                emp.time_off.push({ day, hour });
+            }
+        }
+    } catch (error) {
+        console.error('Error saving availability cell:', error);
+    }
+}
+
+function setupAvailabilityPresets(emp) {
+    const presetBtns = document.querySelectorAll('.preset-btn');
+    presetBtns.forEach(btn => {
+        // Remove old listeners by cloning
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', () => applyAvailabilityPreset(emp.id, newBtn.dataset.preset));
+    });
+}
+
+async function applyAvailabilityPreset(empId, preset) {
+    const tbody = document.getElementById('availabilityTableBody');
+    const cells = tbody.querySelectorAll('.avail-cell');
+    
+    // Clear all first
+    cells.forEach(cell => {
+        cell.classList.remove('available', 'preferred', 'time-off');
+    });
+    
+    if (preset === 'clear') {
+        // Just clear - already done above
+    } else if (preset === 'all-9-5') {
+        // Mon-Sun 9-5
+        cells.forEach(cell => {
+            const hour = parseInt(cell.dataset.hour);
+            if (hour >= 9 && hour < 17) {
+                cell.classList.add('available');
+            }
+        });
+    } else if (preset === 'weekdays-9-5') {
+        // Mon-Fri 9-5 (data days 0-4)
+        cells.forEach(cell => {
+            const day = parseInt(cell.dataset.day);
+            const hour = parseInt(cell.dataset.hour);
+            if (day >= 0 && day <= 4 && hour >= 9 && hour < 17) {
+                cell.classList.add('available');
+            }
+        });
+    } else if (preset === 'weekends-9-5') {
+        // Sat-Sun 9-5 (data days 5, 6)
+        cells.forEach(cell => {
+            const day = parseInt(cell.dataset.day);
+            const hour = parseInt(cell.dataset.hour);
+            if ((day === 5 || day === 6) && hour >= 9 && hour < 17) {
+                cell.classList.add('available');
+            }
+        });
+    }
+    
+    // Save all changes
+    await saveFullAvailability(empId);
+    
+    // Update hours display
+    const availHours = calculateAvailableHoursFromGrid();
+    document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
+    updateSidebarHours(empId, availHours);
+    
+    showToast(`Applied ${preset.replace(/-/g, ' ')} preset`, 'success');
+}
+
+async function saveFullAvailability(empId) {
+    const tbody = document.getElementById('availabilityTableBody');
+    const cells = tbody.querySelectorAll('.avail-cell');
+    
+    const availability = [];
+    const preferences = [];
+    const time_off = [];
+    
+    cells.forEach(cell => {
+        const day = parseInt(cell.dataset.day);
+        const hour = parseInt(cell.dataset.hour);
+        
+        if (cell.classList.contains('time-off')) {
+            time_off.push({ day, hour });
+        } else if (cell.classList.contains('preferred')) {
+            availability.push({ day, hour });
+            preferences.push({ day, hour });
+        } else if (cell.classList.contains('available')) {
+            availability.push({ day, hour });
+        }
+    });
+    
+    try {
+        const response = await fetch(`/api/employees/${empId}/availability`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ availability, preferences, time_off })
+        });
+        
+        if (response.ok) {
+            // Update local state
+            const emp = employeeMap[empId];
+            if (emp) {
+                emp.availability = availability;
+                emp.preferences = preferences;
+                emp.time_off = time_off;
+            }
+        }
+    } catch (error) {
+        console.error('Error saving availability:', error);
     }
 }
 

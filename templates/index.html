@@ -413,20 +413,83 @@
                 <div class="tab-header">
                     <div class="tab-header-left">
                         <h1>Availability</h1>
+                        <p class="tab-subtitle">Set when each team member can work</p>
                     </div>
                 </div>
 
-                <div class="empty-state">
-                    <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8" y1="2" x2="8" y2="6"></line>
-                        <line x1="3" y1="10" x2="21" y2="10"></line>
-                        <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
-                    </svg>
-                    <h3>Employee Availability</h3>
-                    <p>View and manage when your team members are available to work.</p>
-                    <p class="text-muted">Coming soon</p>
+                <div class="availability-layout">
+                    <!-- Left sidebar: Staff list -->
+                    <div class="availability-sidebar">
+                        <h3 class="sidebar-title">Select Staff</h3>
+                        <div class="availability-staff-list" id="availabilityStaffList">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <!-- Right panel: Availability grid -->
+                    <div class="availability-panel" id="availabilityPanel">
+                        <div class="availability-panel-empty" id="availabilityPanelEmpty">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                            <p>Select a staff member to view and edit their availability</p>
+                        </div>
+                        <div class="availability-panel-content" id="availabilityPanelContent" style="display: none;">
+                            <div class="availability-panel-header">
+                                <div class="availability-emp-info">
+                                    <div class="availability-emp-avatar" id="availPanelAvatar">M</div>
+                                    <div class="availability-emp-details">
+                                        <h2 id="availPanelName">Employee Name</h2>
+                                        <p id="availPanelHours">0 hours/week available</p>
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary" id="importIcalBtn" disabled>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline>
+                                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                    Import iCal
+                                </button>
+                            </div>
+                            <div class="availability-presets">
+                                <button class="preset-btn" data-preset="all-9-5">Mon-Sun 9-5</button>
+                                <button class="preset-btn" data-preset="weekdays-9-5">Weekdays 9-5</button>
+                                <button class="preset-btn" data-preset="weekends-9-5">Weekends 9-5</button>
+                                <button class="preset-btn preset-danger" data-preset="clear">Clear All</button>
+                            </div>
+                            <div class="availability-grid-container">
+                                <table class="availability-table" id="availabilityTable">
+                                    <thead>
+                                        <tr>
+                                            <th></th>
+                                            <th>Sun</th>
+                                            <th>Mon</th>
+                                            <th>Tue</th>
+                                            <th>Wed</th>
+                                            <th>Thu</th>
+                                            <th>Fri</th>
+                                            <th>Sat</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="availabilityTableBody">
+                                        <!-- Dynamically generated -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="availability-legend-bar">
+                                <span class="legend-hint">Click to toggle availability. Double-click for preferred. Right-click for time-off.</span>
+                                <div class="legend-items">
+                                    <span class="legend-item"><span class="legend-dot available"></span> Available</span>
+                                    <span class="legend-item"><span class="legend-dot preferred"></span> Preferred</span>
+                                    <span class="legend-item"><span class="legend-dot time-off"></span> Time Off</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
 

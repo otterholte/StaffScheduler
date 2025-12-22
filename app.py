@@ -402,6 +402,54 @@ def update_availability(emp_id):
     })
 
 
+@app.route('/api/employees/<emp_id>/availability-cell', methods=['PUT'])
+def update_availability_cell(emp_id):
+    """Update a single availability cell for an employee."""
+    global _solver
+    business = get_current_business()
+    data = request.json
+    
+    # Find employee
+    employee = None
+    for emp in business.employees:
+        if emp.id == emp_id:
+            employee = emp
+            break
+    
+    if not employee:
+        return jsonify({
+            'success': False,
+            'message': 'Employee not found'
+        }), 404
+    
+    day = data.get('day')
+    hour = data.get('hour')
+    state = data.get('state')  # 'available', 'preferred', 'time-off', 'none'
+    
+    slot = TimeSlot(day, hour)
+    
+    # Remove from all sets first
+    employee.availability.discard(slot)
+    employee.preferences.discard(slot)
+    employee.time_off.discard(slot)
+    
+    # Add to appropriate set
+    if state == 'available':
+        employee.availability.add(slot)
+    elif state == 'preferred':
+        employee.availability.add(slot)
+        employee.preferences.add(slot)
+    elif state == 'time-off':
+        employee.time_off.add(slot)
+    
+    _solver = None  # Reset solver
+    
+    return jsonify({
+        'success': True,
+        'message': 'Cell updated'
+    })
+
+
 # ==================== SETTINGS API ====================
 
 @app.route('/api/settings', methods=['GET'])
