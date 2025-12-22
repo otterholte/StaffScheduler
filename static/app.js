@@ -164,6 +164,8 @@ function getAllPolicies() {
         max_hours_per_day: parseInt(document.getElementById('maxHoursPerDay')?.value || 8),
         max_splits: parseInt(document.getElementById('maxSplits')?.value || 2),
         max_split_shifts_per_week: parseInt(document.getElementById('maxSplitShiftsPerWeek')?.value || 2),
+        // Scheduling strategy
+        scheduling_strategy: getThreeStateToggleValue('schedulingStrategyToggle'),
         // Max days per week constraints
         max_days_ft: parseInt(document.getElementById('maxDaysFT')?.value || 5),
         max_days_ft_mode: getThreeStateToggleValue('maxDaysFTToggle'),

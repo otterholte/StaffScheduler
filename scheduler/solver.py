@@ -50,6 +50,7 @@ class AdvancedScheduleSolver:
         max_hours_per_day: int = 8,
         max_splits_per_day: int = 2,
         max_split_shifts_per_week: int = 2,
+        scheduling_strategy: str = 'balanced',  # 'minimize', 'balanced', 'maximize'
         max_days_ft: int = 5,
         max_days_ft_mode: str = 'required',  # 'off', 'preferred', 'required'
         max_days_pt: int = 3,
@@ -63,6 +64,7 @@ class AdvancedScheduleSolver:
         self.max_hours_per_day = max_hours_per_day
         self.max_splits_per_day = max_splits_per_day
         self.max_split_shifts_per_week = max_split_shifts_per_week
+        self.scheduling_strategy = scheduling_strategy
         
         # Max days per week constraints
         self.max_days_ft = max_days_ft
@@ -527,6 +529,38 @@ class AdvancedScheduleSolver:
                             differences.append(self._shift_vars[key])
                 if differences:
                     self._model.AddBoolOr(differences)
+        
+        # =================================================================
+        # SCHEDULING STRATEGY
+        # =================================================================
+        # Adjust objective based on strategy:
+        # - 'minimize': Penalize hours to use fewest staff hours while meeting coverage
+        # - 'balanced': No adjustment (default behavior)
+        # - 'maximize': Reward hours to give staff as many hours as possible
+        
+        if self.scheduling_strategy == 'minimize':
+            # Penalize each assigned hour to minimize total staffing cost
+            WEIGHT_MINIMIZE_HOURS = 5
+            for emp in self.employees:
+                for day in self.days_open:
+                    for hour in self.operating_hours:
+                        for role_id in emp.roles:
+                            key = (emp.id, day, hour, role_id)
+                            if key in self._shift_vars:
+                                objective_terms.append(-self._shift_vars[key] * WEIGHT_MINIMIZE_HOURS)
+        
+        elif self.scheduling_strategy == 'maximize':
+            # Reward each assigned hour to maximize staff hours
+            WEIGHT_MAXIMIZE_HOURS = 5
+            for emp in self.employees:
+                for day in self.days_open:
+                    for hour in self.operating_hours:
+                        for role_id in emp.roles:
+                            key = (emp.id, day, hour, role_id)
+                            if key in self._shift_vars:
+                                objective_terms.append(self._shift_vars[key] * WEIGHT_MAXIMIZE_HOURS)
+        
+        # 'balanced' strategy: no adjustment, use default objective
         
         # =================================================================
         # OBJECTIVE FUNCTION

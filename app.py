@@ -43,6 +43,7 @@ _current_policies = {
     'max_hours_per_day': 8,
     'max_splits': 2,
     'max_split_shifts_per_week': 2,
+    'scheduling_strategy': 'balanced',  # 'minimize', 'balanced', 'maximize'
     'max_days_ft': 5,
     'max_days_ft_mode': 'required',
     'max_days_pt': 3,
@@ -61,6 +62,7 @@ def get_solver(policies=None):
         _current_policies['max_hours_per_day'] = policies.get('max_hours_per_day', _current_policies['max_hours_per_day'])
         _current_policies['max_splits'] = policies.get('max_splits', _current_policies['max_splits'])
         _current_policies['max_split_shifts_per_week'] = policies.get('max_split_shifts_per_week', _current_policies['max_split_shifts_per_week'])
+        _current_policies['scheduling_strategy'] = policies.get('scheduling_strategy', _current_policies['scheduling_strategy'])
         _current_policies['max_days_ft'] = policies.get('max_days_ft', _current_policies['max_days_ft'])
         _current_policies['max_days_ft_mode'] = policies.get('max_days_ft_mode', _current_policies['max_days_ft_mode'])
         _current_policies['max_days_pt'] = policies.get('max_days_pt', _current_policies['max_days_pt'])
@@ -77,6 +79,7 @@ def get_solver(policies=None):
             max_hours_per_day=_current_policies['max_hours_per_day'],
             max_splits_per_day=_current_policies['max_splits'],
             max_split_shifts_per_week=_current_policies['max_split_shifts_per_week'],
+            scheduling_strategy=_current_policies['scheduling_strategy'],
             max_days_ft=_current_policies['max_days_ft'],
             max_days_ft_mode=_current_policies['max_days_ft_mode'],
             max_days_pt=_current_policies['max_days_pt'],

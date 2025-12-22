@@ -621,6 +621,29 @@
                             <p class="advanced-description">Fine-tune how the scheduler generates shifts for your team.</p>
                         </div>
                         
+                        <!-- Scheduling Strategy Section -->
+                        <div class="constraint-section">
+                            <h4 class="constraint-section-title">Scheduling Strategy</h4>
+                            <p class="constraint-description">Choose how the scheduler prioritizes when building shifts.</p>
+                            
+                            <div class="constraint-row strategy-row">
+                                <div class="three-state-toggle wide-toggle" id="schedulingStrategyToggle">
+                                    <button type="button" class="toggle-option" data-value="minimize">
+                                        <span class="toggle-label">Minimize Cost</span>
+                                        <span class="toggle-hint">Fewest hours for full coverage</span>
+                                    </button>
+                                    <button type="button" class="toggle-option active" data-value="balanced">
+                                        <span class="toggle-label">Balanced</span>
+                                        <span class="toggle-hint">Best overall schedule</span>
+                                    </button>
+                                    <button type="button" class="toggle-option" data-value="maximize">
+                                        <span class="toggle-label">Maximize Hours</span>
+                                        <span class="toggle-hint">More hours for all staff</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="rules-grid">
                             <div class="rule-item">
                                 <label>Minimum shift length</label>
