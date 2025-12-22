@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff Scheduler Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <span class="logo-text">Staff Scheduler</span>
+                </div>
+            </div>
+            <div class="header-center">
+                <nav class="main-nav">
+                    <button class="nav-tab active" data-tab="schedule">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        <span class="tab-text">Schedule</span>
+                    </button>
+                    <button class="nav-tab" data-tab="employees">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        <span class="tab-text">Staff</span>
+                    </button>
+                    <button class="nav-tab" data-tab="settings">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                        </svg>
+                        <span class="tab-text">Availability</span>
+                    </button>
+                    <button class="nav-tab" data-tab="help">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        <span class="tab-text">Requirements</span>
+                    </button>
+                </nav>
+            </div>
+            <div class="header-right">
+                <button id="themeToggle" class="icon-btn" title="Toggle Light/Dark Mode">
+                    <svg class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="app-main">
+            <!-- ==================== SCHEDULE TAB ==================== -->
+            <section id="tab-schedule" class="tab-content active">
+                <div class="tab-header">
+                    <div class="tab-header-left">
+                        <h1>Weekly Schedule</h1>
+                        <div class="business-badge">
+                            <select id="businessSelect" class="business-select">
+                                {% for b in businesses %}
+                                <option value="{{ b.id }}" {% if b.id == business.id %}selected{% endif %}>
+                                    {{ b.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="tab-header-right">
+                        <button id="generateBtn" class="btn btn-primary" data-tooltip="Create an optimal schedule based on your employees and settings">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                            </svg>
+                            Generate Schedule
+                        </button>
+                        <button id="alternativeBtn" class="btn btn-secondary" disabled data-tooltip="Find a different schedule option that also works well">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <polyline points="1 20 1 14 7 14"></polyline>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                            </svg>
+                            Find Alternative
+                        </button>
+                        <button id="resetBtn" class="btn btn-ghost" data-tooltip="Clear the current schedule and start over">
+                            <span class="btn-icon">↺</span>
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <div class="schedule-layout">
+                    <!-- Schedule Grid -->
+                    <div class="schedule-panel">
+                        <div class="panel-card">
+                            <div class="schedule-toolbar">
+                                <div class="toolbar-left">
+                                    <span id="scheduleStatus" class="status-badge">Ready to generate</span>
+                                    <!-- View Toggle -->
+                                    <div class="view-toggle" id="viewToggle">
+                                        <button class="view-toggle-btn active" data-view="grid" title="Hourly Grid View">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <rect x="3" y="3" width="7" height="7"></rect>
+                                                <rect x="14" y="3" width="7" height="7"></rect>
+                                                <rect x="3" y="14" width="7" height="7"></rect>
+                                                <rect x="14" y="14" width="7" height="7"></rect>
+                                            </svg>
+                                            Grid
+                                        </button>
+                                        <button class="view-toggle-btn" data-view="table" title="Simple Table View">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                                            </svg>
+                                            Table
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="toolbar-right">
+                                    <!-- Color Mode Toggle -->
+                                    <div class="color-mode-toggle" id="colorModeToggle">
+                                        <span class="toggle-label">Color by:</span>
+                                        <button class="color-mode-btn active" data-mode="role" title="Color shifts by role/position">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
+                                                <line x1="9" y1="9" x2="9.01" y2="9"></line>
+                                                <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                                            </svg>
+                                            Role
+                                        </button>
+                                        <button class="color-mode-btn" data-mode="employee" title="Color shifts by employee">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                                <circle cx="12" cy="7" r="4"></circle>
+                                            </svg>
+                                            Person
+                                        </button>
+                                    </div>
+                                    <button id="exportBtn" class="btn btn-sm btn-ghost" disabled>
+                                        <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                        </svg> Export
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Grid View -->
+                            <div class="schedule-view schedule-view-grid active" id="scheduleViewGrid">
+                                <div class="schedule-grid-wrapper" id="scheduleGridWrapper">
+                                    <table class="schedule-grid" id="scheduleGrid">
+                                        <thead>
+                                            <tr>
+                                                <th class="time-col">Time</th>
+                                                {% for day_idx in days_open %}
+                                                <th class="day-col">{{ days[day_idx][:3] }}</th>
+                                                {% endfor %}
+                                            </tr>
+                                        </thead>
+                                        <tbody id="scheduleBody">
+                                        {% for hour in hours %}
+                                        <tr>
+                                            <td class="time-cell">{% if hour == 0 or hour == 12 %}12{% elif hour < 12 %}{{ hour }}{% else %}{{ hour - 12 }}{% endif %}{% if hour < 12 %}am{% else %}pm{% endif %}</td>
+                                                {% for day_idx in days_open %}
+                                                <td class="slot" data-day="{{ day_idx }}" data-hour="{{ hour }}">
+                                                    <div class="slot-content"></div>
+                                                </td>
+                                                {% endfor %}
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                    <!-- Shift blocks overlay -->
+                                    <div class="schedule-events" id="scheduleEvents"></div>
+                                </div>
+                            </div>
+                            
+                            <!-- Table View -->
+                            <div class="schedule-view schedule-view-table" id="scheduleViewTable">
+                                <table class="simple-schedule-table" id="simpleScheduleTable">
+                                    <thead>
+                                        <tr>
+                                            <th class="name-col">Name</th>
+                                            <th>Mon</th>
+                                            <th>Tue</th>
+                                            <th>Wed</th>
+                                            <th>Thu</th>
+                                            <th>Fri</th>
+                                            <th>Sat</th>
+                                            <th>Sun</th>
+                                            <th class="hours-col">Hours</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="simpleScheduleBody">
+                                        <!-- Will be populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <!-- Schedule Legend -->
+                            <div class="schedule-legend-wrapper" id="scheduleLegendWrapper">
+                                <div class="legend-title" id="legendTitle">Roles</div>
+                                <div class="schedule-legend" id="scheduleLegend">
+                                    <!-- Legend items populated by JS -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sidebar Stats -->
+                    <div class="schedule-sidebar">
+                        <!-- Metrics Card -->
+                        <div class="panel-card metrics-card">
+                            <h3 class="card-title">
+                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                                </svg>
+                                Schedule Metrics
+                            </h3>
+                            <div class="metrics-grid">
+                                <div class="metric" data-tooltip="Percentage of required shifts that are filled">
+                                    <span class="metric-value" id="coveragePercent">—%</span>
+                                    <span class="metric-label">Coverage</span>
+                                </div>
+                                <div class="metric" data-tooltip="Number of shift slots filled out of total required">
+                                    <span class="metric-value" id="slotsFilled">—/—</span>
+                                    <span class="metric-label">Slots Filled</span>
+                                </div>
+                                <div class="metric highlight" data-tooltip="Hours that still need to be covered - aim for zero!">
+                                    <span class="metric-value" id="hoursStillNeeded">—</span>
+                                    <span class="metric-label">Hours Needed</span>
+                                </div>
+                                <div class="metric" data-tooltip="Estimated total labor cost for this schedule">
+                                    <span class="metric-value" id="laborCost">$—</span>
+                                    <span class="metric-label">Labor Cost</span>
+                                </div>
+                            </div>
+                            <div class="metric-divider"></div>
+                            <div class="metric-row" data-tooltip="How long the computer took to create this schedule">
+                                <span class="metric-label">Solve Time</span>
+                                <span class="metric-value small" id="solveTime">—ms</span>
+                            </div>
+                            <div class="metric-row" data-tooltip="Total overtime hours in this schedule">
+                                <span class="metric-label">Overtime Hours</span>
+                                <span class="metric-value small" id="overtimeHours">—</span>
+                            </div>
+                            <div class="metric-row" data-tooltip="Which schedule variation this is">
+                                <span class="metric-label">Solution #</span>
+                                <span class="metric-value small" id="solutionIndex">—</span>
+                            </div>
+                        </div>
+
+                        <!-- Coverage Gaps Card (Collapsible) -->
+                        <div class="panel-card gaps-card collapsible-card" id="gapsCard" style="display: none;">
+                            <h3 class="card-title danger collapsible-header" data-target="gapsContent">
+                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                                Coverage Gaps
+                                <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </h3>
+                            <div id="gapsContent" class="collapsible-content">
+                                <div id="gapsByRole" class="gaps-section">
+                                    <div class="gaps-label">By Role:</div>
+                                    <div id="roleGaps"></div>
+                                </div>
+                                <div id="gapsByDay" class="gaps-section">
+                                    <div class="gaps-label">By Day:</div>
+                                    <div id="dayGaps"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Employee Hours (Collapsible) -->
+                        <div class="panel-card employee-hours-card collapsible-card">
+                            <h3 class="card-title collapsible-header" data-target="employeeHoursContent">
+                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="9" cy="7" r="4"></circle>
+                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                </svg>
+                                Employee Hours
+                                <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </h3>
+                            <div id="employeeHoursContent" class="collapsible-content">
+                            <div id="employeeHoursList" class="employee-hours-list">
+                                {% for emp in employees %}
+                                <div class="emp-hours-row" data-id="{{ emp.id }}">
+                                    <div class="emp-hours-info">
+                                        <span class="emp-color-dot" style="background: {{ emp.color }}" data-tooltip="{{ emp.name }}"></span>
+                                        <span class="emp-name" data-tooltip="{{ emp.name }}">{{ emp.name }}</span>
+                                        <div class="emp-badges">
+                                            {% if emp.classification == 'full_time' %}
+                                            <span class="badge badge-ft" data-tooltip="Full-Time Employee">FT</span>
+                                            {% else %}
+                                            <span class="badge badge-pt" data-tooltip="Part-Time Employee">PT</span>
+                                            {% endif %}
+                                            {% if emp.needs_supervision %}
+                                            <span class="badge badge-new" data-tooltip="New Employee - Needs Supervision">NEW</span>
+                                            {% endif %}
+                                            {% if emp.can_supervise %}
+                                            <span class="badge badge-sup" data-tooltip="Supervisor - Can train others">SUP</span>
+                                            {% endif %}
+                                            {% if emp.overtime_allowed %}
+                                            <span class="badge badge-ot" data-tooltip="Overtime Allowed">OT</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="emp-hours-stats">
+                                        <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
+                                        <span class="emp-range" data-tooltip="Required hours range (min-max)">({{ emp.min_hours }}-{{ emp.max_hours }})</span>
+                                        <span class="emp-status" data-tooltip="Schedule status">—</span>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== EMPLOYEES TAB ==================== -->
+            <section id="tab-employees" class="tab-content">
+                <div class="tab-header">
+                    <div class="tab-header-left">
+                        <h1>Team Members</h1>
+                        <span class="count-badge" id="employeeCount">{{ employees|length }} employees</span>
+                    </div>
+                    <div class="tab-header-right">
+                        <div class="search-box">
+                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"></circle>
+                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                            </svg>
+                            <input type="text" id="employeeSearch" placeholder="Search employees...">
+                        </div>
+                        <div class="sort-dropdown" id="employeeSortDropdown">
+                            <button class="sort-btn" id="employeeSortBtn" data-tooltip="Sort employees">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                                    <path d="M3 6h18M6 12h12M9 18h6"></path>
+                                </svg>
+                                <span class="sort-label" id="sortLabel">Name</span>
+                                <svg class="sort-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                            <div class="sort-menu" id="employeeSortMenu">
+                                <div class="sort-menu-section">Sort by</div>
+                                <button class="sort-option active" data-sort="name">Name</button>
+                                <button class="sort-option" data-sort="role">Role</button>
+                                <button class="sort-option" data-sort="classification">Classification (FT/PT)</button>
+                                <button class="sort-option" data-sort="supervisor">Supervisors First</button>
+                                <button class="sort-option" data-sort="new">New Hires First</button>
+                                <button class="sort-option" data-sort="hours">Hours (High to Low)</button>
+                                <button class="sort-option" data-sort="rate">Pay Rate (High to Low)</button>
+                            </div>
+                        </div>
+                        <button id="addEmployeeBtn" class="btn btn-primary">
+                            <span class="btn-icon">+</span>
+                            Add Employee
+                        </button>
+                    </div>
+                </div>
+
+                <div class="employees-grid" id="employeesGrid">
+                    <!-- Employee cards will be dynamically generated -->
+                </div>
+            </section>
+
+            <!-- ==================== AVAILABILITY TAB ==================== -->
+            <section id="tab-settings" class="tab-content">
+                <div class="tab-header">
+                    <div class="tab-header-left">
+                        <h1>Availability</h1>
+                    </div>
+                </div>
+
+                <div class="empty-state">
+                    <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                        <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
+                    </svg>
+                    <h3>Employee Availability</h3>
+                    <p>View and manage when your team members are available to work.</p>
+                    <p class="text-muted">Coming soon</p>
+                </div>
+            </section>
+
+            <!-- ==================== REQUIREMENTS TAB ==================== -->
+            <section id="tab-help" class="tab-content">
+                <div class="tab-header">
+                    <div class="tab-header-left">
+                        <h1>Requirements</h1>
+                        <p class="tab-subtitle">Define locations, qualifications, and shift coverage needs</p>
+                    </div>
+                </div>
+
+                <!-- Sub-tabs for Requirements -->
+                <div class="sub-tabs-container">
+                    <div class="sub-tabs" id="requirementsSubTabs">
+                        <button class="sub-tab active" data-subtab="shifts">Shift Requirements</button>
+                        <button class="sub-tab" data-subtab="roles">Roles</button>
+                        <button class="sub-tab" data-subtab="advanced">Advanced</button>
+                    </div>
+                </div>
+
+                <!-- Sub-tab Content Panels -->
+                <div class="sub-tab-content active" id="subtab-shifts">
+                    <!-- Weekly Staffing Schedule -->
+                    <div class="calendar-section coverage-section" id="shiftsSection">
+                        <div class="calendar-header">
+                            <div class="calendar-title">
+                                <svg class="title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                <h3>Weekly Staffing Schedule</h3>
+                            </div>
+                            <div class="calendar-header-actions">
+                                <button class="icon-btn time-toggle-btn" id="timeRangeToggle" title="Business Hours">
+                                    <svg class="btn-svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                    <span class="time-toggle-label" id="timeToggleLabel">Business</span>
+                                </button>
+                                <button class="btn btn-primary btn-sm" id="addShiftBtn" title="Add new shift">
+                                    <span class="btn-icon">+</span>
+                                    Add Shift
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="calendar-instructions calendar-instructions-top">
+                            <span class="instruction-item"><strong>Drag</strong> to create shifts</span>
+                            <span class="instruction-item"><strong>Click</strong> to edit</span>
+                            <span class="instruction-item"><strong>Right-click</strong> to delete</span>
+                        </div>
+                        
+                        <div class="calendar-wrapper">
+                            <div class="calendar-container" id="calendarContainer">
+                                <div class="calendar-grid" id="calendarGrid">
+                                    <!-- Grid will be built by JS -->
+                                </div>
+                                
+                                <!-- Shift events overlay -->
+                                <div class="calendar-events" id="calendarEvents">
+                                    <!-- Shift bars will be rendered here -->
+                                </div>
+                                
+                                <!-- Drag selection overlay -->
+                                <div class="calendar-selection" id="calendarSelection" style="display: none;"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="calendar-legend-wrapper" id="legendWrapper">
+                            <div class="legend-label">Roles:</div>
+                            <div class="calendar-legend" id="calendarLegend">
+                                <!-- Role colors will be shown here -->
+                            </div>
+                            <button class="legend-expand-btn" id="legendExpandBtn" style="display: none;">
+                                <span class="expand-text">Show more</span>
+                                <span class="expand-icon">▼</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Roles Sub-tab -->
+                <div class="sub-tab-content" id="subtab-roles">
+                    <div class="roles-panel">
+                        <div class="roles-panel-header">
+                            <div>
+                                <h3>Roles & Positions</h3>
+                                <p class="roles-description">Define the different positions in your business. Each role can have its own color for easy identification on the schedule.</p>
+                            </div>
+                            <button id="addRoleBtn" class="btn btn-primary">
+                                <span>+</span> Add Role
+                            </button>
+                        </div>
+                        <div class="roles-grid" id="rolesList">
+                            {% for role in roles %}
+                            <div class="role-card" data-id="{{ role.id }}">
+                                <div class="role-card-color" style="background: {{ role.color }}"></div>
+                                <div class="role-card-info">
+                                    <span class="role-card-name">{{ role.name }}</span>
+                                </div>
+                                <div class="role-card-actions">
+                                    <button class="btn-icon-sm edit-role-btn" title="Edit role">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                        </svg>
+                                    </button>
+                                    <button class="btn-icon-sm delete-role-btn" title="Remove role">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sub-tab-content" id="subtab-advanced">
+                    <div class="advanced-panel">
+                        <div class="advanced-panel-header">
+                            <h3>Advanced Scheduling Rules</h3>
+                            <p class="advanced-description">Fine-tune how the scheduler generates shifts for your team.</p>
+                        </div>
+                        
+                        <div class="rules-grid">
+                            <div class="rule-item">
+                                <label>Minimum shift length</label>
+                                <select id="minShiftLength" class="small-select">
+                                    <option value="1">1 hour</option>
+                                    <option value="2" selected>2 hours</option>
+                                    <option value="3">3 hours</option>
+                                    <option value="4">4 hours</option>
+                                    <option value="5">5 hours</option>
+                                    <option value="6">6 hours</option>
+                                    <option value="7">7 hours</option>
+                                    <option value="8">8 hours</option>
+                                </select>
+                            </div>
+                            <div class="rule-item">
+                                <label>Max hours per day</label>
+                                <select id="maxHoursPerDay" class="small-select">
+                                    <option value="4">4 hours</option>
+                                    <option value="6">6 hours</option>
+                                    <option value="8" selected>8 hours</option>
+                                    <option value="10">10 hours</option>
+                                    <option value="12">12 hours</option>
+                                </select>
+                            </div>
+                            <div class="rule-item">
+                                <label>Max shifts per day</label>
+                                <select id="maxSplits" class="small-select">
+                                    <option value="1">1 shift only</option>
+                                    <option value="2" selected>Up to 2 shifts</option>
+                                </select>
+                            </div>
+                            <div class="rule-item">
+                                <label>Max split shifts per week</label>
+                                <select id="maxSplitShiftsPerWeek" class="small-select">
+                                    <option value="0">No split shifts</option>
+                                    <option value="1">1 day</option>
+                                    <option value="2" selected>2 days</option>
+                                    <option value="3">3 days</option>
+                                    <option value="7">Unlimited</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Max Days Per Week Section -->
+                        <div class="constraint-section">
+                            <h4 class="constraint-section-title">Maximum Days Per Week</h4>
+                            <p class="constraint-description">Limit how many days employees can be scheduled each week.</p>
+                            
+                            <div class="constraint-row" data-tooltip="Control maximum days per week for full-time employees">
+                                <div class="constraint-label">
+                                    <span class="constraint-name">Full-Time Employees</span>
+                                    <span class="constraint-detail">Max <select id="maxDaysFT" class="inline-select">
+                                        <option value="4">4</option>
+                                        <option value="5" selected>5</option>
+                                        <option value="6">6</option>
+                                        <option value="7">7</option>
+                                    </select> days/week</span>
+                                </div>
+                                <div class="three-state-toggle" id="maxDaysFTToggle">
+                                    <button type="button" class="toggle-option" data-value="off">Off</button>
+                                    <button type="button" class="toggle-option" data-value="preferred">Preferred</button>
+                                    <button type="button" class="toggle-option active" data-value="required">Required</button>
+                                </div>
+                            </div>
+                            
+                            <div class="constraint-row" data-tooltip="Control maximum days per week for part-time employees">
+                                <div class="constraint-label">
+                                    <span class="constraint-name">Part-Time Employees</span>
+                                    <span class="constraint-detail">Max <select id="maxDaysPT" class="inline-select">
+                                        <option value="2">2</option>
+                                        <option value="3" selected>3</option>
+                                        <option value="4">4</option>
+                                        <option value="5">5</option>
+                                    </select> days/week</span>
+                                </div>
+                                <div class="three-state-toggle" id="maxDaysPTToggle">
+                                    <button type="button" class="toggle-option" data-value="off">Off</button>
+                                    <button type="button" class="toggle-option" data-value="preferred">Preferred</button>
+                                    <button type="button" class="toggle-option active" data-value="required">Required</button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="toggle-list">
+                            <label class="toggle-row" data-tooltip="When enabled, employees marked as 'needs supervision' will only be scheduled when a supervisor is also working">
+                                <input type="checkbox" id="supervisionRequired" checked>
+                                <span class="toggle-switch"></span>
+                                <span>New employees must work with a supervisor</span>
+                            </label>
+                            <label class="toggle-row" data-tooltip="The system will try to share Saturday and Sunday shifts evenly among all employees">
+                                <input type="checkbox" id="weekendFairness" checked>
+                                <span class="toggle-switch"></span>
+                                <span>Try to distribute weekend shifts fairly</span>
+                            </label>
+                            <label class="toggle-row" data-tooltip="The system will try to keep employees under 40 hours to avoid overtime pay when possible">
+                                <input type="checkbox" id="avoidOvertime" checked>
+                                <span class="toggle-switch"></span>
+                                <span>Avoid overtime when possible</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ==================== MODALS ==================== -->
+    
+    <!-- Add/Edit Employee Modal -->
+    <div id="employeeModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="employeeModalTitle">Add Employee</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="employeeForm">
+                    <input type="hidden" id="empId">
+                    
+                    <div class="form-section">
+                        <h4>Basic Information</h4>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="empName">Name *</label>
+                                <input type="text" id="empName" required placeholder="John Smith">
+                            </div>
+                            <div class="form-group">
+                                <label for="empColor">Color</label>
+                                <input type="color" id="empColor" value="#4CAF50">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Hours & Classification</h4>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="empClassification">Type</label>
+                                <select id="empClassification">
+                                    <option value="part_time">Part-Time</option>
+                                    <option value="full_time">Full-Time</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="empHourlyRate">Hourly Rate ($)</label>
+                                <input type="number" id="empHourlyRate" value="15" min="0" step="0.50">
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="empMinHours">Min Hours/Week</label>
+                                <input type="number" id="empMinHours" value="15" min="0" max="60">
+                            </div>
+                            <div class="form-group">
+                                <label for="empMaxHours">Max Hours/Week</label>
+                                <input type="number" id="empMaxHours" value="25" min="0" max="60">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Roles</h4>
+                        <div class="roles-checkboxes" id="empRoles">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Special Settings</h4>
+                        <div class="toggle-list compact">
+                            <label class="toggle-row" data-tooltip="Turn on if this employee can train and supervise new employees">
+                                <input type="checkbox" id="empCanSupervise">
+                                <span class="toggle-switch"></span>
+                                <span>Can supervise others</span>
+                            </label>
+                            <label class="toggle-row" data-tooltip="Turn on for new employees who should always work alongside an experienced supervisor">
+                                <input type="checkbox" id="empNeedsSupervision">
+                                <span class="toggle-switch"></span>
+                                <span>Needs supervision (new employee)</span>
+                            </label>
+                            <label class="toggle-row" data-tooltip="Turn on if this employee is allowed to work more than 40 hours per week">
+                                <input type="checkbox" id="empOvertimeAllowed">
+                                <span class="toggle-switch"></span>
+                                <span>Overtime allowed</span>
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="submit" form="employeeForm" class="btn btn-primary" id="saveEmployeeBtn">Save Employee</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Availability Modal -->
+    <div id="availabilityModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2>Edit Availability: <span id="availEmpName">Employee</span></h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="availability-legend">
+                    <div class="legend-item">
+                        <span class="legend-box unavailable"></span>
+                        <span>Not Available</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-box available"></span>
+                        <span>Available</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-box preferred"></span>
+                        <span>Preferred</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-box time-off"></span>
+                        <span>Time Off</span>
+                    </div>
+                </div>
+                <p class="availability-instructions">Click to toggle availability. Double-click for preferred. Right-click for time-off.</p>
+                <div class="availability-grid-wrapper">
+                    <table class="availability-grid" id="availabilityGrid">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Mon</th>
+                                <th>Tue</th>
+                                <th>Wed</th>
+                                <th>Thu</th>
+                                <th>Fri</th>
+                                <th>Sat</th>
+                                <th>Sun</th>
+                            </tr>
+                        </thead>
+                        <tbody id="availabilityBody">
+                            <!-- Dynamically generated -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="availability-actions">
+                    <button class="btn btn-sm btn-ghost" id="clearAvailability">Clear All</button>
+                    <button class="btn btn-sm btn-ghost" id="fillWeekdays">Fill Weekdays</button>
+                    <button class="btn btn-sm btn-ghost" id="fillAll">Fill All</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveAvailabilityBtn">Save Availability</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Role Modal -->
+    <div id="roleModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 id="roleModalTitle">Add Role</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="roleForm">
+                    <input type="hidden" id="roleId">
+                    <div class="form-group">
+                        <label for="roleName">Role Name *</label>
+                        <input type="text" id="roleName" required placeholder="e.g., Shift Lead">
+                    </div>
+                    <div class="form-group">
+                        <label for="roleColor">Color</label>
+                        <input type="color" id="roleColor" value="#6366f1">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="submit" form="roleForm" class="btn btn-primary">Save Role</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slot Edit Modal -->
+    <div id="slotModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Edit Shift</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="slot-info" id="slotInfo">Monday 9:00 AM</p>
+                <div class="form-group">
+                    <label>Assign Employee:</label>
+                    <select id="slotEmployee" class="full-width">
+                        <option value="">— Unassigned —</option>
+                        <!-- Dynamically populated -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Role:</label>
+                    <select id="slotRole" class="full-width">
+                        <!-- Dynamically populated -->
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSlotBtn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm Dialog -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 id="confirmTitle">Confirm</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmBtn">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shift Template Modal -->
+    <div id="shiftModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="shiftModalTitle">Add Shift</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="shiftForm">
+                    <input type="hidden" id="shiftId">
+                    
+                    <div class="form-section">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="shiftName">Shift Name *</label>
+                                <input type="text" id="shiftName" required placeholder="e.g., Opening Shift">
+                            </div>
+                            <div class="form-group">
+                                <label>Shift Color</label>
+                                <div class="color-selector" id="shiftColorSelector">
+                                    <div class="color-options" id="roleColorOptions">
+                                        <!-- Role colors will be populated dynamically -->
+                                    </div>
+                                    <div class="color-custom">
+                                        <input type="color" id="shiftColor" value="#6366f1">
+                                        <span class="custom-label">Custom</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Time Range</h4>
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="shiftStartHour">Start Time</label>
+                                <select id="shiftStartHour" class="time-select">
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="shiftEndHour">End Time</label>
+                                <select id="shiftEndHour" class="time-select">
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                        <div class="shift-duration" id="shiftDuration">Duration: 8 hours</div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Days This Shift Applies</h4>
+                        <div class="days-checkboxes shift-days" id="shiftDays">
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="0" checked>
+                                <span>Mon</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="1" checked>
+                                <span>Tue</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="2" checked>
+                                <span>Wed</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="3" checked>
+                                <span>Thu</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="4" checked>
+                                <span>Fri</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="5" checked>
+                                <span>Sat</span>
+                            </label>
+                            <label class="day-checkbox">
+                                <input type="checkbox" value="6" checked>
+                                <span>Sun</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Staff Required</h4>
+                        <p class="section-description">Set minimum required and maximum allowed staff for each role</p>
+                        <div class="shift-roles-editor" id="shiftRolesEditor">
+                            <!-- Role requirements will be populated dynamically -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="submit" form="shiftForm" class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <p class="loading-text">Generating schedule...</p>
+    </div>
+
+    <!-- Pass data to JavaScript -->
+    <script>
+        const INITIAL_DATA = {
+            business: {{ business | tojson }},
+            businesses: {{ businesses | tojson }},
+            employees: {{ employees | tojson }},
+            roles: {{ roles | tojson }},
+            days: {{ days | tojson }},
+            daysOpen: {{ days_open | tojson }},
+            hours: {{ hours | tojson }},
+            startHour: {{ start_hour }},
+            endHour: {{ end_hour }}
+        };
+    </script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
