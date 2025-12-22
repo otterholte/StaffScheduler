@@ -375,25 +375,25 @@
                             </svg>
                             <input type="text" id="employeeSearch" placeholder="Search employees...">
                         </div>
-                        <div class="sort-dropdown" id="employeeSortDropdown">
-                            <button class="sort-btn" id="employeeSortBtn" data-tooltip="Sort employees">
+                        <div class="filter-dropdown" id="employeeFilterDropdown">
+                            <button class="filter-btn" id="employeeFilterBtn" data-tooltip="Filter employees">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                                    <path d="M3 6h18M6 12h12M9 18h6"></path>
+                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
                                 </svg>
-                                <span class="sort-label" id="sortLabel">Name</span>
-                                <svg class="sort-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                <span class="filter-label" id="filterLabel">All</span>
+                                <svg class="filter-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                                     <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
                             </button>
-                            <div class="sort-menu" id="employeeSortMenu">
-                                <div class="sort-menu-section">Sort by</div>
-                                <button class="sort-option active" data-sort="name">Name</button>
-                                <button class="sort-option" data-sort="role">Role</button>
-                                <button class="sort-option" data-sort="classification">Classification (FT/PT)</button>
-                                <button class="sort-option" data-sort="supervisor">Supervisors First</button>
-                                <button class="sort-option" data-sort="new">New Hires First</button>
-                                <button class="sort-option" data-sort="hours">Hours (High to Low)</button>
-                                <button class="sort-option" data-sort="rate">Pay Rate (High to Low)</button>
+                            <div class="filter-menu" id="employeeFilterMenu">
+                                <div class="filter-menu-section">Filter by</div>
+                                <button class="filter-option active" data-filter="all">All Employees</button>
+                                <button class="filter-option" data-filter="full_time">Full-Time Only</button>
+                                <button class="filter-option" data-filter="part_time">Part-Time Only</button>
+                                <button class="filter-option" data-filter="supervisors">Supervisors</button>
+                                <button class="filter-option" data-filter="new_hires">New Hires</button>
+                                <div class="filter-menu-section">By Role</div>
+                                <div id="roleFilterOptions"></div>
                             </div>
                         </div>
                         <button id="addEmployeeBtn" class="btn btn-primary">

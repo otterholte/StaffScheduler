@@ -75,9 +75,10 @@ const dom = {
     
     // Employees Tab
     employeeSearch: document.getElementById('employeeSearch'),
-    employeeSortBtn: document.getElementById('employeeSortBtn'),
-    employeeSortMenu: document.getElementById('employeeSortMenu'),
-    employeeSortLabel: document.getElementById('sortLabel'),
+    employeeFilterBtn: document.getElementById('employeeFilterBtn'),
+    employeeFilterMenu: document.getElementById('employeeFilterMenu'),
+    employeeFilterLabel: document.getElementById('filterLabel'),
+    roleFilterOptions: document.getElementById('roleFilterOptions'),
     addEmployeeBtn: document.getElementById('addEmployeeBtn'),
     employeesGrid: document.getElementById('employeesGrid'),
     employeeCount: document.getElementById('employeeCount'),
@@ -1382,85 +1383,100 @@ function saveSlotAssignment() {
 }
 
 // ==================== EMPLOYEES TAB ====================
-let employeeSortBy = 'name'; // Default sort
+let employeeFilterBy = 'all'; // Default filter
 
 function setupEmployeesTab() {
     dom.addEmployeeBtn.addEventListener('click', () => openEmployeeForm());
     dom.employeeSearch.addEventListener('input', renderEmployeesGrid);
     
-    // Sort dropdown toggle
-    dom.employeeSortBtn.addEventListener('click', (e) => {
+    // Filter dropdown toggle
+    dom.employeeFilterBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        dom.employeeSortMenu.classList.toggle('open');
+        dom.employeeFilterMenu.classList.toggle('open');
+        // Populate role filter options when menu opens
+        populateRoleFilterOptions();
     });
     
-    // Sort option selection
-    dom.employeeSortMenu.querySelectorAll('.sort-option').forEach(option => {
+    // Filter option selection (for static options)
+    dom.employeeFilterMenu.querySelectorAll('.filter-option').forEach(option => {
         option.addEventListener('click', (e) => {
             e.stopPropagation();
-            const sortBy = option.dataset.sort;
-            employeeSortBy = sortBy;
-            
-            // Update active state
-            dom.employeeSortMenu.querySelectorAll('.sort-option').forEach(o => o.classList.remove('active'));
-            option.classList.add('active');
-            
-            // Update label
-            dom.employeeSortLabel.textContent = option.textContent;
-            
-            // Close menu and re-render
-            dom.employeeSortMenu.classList.remove('open');
-            renderEmployeesGrid();
+            selectFilterOption(option);
         });
     });
     
     // Close menu when clicking outside
     document.addEventListener('click', () => {
-        dom.employeeSortMenu.classList.remove('open');
+        dom.employeeFilterMenu.classList.remove('open');
     });
+}
+
+function populateRoleFilterOptions() {
+    dom.roleFilterOptions.innerHTML = '';
+    state.roles.forEach(role => {
+        const btn = document.createElement('button');
+        btn.className = 'filter-option';
+        if (employeeFilterBy === `role_${role.id}`) btn.classList.add('active');
+        btn.dataset.filter = `role_${role.id}`;
+        btn.textContent = role.name;
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectFilterOption(btn);
+        });
+        dom.roleFilterOptions.appendChild(btn);
+    });
+}
+
+function selectFilterOption(option) {
+    const filterBy = option.dataset.filter;
+    employeeFilterBy = filterBy;
+    
+    // Update active state for all options
+    dom.employeeFilterMenu.querySelectorAll('.filter-option').forEach(o => o.classList.remove('active'));
+    option.classList.add('active');
+    
+    // Update label
+    dom.employeeFilterLabel.textContent = option.textContent;
+    
+    // Close menu and re-render
+    dom.employeeFilterMenu.classList.remove('open');
+    renderEmployeesGrid();
 }
 
 function renderEmployeesGrid() {
     const search = dom.employeeSearch.value.toLowerCase();
     
-    // Filter by search
+    // Filter by search and selected filter
     let filtered = state.employees.filter(emp => {
+        // Search filter
         if (search && !emp.name.toLowerCase().includes(search)) {
             return false;
         }
-        return true;
-    });
-    
-    // Sort
-    filtered.sort((a, b) => {
-        switch (employeeSortBy) {
-            case 'name':
-                return a.name.localeCompare(b.name);
-            case 'role':
-                const aRole = a.roles.length > 0 ? (roleMap[a.roles[0]]?.name || '') : 'zzz';
-                const bRole = b.roles.length > 0 ? (roleMap[b.roles[0]]?.name || '') : 'zzz';
-                return aRole.localeCompare(bRole);
-            case 'classification':
-                // Full-time first
-                if (a.classification === 'full_time' && b.classification !== 'full_time') return -1;
-                if (b.classification === 'full_time' && a.classification !== 'full_time') return 1;
-                return a.name.localeCompare(b.name);
-            case 'supervisor':
-                if (a.can_supervise && !b.can_supervise) return -1;
-                if (b.can_supervise && !a.can_supervise) return 1;
-                return a.name.localeCompare(b.name);
-            case 'new':
-                if (a.needs_supervision && !b.needs_supervision) return -1;
-                if (b.needs_supervision && !a.needs_supervision) return 1;
-                return a.name.localeCompare(b.name);
-            case 'hours':
-                return b.max_hours - a.max_hours;
-            case 'rate':
-                return b.hourly_rate - a.hourly_rate;
+        
+        // Category filter
+        switch (employeeFilterBy) {
+            case 'all':
+                return true;
+            case 'full_time':
+                return emp.classification === 'full_time';
+            case 'part_time':
+                return emp.classification === 'part_time';
+            case 'supervisors':
+                return emp.can_supervise === true;
+            case 'new_hires':
+                return emp.needs_supervision === true;
             default:
-                return 0;
+                // Check for role filter (role_xxx)
+                if (employeeFilterBy.startsWith('role_')) {
+                    const roleId = employeeFilterBy.replace('role_', '');
+                    return emp.roles.includes(roleId);
+                }
+                return true;
         }
     });
+    
+    // Always sort by name
+    filtered.sort((a, b) => a.name.localeCompare(b.name));
     
     dom.employeesGrid.innerHTML = '';
     dom.employeeCount.textContent = `${filtered.length} employee${filtered.length !== 1 ? 's' : ''}`;

@@ -246,10 +246,25 @@ def create_coffee_shop() -> BusinessScenario:
         zoe.add_availability(day, 8, 16)
     employees.append(zoe)
     
+    # Alex - Full-time barista
+    alex = Employee(
+        id="alex_6", name="Alex",
+        classification=EmployeeClassification.FULL_TIME,
+        min_hours=30, max_hours=40,
+        roles=["barista"],
+        can_supervise=False, needs_supervision=False,
+        overtime_allowed=True, hourly_rate=15.0,
+        color="#06d6a0"  # Mint
+    )
+    for day in range(7):
+        alex.add_availability(day, 6, 18)
+        alex.add_preference(day, 12, 18)  # Prefers afternoon
+    employees.append(alex)
+    
     scenario = BusinessScenario(
         id="coffee_shop",
         name="Sunrise Coffee",
-        description="Small coffee shop with 6 staff",
+        description="Small coffee shop with 7 staff",
         start_hour=6, end_hour=18,
         days_open=list(range(7)),
         roles=roles,
