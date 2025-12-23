@@ -1008,7 +1008,7 @@ body[data-theme="light"] .advanced-panel {
 .schedule-grid {
     width: 100%;
     border-collapse: separate;
-    border-spacing: 3px;
+    border-spacing: 4px 3px; /* More horizontal spacing between days */
 }
 
 /* Schedule events overlay */
@@ -1083,12 +1083,18 @@ body[data-theme="light"] .advanced-panel {
 }
 
 .schedule-grid th {
-    padding: 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-secondary);
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-primary);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+.schedule-grid th:first-child {
+    background: transparent;
 }
 
 .time-col {
@@ -1098,6 +1104,17 @@ body[data-theme="light"] .advanced-panel {
 
 .day-col {
     min-width: 80px;
+    position: relative;
+}
+
+/* Weekend column styling */
+.day-col.weekend,
+th.day-col.weekend {
+    background: rgba(139, 92, 246, 0.15);
+}
+
+.slot.weekend {
+    background: rgba(139, 92, 246, 0.1);
 }
 
 .time-cell {

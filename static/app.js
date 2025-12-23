@@ -454,12 +454,15 @@ async function switchBusiness(businessId) {
 }
 
 function rebuildScheduleGrid() {
+    // Weekend days: Saturday = 5, Sunday = 6
+    const weekendDays = [5, 6];
+    
     // Rebuild header
     const thead = dom.scheduleGrid.querySelector('thead tr');
     thead.innerHTML = '<th class="time-col">Time</th>';
     state.daysOpen.forEach(dayIdx => {
         const th = document.createElement('th');
-        th.className = 'day-col';
+        th.className = 'day-col' + (weekendDays.includes(dayIdx) ? ' weekend' : '');
         th.textContent = state.days[dayIdx].substring(0, 3);
         thead.appendChild(th);
     });
@@ -476,7 +479,7 @@ function rebuildScheduleGrid() {
         
         state.daysOpen.forEach(dayIdx => {
             const td = document.createElement('td');
-            td.className = 'slot';
+            td.className = 'slot' + (weekendDays.includes(dayIdx) ? ' weekend' : '');
             td.dataset.day = dayIdx;
             td.dataset.hour = hour;
             td.innerHTML = '<div class="slot-content"><span class="slot-empty">—</span></div>';
