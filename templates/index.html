@@ -184,7 +184,7 @@
                                             <tr>
                                                 <th class="time-col">Time</th>
                                                 {% for day_idx in days_open %}
-                                                <th class="day-col">{{ days[day_idx][:3] }}</th>
+                                                <th class="day-col {% if day_idx % 2 == 0 %}day-even{% else %}day-odd{% endif %}">{{ days[day_idx][:3] }}</th>
                                                 {% endfor %}
                                             </tr>
                                         </thead>
@@ -193,7 +193,7 @@
                                         <tr>
                                             <td class="time-cell">{% if hour == 0 or hour == 12 %}12{% elif hour < 12 %}{{ hour }}{% else %}{{ hour - 12 }}{% endif %}{% if hour < 12 %}am{% else %}pm{% endif %}</td>
                                                 {% for day_idx in days_open %}
-                                                <td class="slot" data-day="{{ day_idx }}" data-hour="{{ hour }}">
+                                                <td class="slot {% if day_idx % 2 == 0 %}day-even{% else %}day-odd{% endif %}" data-day="{{ day_idx }}" data-hour="{{ hour }}">
                                                     <div class="slot-content"></div>
                                                 </td>
                                                 {% endfor %}
@@ -212,13 +212,13 @@
                                     <thead>
                                         <tr>
                                             <th class="name-col">Name</th>
-                                            <th>Mon</th>
-                                            <th>Tue</th>
-                                            <th>Wed</th>
-                                            <th>Thu</th>
-                                            <th>Fri</th>
-                                            <th>Sat</th>
-                                            <th>Sun</th>
+                                            <th class="day-even">Mon</th>
+                                            <th class="day-odd">Tue</th>
+                                            <th class="day-even">Wed</th>
+                                            <th class="day-odd">Thu</th>
+                                            <th class="day-even">Fri</th>
+                                            <th class="day-odd">Sat</th>
+                                            <th class="day-even">Sun</th>
                                             <th class="hours-col">Hours</th>
                                         </tr>
                                     </thead>
@@ -238,123 +238,116 @@
                         </div>
                     </div>
 
-                    <!-- Sidebar Stats -->
-                    <div class="schedule-sidebar">
-                        <!-- Metrics Card -->
-                        <div class="panel-card metrics-card">
-                            <h3 class="card-title">
-                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <line x1="18" y1="20" x2="18" y2="10"></line>
-                                    <line x1="12" y1="20" x2="12" y2="4"></line>
-                                    <line x1="6" y1="20" x2="6" y2="14"></line>
-                                </svg>
-                                Schedule Metrics
-                            </h3>
-                            <div class="metrics-grid">
-                                <div class="metric" data-tooltip="Percentage of required shifts that are filled">
-                                    <span class="metric-value" id="coveragePercent">—%</span>
-                                    <span class="metric-label">Coverage</span>
-                                </div>
-                                <div class="metric" data-tooltip="Number of shift slots filled out of total required">
-                                    <span class="metric-value" id="slotsFilled">—/—</span>
-                                    <span class="metric-label">Slots Filled</span>
-                                </div>
-                                <div class="metric highlight" data-tooltip="Hours that still need to be covered - aim for zero!">
-                                    <span class="metric-value" id="hoursStillNeeded">—</span>
-                                    <span class="metric-label">Hours Needed</span>
-                                </div>
-                                <div class="metric" data-tooltip="Estimated total labor cost for this schedule">
-                                    <span class="metric-value" id="laborCost">$—</span>
-                                    <span class="metric-label">Labor Cost</span>
-                                </div>
-                            </div>
-                            <div class="metric-divider"></div>
-                            <div class="metric-row" data-tooltip="How long the computer took to create this schedule">
-                                <span class="metric-label">Solve Time</span>
-                                <span class="metric-value small" id="solveTime">—ms</span>
-                            </div>
-                            <div class="metric-row" data-tooltip="Total overtime hours in this schedule">
-                                <span class="metric-label">Overtime Hours</span>
-                                <span class="metric-value small" id="overtimeHours">—</span>
-                            </div>
-                            <div class="metric-row" data-tooltip="Which schedule variation this is">
-                                <span class="metric-label">Solution #</span>
-                                <span class="metric-value small" id="solutionIndex">—</span>
-                            </div>
-                        </div>
+                </div>
 
-                        <!-- Coverage Gaps Card (Collapsible) -->
-                        <div class="panel-card gaps-card collapsible-card" id="gapsCard" style="display: none;">
-                            <h3 class="card-title danger collapsible-header" data-target="gapsContent">
-                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                                Coverage Gaps
-                                <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </h3>
-                            <div id="gapsContent" class="collapsible-content">
-                                <div id="gapsByRole" class="gaps-section">
-                                    <div class="gaps-label">By Role:</div>
-                                    <div id="roleGaps"></div>
-                                </div>
-                                <div id="gapsByDay" class="gaps-section">
-                                    <div class="gaps-label">By Day:</div>
-                                    <div id="dayGaps"></div>
-                                </div>
-                            </div>
+                <!-- Schedule Metrics (Full Width Below) -->
+                <div class="panel-card metrics-card metrics-fullwidth">
+                    <h3 class="card-title">
+                        <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="20" x2="18" y2="10"></line>
+                            <line x1="12" y1="20" x2="12" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="14"></line>
+                        </svg>
+                        Schedule Metrics
+                    </h3>
+                    <div class="metrics-grid metrics-grid-horizontal">
+                        <div class="metric" data-tooltip="Percentage of required shifts that are filled">
+                            <span class="metric-value" id="coveragePercent">—%</span>
+                            <span class="metric-label">Coverage</span>
                         </div>
+                        <div class="metric" data-tooltip="Number of shift slots filled out of total required">
+                            <span class="metric-value" id="slotsFilled">—/—</span>
+                            <span class="metric-label">Slots Filled</span>
+                        </div>
+                        <div class="metric highlight" data-tooltip="Hours that still need to be covered - aim for zero!">
+                            <span class="metric-value" id="hoursStillNeeded">—</span>
+                            <span class="metric-label">Hours Needed</span>
+                        </div>
+                        <div class="metric" data-tooltip="Estimated total labor cost for this schedule">
+                            <span class="metric-value" id="laborCost">$—</span>
+                            <span class="metric-label">Labor Cost</span>
+                        </div>
+                        <div class="metric" data-tooltip="How long the computer took to create this schedule">
+                            <span class="metric-value small" id="solveTime">—s</span>
+                            <span class="metric-label">Solve Time</span>
+                        </div>
+                        <div class="metric" data-tooltip="Total overtime hours in this schedule">
+                            <span class="metric-value small" id="overtimeHours">—</span>
+                            <span class="metric-label">Overtime</span>
+                        </div>
+                    </div>
+                </div>
 
-                        <!-- Employee Hours (Collapsible) -->
-                        <div class="panel-card employee-hours-card collapsible-card">
-                            <h3 class="card-title collapsible-header" data-target="employeeHoursContent">
-                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                    <circle cx="9" cy="7" r="4"></circle>
-                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                </svg>
-                                Employee Hours
-                                <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </h3>
-                            <div id="employeeHoursContent" class="collapsible-content">
-                            <div id="employeeHoursList" class="employee-hours-list">
-                                {% for emp in employees %}
-                                <div class="emp-hours-row" data-id="{{ emp.id }}">
-                                    <div class="emp-hours-info">
-                                        <span class="emp-color-dot" style="background: {{ emp.color }}" data-tooltip="{{ emp.name }}"></span>
-                                        <span class="emp-name" data-tooltip="{{ emp.name }}">{{ emp.name }}</span>
-                                        <div class="emp-badges">
-                                            {% if emp.classification == 'full_time' %}
-                                            <span class="badge badge-ft" data-tooltip="Full-Time Employee">FT</span>
-                                            {% else %}
-                                            <span class="badge badge-pt" data-tooltip="Part-Time Employee">PT</span>
-                                            {% endif %}
-                                            {% if emp.needs_supervision %}
-                                            <span class="badge badge-new" data-tooltip="New Employee - Needs Supervision">NEW</span>
-                                            {% endif %}
-                                            {% if emp.can_supervise %}
-                                            <span class="badge badge-sup" data-tooltip="Supervisor - Can train others">SUP</span>
-                                            {% endif %}
-                                            {% if emp.overtime_allowed %}
-                                            <span class="badge badge-ot" data-tooltip="Overtime Allowed">OT</span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="emp-hours-stats">
-                                        <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
-                                        <span class="emp-range" data-tooltip="Required hours range (min-max)">({{ emp.min_hours }}-{{ emp.max_hours }})</span>
-                                        <span class="emp-status" data-tooltip="Schedule status">—</span>
+                <!-- Coverage Gaps Card (Collapsible) -->
+                <div class="panel-card gaps-card collapsible-card gaps-fullwidth" id="gapsCard" style="display: none;">
+                    <h3 class="card-title danger collapsible-header" data-target="gapsContent">
+                        <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        Coverage Gaps
+                        <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </h3>
+                    <div id="gapsContent" class="collapsible-content">
+                        <div id="gapsByRole" class="gaps-section">
+                            <div class="gaps-label">By Role:</div>
+                            <div id="roleGaps"></div>
+                        </div>
+                        <div id="gapsByDay" class="gaps-section">
+                            <div class="gaps-label">By Day:</div>
+                            <div id="dayGaps"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Employee Hours (Full Width Below) -->
+                <div class="panel-card employee-hours-card collapsible-card employee-hours-fullwidth">
+                    <h3 class="card-title collapsible-header" data-target="employeeHoursContent">
+                        <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                        Employee Hours
+                        <svg class="collapse-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </h3>
+                    <div id="employeeHoursContent" class="collapsible-content">
+                        <div id="employeeHoursList" class="employee-hours-list employee-hours-grid">
+                            {% for emp in employees %}
+                            <div class="emp-hours-row" data-id="{{ emp.id }}">
+                                <div class="emp-hours-info">
+                                    <span class="emp-color-dot" style="background: {{ emp.color }}" data-tooltip="{{ emp.name }}"></span>
+                                    <span class="emp-name" data-tooltip="{{ emp.name }}">{{ emp.name }}</span>
+                                    <div class="emp-badges">
+                                        {% if emp.classification == 'full_time' %}
+                                        <span class="badge badge-ft"><span class="badge-short">FT</span><span class="badge-full">Full-Time</span></span>
+                                        {% else %}
+                                        <span class="badge badge-pt"><span class="badge-short">PT</span><span class="badge-full">Part-Time</span></span>
+                                        {% endif %}
+                                        {% if emp.needs_supervision %}
+                                        <span class="badge badge-new"><span class="badge-short">NEW</span><span class="badge-full">New Hire</span></span>
+                                        {% endif %}
+                                        {% if emp.can_supervise %}
+                                        <span class="badge badge-sup"><span class="badge-short">SUP</span><span class="badge-full">Supervisor</span></span>
+                                        {% endif %}
+                                        {% if emp.overtime_allowed %}
+                                        <span class="badge badge-ot"><span class="badge-short">OT</span><span class="badge-full">Overtime</span></span>
+                                        {% endif %}
                                     </div>
                                 </div>
-                                {% endfor %}
+                                <div class="emp-hours-stats">
+                                    <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
+                                    <span class="emp-range" data-tooltip="Required hours range (min-max)">({{ emp.min_hours }}-{{ emp.max_hours }})</span>
+                                    <span class="emp-status" data-tooltip="Schedule status">—</span>
+                                </div>
                             </div>
-                            </div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
@@ -749,6 +742,35 @@
             </section>
 
         </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <div class="footer-main">
+                    <div class="footer-brand">
+                        <div class="footer-logo">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="16" y1="2" x2="16" y2="6"></line>
+                                <line x1="8" y1="2" x2="8" y2="6"></line>
+                                <line x1="3" y1="10" x2="21" y2="10"></line>
+                            </svg>
+                            Staff Scheduler Pro
+                        </div>
+                        <p class="footer-tagline">Smart scheduling for modern teams.</p>
+                    </div>
+                    <div class="footer-links-inline">
+                        <a href="#">Features</a>
+                        <a href="#">Pricing</a>
+                        <a href="#">Support</a>
+                        <a href="#">Contact</a>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p class="footer-copyright">© 2025 Staff Scheduler Pro. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
     </div>
 
     <!-- ==================== MODALS ==================== -->

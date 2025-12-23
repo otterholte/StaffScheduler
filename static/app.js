@@ -67,7 +67,6 @@ const dom = {
     laborCost: document.getElementById('laborCost'),
     solveTime: document.getElementById('solveTime'),
     overtimeHours: document.getElementById('overtimeHours'),
-    solutionIndex: document.getElementById('solutionIndex'),
     gapsCard: document.getElementById('gapsCard'),
     roleGaps: document.getElementById('roleGaps'),
     dayGaps: document.getElementById('dayGaps'),
@@ -454,12 +453,13 @@ async function switchBusiness(businessId) {
 }
 
 function rebuildScheduleGrid() {
-    // Rebuild header with alternating colors
+    // Rebuild header with alternating colors (TUE, THU, SAT get alternate color)
     const thead = dom.scheduleGrid.querySelector('thead tr');
     thead.innerHTML = '<th class="time-col">Time</th>';
     state.daysOpen.forEach((dayIdx, colIndex) => {
         const th = document.createElement('th');
-        th.className = 'day-col ' + (colIndex % 2 === 0 ? 'day-even' : 'day-odd');
+        // Use actual day index: TUE(1), THU(3), SAT(5) are odd days
+        th.className = 'day-col ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
         th.textContent = state.days[dayIdx].substring(0, 3);
         thead.appendChild(th);
     });
@@ -476,7 +476,8 @@ function rebuildScheduleGrid() {
         
         state.daysOpen.forEach((dayIdx, colIndex) => {
             const td = document.createElement('td');
-            td.className = 'slot ' + (colIndex % 2 === 0 ? 'day-even' : 'day-odd');
+            // Use actual day index: TUE(1), THU(3), SAT(5) are odd days
+            td.className = 'slot ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
             td.dataset.day = dayIdx;
             td.dataset.hour = hour;
             td.innerHTML = '<div class="slot-content"><span class="slot-empty">—</span></div>';
@@ -562,12 +563,17 @@ async function generateSchedule() {
     const policies = getAllPolicies();
     
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+        
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies })
+            body: JSON.stringify({ policies }),
+            signal: controller.signal
         });
         
+        clearTimeout(timeoutId);
         const data = await response.json();
         
         if (data.success) {
@@ -615,12 +621,17 @@ async function findAlternative() {
     const policies = getAllPolicies();
     
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
+        
         const response = await fetch('/api/alternative', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies })
+            body: JSON.stringify({ policies }),
+            signal: controller.signal
         });
         
+        clearTimeout(timeoutId);
         const data = await response.json();
         
         if (data.success) {
@@ -1158,12 +1169,13 @@ function renderSimpleTableView(schedule) {
         let html = `<td class="name-col"><div class="emp-name"><span>⚠ Still Needed</span></div></td>`;
         
         for (let day = 0; day < 7; day++) {
+            const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
             const shifts = gaps.days[day];
             if (shifts.length === 0) {
-                html += `<td class="shift-times"><span class="no-shift">—</span></td>`;
+                html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
             } else {
                 const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
-                html += `<td class="shift-times">${shiftStrs}</td>`;
+                html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
             }
         }
         
@@ -1186,12 +1198,13 @@ function renderSimpleTableView(schedule) {
             </div></td>`;
             
             for (let day = 0; day < 7; day++) {
+                const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
                 const shifts = empSchedule.days[day];
                 if (shifts.length === 0) {
-                    html += `<td class="shift-times"><span class="no-shift">—</span></td>`;
+                    html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
                 } else {
                     const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
-                    html += `<td class="shift-times">${shiftStrs}</td>`;
+                    html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
                 }
             }
             
@@ -1219,9 +1232,8 @@ function updateMetrics(schedule) {
     dom.coveragePercent.textContent = `${schedule.coverage_percentage}%`;
     dom.slotsFilled.textContent = `${metrics.total_slots_filled}/${metrics.total_slots_required}`;
     dom.solveTime.textContent = `${(schedule.solve_time_ms / 1000).toFixed(2)}s`;
-    dom.solutionIndex.textContent = `#${schedule.solution_index}`;
-    dom.laborCost.textContent = `$${metrics.estimated_labor_cost.toLocaleString()}`;
-    dom.overtimeHours.textContent = metrics.total_overtime_hours;
+    dom.laborCost.textContent = `$${metrics.estimated_labor_cost?.toLocaleString() || '—'}`;
+    dom.overtimeHours.textContent = metrics.total_overtime_hours ?? '—';
     
     const needed = metrics.total_hours_still_needed || 0;
     dom.hoursStillNeeded.textContent = needed > 0 ? `${needed}h` : '0';
@@ -1278,11 +1290,10 @@ function clearMetrics() {
     dom.laborCost.textContent = '$—';
     dom.solveTime.textContent = '—s';
     dom.overtimeHours.textContent = '—';
-    dom.solutionIndex.textContent = '—';
-    dom.gapsCard.style.display = 'none';
+    if (dom.gapsCard) dom.gapsCard.style.display = 'none';
     
-    const highlightMetric = dom.hoursStillNeeded.closest('.metric');
-    highlightMetric.classList.remove('covered');
+    const highlightMetric = dom.hoursStillNeeded?.closest('.metric');
+    if (highlightMetric) highlightMetric.classList.remove('covered');
 }
 
 function updateEmployeeHours(schedule) {
