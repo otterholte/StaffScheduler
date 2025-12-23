@@ -454,20 +454,17 @@ async function switchBusiness(businessId) {
 }
 
 function rebuildScheduleGrid() {
-    // Weekend days: Saturday = 5, Sunday = 6
-    const weekendDays = [5, 6];
-    
-    // Rebuild header
+    // Rebuild header with alternating colors
     const thead = dom.scheduleGrid.querySelector('thead tr');
     thead.innerHTML = '<th class="time-col">Time</th>';
-    state.daysOpen.forEach(dayIdx => {
+    state.daysOpen.forEach((dayIdx, colIndex) => {
         const th = document.createElement('th');
-        th.className = 'day-col' + (weekendDays.includes(dayIdx) ? ' weekend' : '');
+        th.className = 'day-col ' + (colIndex % 2 === 0 ? 'day-even' : 'day-odd');
         th.textContent = state.days[dayIdx].substring(0, 3);
         thead.appendChild(th);
     });
     
-    // Rebuild body
+    // Rebuild body with alternating colors
     dom.scheduleBody.innerHTML = '';
     state.hours.forEach(hour => {
         const tr = document.createElement('tr');
@@ -477,9 +474,9 @@ function rebuildScheduleGrid() {
         timeCell.textContent = `${hour.toString().padStart(2, '0')}:00`;
         tr.appendChild(timeCell);
         
-        state.daysOpen.forEach(dayIdx => {
+        state.daysOpen.forEach((dayIdx, colIndex) => {
             const td = document.createElement('td');
-            td.className = 'slot' + (weekendDays.includes(dayIdx) ? ' weekend' : '');
+            td.className = 'slot ' + (colIndex % 2 === 0 ? 'day-even' : 'day-odd');
             td.dataset.day = dayIdx;
             td.dataset.hour = hour;
             td.innerHTML = '<div class="slot-content"><span class="slot-empty">—</span></div>';
@@ -706,10 +703,12 @@ function renderSchedule(schedule) {
     
     if (!firstSlot || !wrapper) return;
     
-    const slotWidth = firstSlot.offsetWidth + 3; // +3 for border-spacing
-    const slotHeight = firstSlot.offsetHeight + 3;
+    const hSpacing = 8; // Horizontal border-spacing between columns
+    const vSpacing = 3; // Vertical border-spacing between rows
+    const slotWidth = firstSlot.offsetWidth + hSpacing;
+    const slotHeight = firstSlot.offsetHeight + vSpacing;
     const headerHeight = headerRow?.offsetHeight || 35;
-    const timeCellWidth = timeCell?.offsetWidth + 3 || 50;
+    const timeCellWidth = (timeCell?.offsetWidth || 50) + hSpacing;
     
     // Build employee shift segments - group consecutive hours for same employee (regardless of role)
     const shiftSegments = []; // { employeeId, roles: Set, day, startHour, endHour }

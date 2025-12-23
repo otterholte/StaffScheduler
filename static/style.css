@@ -1008,7 +1008,7 @@ body[data-theme="light"] .advanced-panel {
 .schedule-grid {
     width: 100%;
     border-collapse: separate;
-    border-spacing: 4px 3px; /* More horizontal spacing between days */
+    border-spacing: 8px 3px; /* More horizontal spacing between days */
 }
 
 /* Schedule events overlay */
@@ -1104,17 +1104,25 @@ body[data-theme="light"] .advanced-panel {
 
 .day-col {
     min-width: 80px;
-    position: relative;
 }
 
-/* Weekend column styling */
-.day-col.weekend,
-th.day-col.weekend {
-    background: rgba(139, 92, 246, 0.15);
+/* Alternating day column colors */
+.day-col.day-even,
+th.day-col.day-even {
+    background: rgba(99, 102, 241, 0.12);
 }
 
-.slot.weekend {
-    background: rgba(139, 92, 246, 0.1);
+.slot.day-even {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.day-col.day-odd,
+th.day-col.day-odd {
+    background: rgba(45, 55, 72, 0.4);
+}
+
+.slot.day-odd {
+    background: rgba(45, 55, 72, 0.25);
 }
 
 .time-cell {
