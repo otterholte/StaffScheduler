@@ -1107,22 +1107,20 @@ body[data-theme="light"] .advanced-panel {
 }
 
 /* Alternating day column colors */
-.day-col.day-even,
 th.day-col.day-even {
-    background: rgba(99, 102, 241, 0.25);
+    background: rgba(99, 102, 241, 0.3) !important;
 }
 
-.slot.day-even {
-    background: rgba(99, 102, 241, 0.15);
+td.slot.day-even {
+    background: rgba(99, 102, 241, 0.18) !important;
 }
 
-.day-col.day-odd,
 th.day-col.day-odd {
-    background: rgba(30, 35, 50, 0.8);
+    background: rgba(55, 48, 80, 0.9) !important;
 }
 
-.slot.day-odd {
-    background: rgba(30, 35, 50, 0.6);
+td.slot.day-odd {
+    background: rgba(55, 48, 80, 0.5) !important;
 }
 
 .time-cell {
