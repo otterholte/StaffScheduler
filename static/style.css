@@ -1108,19 +1108,19 @@ body[data-theme="light"] .advanced-panel {
 
 /* Alternating day column colors */
 th.day-col.day-even {
-    background: rgba(99, 102, 241, 0.3) !important;
+    background: rgba(79, 70, 229, 0.4) !important;
 }
 
 td.slot.day-even {
-    background: rgba(99, 102, 241, 0.18) !important;
+    background: rgba(79, 70, 229, 0.2) !important;
 }
 
 th.day-col.day-odd {
-    background: rgba(55, 48, 80, 0.9) !important;
+    background: rgba(17, 24, 39, 0.95) !important;
 }
 
 td.slot.day-odd {
-    background: rgba(55, 48, 80, 0.5) !important;
+    background: rgba(17, 24, 39, 0.7) !important;
 }
 
 .time-cell {
