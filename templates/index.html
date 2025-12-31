@@ -133,6 +133,17 @@
                                             </svg>
                                             Grid
                                         </button>
+                                        <button class="view-toggle-btn" data-view="timeline" title="Timeline View - Days as rows">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                                <line x1="3" y1="18" x2="21" y2="18"></line>
+                                                <rect x="5" y="4" width="4" height="4" rx="1"></rect>
+                                                <rect x="11" y="10" width="6" height="4" rx="1"></rect>
+                                                <rect x="7" y="16" width="5" height="4" rx="1"></rect>
+                                            </svg>
+                                            Timeline
+                                        </button>
                                         <button class="view-toggle-btn" data-view="table" title="Simple Table View">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -203,6 +214,15 @@
                                     </table>
                                     <!-- Shift blocks overlay -->
                                     <div class="schedule-events" id="scheduleEvents"></div>
+                                </div>
+                            </div>
+
+                            <!-- Timeline View (Days as rows, Hours as columns) -->
+                            <div class="schedule-view schedule-view-timeline" id="scheduleViewTimeline">
+                                <div class="timeline-wrapper" id="timelineWrapper">
+                                    <div class="timeline-grid" id="timelineGrid">
+                                        <!-- Will be populated by JS -->
+                                    </div>
                                 </div>
                             </div>
                             

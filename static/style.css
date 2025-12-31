@@ -897,6 +897,179 @@ body[data-theme="light"] .advanced-panel {
     display: block;
 }
 
+/* ---------- Timeline View (Days as rows) ---------- */
+.timeline-wrapper {
+    overflow-x: auto;
+    padding-bottom: 1rem;
+}
+
+.timeline-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: max-content;
+}
+
+.timeline-header {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.timeline-header-day {
+    width: 100px;
+    flex-shrink: 0;
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    padding: 0.5rem;
+}
+
+.timeline-header-hours {
+    display: flex;
+    gap: 0;
+}
+
+.timeline-hour-label {
+    width: 60px;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 0.4rem 0;
+}
+
+.timeline-row {
+    display: flex;
+    align-items: stretch;
+    min-height: 42px;
+}
+
+.timeline-row.day-even {
+    background: #2c304e;
+    border-radius: var(--radius-sm);
+}
+
+.timeline-row.day-odd {
+    background: #3e4269;
+    border-radius: var(--radius-sm);
+}
+
+.timeline-day-label {
+    width: 100px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0.75rem;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.timeline-slots {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    position: relative;
+    min-height: 42px;
+    padding: 4px 0;
+    gap: 2px;
+}
+
+.timeline-slots-row {
+    position: relative;
+    height: 34px;
+    flex-shrink: 0;
+    /* Width is set by number of hours * 60px */
+    min-width: max-content;
+}
+
+.timeline-slot {
+    width: 60px;
+    flex-shrink: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+
+.timeline-slot:first-child {
+    border-left: none;
+}
+
+.timeline-shift-block {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    cursor: pointer;
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
+    overflow: hidden;
+    white-space: nowrap;
+    z-index: 1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.timeline-shift-block:hover {
+    transform: scaleY(1.1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    z-index: 10;
+}
+
+.timeline-shift-block .shift-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.timeline-gap-block {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 4px;
+    border: 2px dashed var(--danger);
+    background: rgba(239, 68, 68, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.timeline-gap-block .gap-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--danger);
+    background: var(--bg-secondary);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+/* Light theme timeline */
+body[data-theme="light"] .timeline-row.day-even {
+    background: rgba(226, 232, 240, 0.6);
+}
+
+body[data-theme="light"] .timeline-row.day-odd {
+    background: rgba(203, 213, 225, 0.6);
+}
+
+body[data-theme="light"] .timeline-day-label {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+body[data-theme="light"] .timeline-slot {
+    border-left-color: rgba(0, 0, 0, 0.05);
+}
+
 /* Schedule Legend */
 .schedule-legend-wrapper {
     margin-top: 1rem;

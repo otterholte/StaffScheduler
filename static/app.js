@@ -335,7 +335,7 @@ function setupScheduleTab() {
         }
     });
     
-    // View toggle (grid vs table)
+    // View toggle (grid vs table vs timeline)
     document.querySelectorAll('.view-toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const view = btn.dataset.view;
@@ -347,15 +347,16 @@ function setupScheduleTab() {
             
             // Toggle views
             document.getElementById('scheduleViewGrid').classList.toggle('active', view === 'grid');
+            document.getElementById('scheduleViewTimeline').classList.toggle('active', view === 'timeline');
             document.getElementById('scheduleViewTable').classList.toggle('active', view === 'table');
             
-            // Re-render current schedule
-            if (state.currentSchedule) {
-                if (view === 'table') {
-                    renderSimpleTableView(state.currentSchedule);
-                } else {
-                    renderSchedule(state.currentSchedule);
-                }
+            // Re-render current schedule (or empty view)
+            if (view === 'table') {
+                if (state.currentSchedule) renderSimpleTableView(state.currentSchedule);
+            } else if (view === 'timeline') {
+                renderTimelineView(state.currentSchedule || {});
+            } else {
+                if (state.currentSchedule) renderSchedule(state.currentSchedule);
             }
         });
     });
@@ -374,6 +375,8 @@ function setupScheduleTab() {
             if (state.currentSchedule) {
                 if (state.scheduleViewMode === 'table') {
                     renderSimpleTableView(state.currentSchedule);
+                } else if (state.scheduleViewMode === 'timeline') {
+                    renderTimelineView(state.currentSchedule);
                 } else {
                     renderSchedule(state.currentSchedule);
                 }
@@ -583,7 +586,14 @@ async function generateSchedule() {
                 buildLookups();
             }
             
-            renderSchedule(data.schedule);
+            // Render based on current view mode
+            if (state.scheduleViewMode === 'table') {
+                renderSimpleTableView(data.schedule);
+            } else if (state.scheduleViewMode === 'timeline') {
+                renderTimelineView(data.schedule);
+            } else {
+                renderSchedule(data.schedule);
+            }
             updateMetrics(data.schedule);
             updateEmployeeHours(data.schedule);
             
@@ -636,7 +646,14 @@ async function findAlternative() {
         
         if (data.success) {
             state.currentSchedule = data.schedule;
-            renderSchedule(data.schedule);
+            // Render based on current view mode
+            if (state.scheduleViewMode === 'table') {
+                renderSimpleTableView(data.schedule);
+            } else if (state.scheduleViewMode === 'timeline') {
+                renderTimelineView(data.schedule);
+            } else {
+                renderSchedule(data.schedule);
+            }
             updateMetrics(data.schedule);
             updateEmployeeHours(data.schedule);
             
@@ -1223,6 +1240,260 @@ function renderSimpleTableView(schedule) {
     }
     
     // Update legend for table view too
+    renderScheduleLegend();
+}
+
+// ==================== TIMELINE VIEW ====================
+function renderTimelineView(schedule) {
+    const container = document.getElementById('timelineGrid');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Make sure state is initialized
+    if (!state.hours || state.hours.length === 0 || !state.daysOpen || state.daysOpen.length === 0) {
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+            Loading schedule data...
+        </div>`;
+        return;
+    }
+    
+    const slotAssignments = schedule?.slot_assignments || {};
+    
+    // Build header row with hours
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'timeline-header';
+    
+    const dayLabelHeader = document.createElement('div');
+    dayLabelHeader.className = 'timeline-header-day';
+    dayLabelHeader.textContent = 'Day';
+    headerDiv.appendChild(dayLabelHeader);
+    
+    const hoursHeader = document.createElement('div');
+    hoursHeader.className = 'timeline-header-hours';
+    
+    state.hours.forEach(hour => {
+        const hourLabel = document.createElement('div');
+        hourLabel.className = 'timeline-hour-label';
+        hourLabel.textContent = formatHour(hour);
+        hoursHeader.appendChild(hourLabel);
+    });
+    
+    headerDiv.appendChild(hoursHeader);
+    container.appendChild(headerDiv);
+    
+    // Build a row for each day
+    state.daysOpen.forEach(dayIdx => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'timeline-row ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
+        
+        // Day label
+        const dayLabel = document.createElement('div');
+        dayLabel.className = 'timeline-day-label';
+        dayLabel.textContent = state.days[dayIdx];
+        rowDiv.appendChild(dayLabel);
+        
+        // Slots container
+        const slotsDiv = document.createElement('div');
+        slotsDiv.className = 'timeline-slots';
+        
+        // Build shift blocks for this day
+        const dayAssignments = {};
+        
+        // Gather all assignments for this day
+        state.hours.forEach(hour => {
+            const key = `${dayIdx},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            assignments.forEach(assignment => {
+                const empId = assignment.employee_id;
+                if (!dayAssignments[empId]) {
+                    dayAssignments[empId] = { hours: [], roleId: assignment.role_id };
+                }
+                dayAssignments[empId].hours.push(hour);
+            });
+        });
+        
+        // Convert to shift segments (each employee can have multiple segments if split shift)
+        const allShifts = [];
+        Object.entries(dayAssignments).forEach(([empId, data]) => {
+            const emp = employeeMap[empId];
+            if (!emp) return;
+            
+            const hours = data.hours.sort((a, b) => a - b);
+            
+            // Find continuous segments
+            let segStart = hours[0];
+            let prevHour = hours[0];
+            
+            for (let i = 1; i <= hours.length; i++) {
+                const currentHour = hours[i];
+                
+                if (currentHour !== prevHour + 1 || i === hours.length) {
+                    allShifts.push({
+                        empId,
+                        emp,
+                        roleId: data.roleId,
+                        startHour: segStart,
+                        endHour: prevHour + 1
+                    });
+                    
+                    if (i < hours.length) {
+                        segStart = currentHour;
+                    }
+                }
+                prevHour = currentHour;
+            }
+        });
+        
+        // Assign shifts to rows (greedy algorithm - place each shift in first row where it fits)
+        const shiftRows = [];
+        allShifts.sort((a, b) => a.startHour - b.startHour);
+        
+        allShifts.forEach(shift => {
+            let placed = false;
+            for (let rowIdx = 0; rowIdx < shiftRows.length; rowIdx++) {
+                const rowShifts = shiftRows[rowIdx];
+                const hasOverlap = rowShifts.some(s => 
+                    shift.startHour < s.endHour && shift.endHour > s.startHour
+                );
+                if (!hasOverlap) {
+                    shift.row = rowIdx;
+                    rowShifts.push(shift);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                shift.row = shiftRows.length;
+                shiftRows.push([shift]);
+            }
+        });
+        
+        // Add gap indicators
+        const shiftTemplates = state.shiftTemplates || [];
+        const gapHours = [];
+        
+        state.hours.forEach(hour => {
+            const key = `${dayIdx},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            
+            const assignedByRole = {};
+            assignments.forEach(a => {
+                assignedByRole[a.role_id] = (assignedByRole[a.role_id] || 0) + 1;
+            });
+            
+            let hasGap = false;
+            shiftTemplates.forEach(shift => {
+                if (!shift.days || !shift.days.includes(dayIdx)) return;
+                if (hour < shift.start_hour || hour >= shift.end_hour) return;
+                
+                (shift.roles || []).forEach(roleReq => {
+                    const needed = roleReq.count || 0;
+                    const assigned = assignedByRole[roleReq.role_id] || 0;
+                    if (needed > assigned) hasGap = true;
+                });
+            });
+            
+            if (hasGap) gapHours.push(hour);
+        });
+        
+        // Convert gap hours to segments
+        const gapShifts = [];
+        if (gapHours.length > 0) {
+            gapHours.sort((a, b) => a - b);
+            let segStart = gapHours[0];
+            let prevHour = gapHours[0];
+            
+            for (let i = 1; i <= gapHours.length; i++) {
+                const currentHour = gapHours[i];
+                
+                if (currentHour !== prevHour + 1 || i === gapHours.length) {
+                    gapShifts.push({
+                        isGap: true,
+                        startHour: segStart,
+                        endHour: prevHour + 1
+                    });
+                    
+                    if (i < gapHours.length) {
+                        segStart = currentHour;
+                    }
+                }
+                prevHour = currentHour;
+            }
+        }
+        
+        // Determine number of rows needed (at least 1, show up to 5 by default)
+        const numShiftRows = Math.max(1, shiftRows.length);
+        const displayRows = numShiftRows; // Show all rows (can be limited to 5 + expand if needed)
+        
+        // Create row containers and render shifts
+        const slotWidth = 60;
+        const totalWidth = state.hours.length * slotWidth;
+        
+        for (let rowIdx = 0; rowIdx < displayRows; rowIdx++) {
+            const rowContainer = document.createElement('div');
+            rowContainer.className = 'timeline-slots-row';
+            rowContainer.style.width = `${totalWidth}px`;
+            
+            // Add shifts for this row
+            const rowShifts = shiftRows[rowIdx] || [];
+            rowShifts.forEach(shift => {
+                const startIdx = state.hours.indexOf(shift.startHour);
+                const duration = shift.endHour - shift.startHour;
+                
+                const block = document.createElement('div');
+                block.className = 'timeline-shift-block';
+                
+                block.style.left = `${startIdx * slotWidth + 2}px`;
+                block.style.width = `${duration * slotWidth - 4}px`;
+                
+                // Color based on mode
+                if (state.scheduleColorMode === 'employee') {
+                    block.style.background = shift.emp.color || '#666';
+                } else {
+                    const role = roleMap[shift.roleId];
+                    block.style.background = role?.color || '#666';
+                }
+                
+                block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>`;
+                block.title = `${shift.emp.name}: ${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
+                
+                rowContainer.appendChild(block);
+            });
+            
+            // Add gap blocks to first row only
+            if (rowIdx === 0 && gapShifts.length > 0) {
+                gapShifts.forEach(gap => {
+                    const startIdx = state.hours.indexOf(gap.startHour);
+                    const duration = gap.endHour - gap.startHour;
+                    
+                    const gapBlock = document.createElement('div');
+                    gapBlock.className = 'timeline-gap-block';
+                    
+                    gapBlock.style.left = `${startIdx * slotWidth + 2}px`;
+                    gapBlock.style.width = `${duration * slotWidth - 4}px`;
+                    gapBlock.innerHTML = `<span class="gap-label">+${duration}</span>`;
+                    gapBlock.title = `Gap: ${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}`;
+                    
+                    rowContainer.appendChild(gapBlock);
+                });
+            }
+            
+            slotsDiv.appendChild(rowContainer);
+        }
+        
+        // If no shifts at all, add an empty row
+        if (displayRows === 0 || (shiftRows.length === 0 && gapShifts.length === 0)) {
+            const emptyRow = document.createElement('div');
+            emptyRow.className = 'timeline-slots-row';
+            emptyRow.style.width = `${totalWidth}px`;
+            slotsDiv.appendChild(emptyRow);
+        }
+        
+        rowDiv.appendChild(slotsDiv);
+        container.appendChild(rowDiv);
+    });
+    
     renderScheduleLegend();
 }
 
