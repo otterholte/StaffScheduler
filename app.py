@@ -123,10 +123,10 @@ def index():
     
     # Default emoji/color mapping for built-in businesses
     business_meta = {
-        'coffee_shop': {'emoji': '☕', 'color': '#06d6a0'},
-        'retail_store': {'emoji': '🏪', 'color': '#6366f1'},
-        'restaurant': {'emoji': '🍽️', 'color': '#f59e0b'},
-        'call_center': {'emoji': '📞', 'color': '#3b82f6'},
+        'coffee_shop': {'emoji': '☕', 'color': '#3b82f6'},
+        'retail_store': {'emoji': '👗', 'color': '#f59e0b'},
+        'restaurant': {'emoji': '🍽️', 'color': '#ef4444'},
+        'call_center': {'emoji': '💻', 'color': '#4b5563'},
         'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
     }
     
@@ -177,10 +177,10 @@ def list_businesses():
     
     # Default emoji/color mapping for built-in businesses
     business_meta = {
-        'coffee_shop': {'emoji': '☕', 'color': '#06d6a0'},
-        'retail_store': {'emoji': '🏪', 'color': '#6366f1'},
-        'restaurant': {'emoji': '🍽️', 'color': '#f59e0b'},
-        'call_center': {'emoji': '📞', 'color': '#3b82f6'},
+        'coffee_shop': {'emoji': '☕', 'color': '#3b82f6'},
+        'retail_store': {'emoji': '👗', 'color': '#f59e0b'},
+        'restaurant': {'emoji': '🍽️', 'color': '#ef4444'},
+        'call_center': {'emoji': '💻', 'color': '#4b5563'},
         'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
     }
     

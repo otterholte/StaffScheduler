@@ -2,6 +2,21 @@
   "retail_store": {
     "name": "Urban Outfitters Plus",
     "emoji": "\ud83d\udc57",
-    "color": "#6366f1"
+    "color": "#f59e0b"
+  },
+  "coffee_shop": {
+    "name": "Sunrise Coffee",
+    "emoji": "\u2615",
+    "color": "#3b82f6"
+  },
+  "restaurant": {
+    "name": "Bella Vista Bistro",
+    "emoji": "\ud83c\udf7d\ufe0f",
+    "color": "#ef4444"
+  },
+  "call_center": {
+    "name": "Premier Support Services",
+    "emoji": "\ud83d\udcbb",
+    "color": "#4b5563"
   }
 }
