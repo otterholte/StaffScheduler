@@ -509,6 +509,18 @@ function setupBusinessModal() {
     // Initialize with favorites
     filterEmojis('', 'favorites');
     
+    // Add tooltips to emoji options based on data-name
+    emojiGrid?.querySelectorAll('.emoji-option').forEach(option => {
+        const name = option.dataset.name;
+        if (name) {
+            // Capitalize first letter and format nicely
+            const tooltip = name.split(' ').slice(0, 3).map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
+            option.title = tooltip;
+        }
+    });
+    
     if (emojiBtn && emojiPicker) {
         emojiBtn.addEventListener('click', (e) => {
             e.stopPropagation();
