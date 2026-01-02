@@ -484,17 +484,21 @@ function setupBusinessModal() {
         
         const search = searchTerm.toLowerCase().trim();
         let visibleCount = 0;
+        const seenEmojis = new Set();
         
         allEmojis.forEach(emoji => {
+            const emojiChar = emoji.dataset.emoji;
             const emojiCategories = emoji.dataset.category || '';
             const emojiName = emoji.dataset.name?.toLowerCase() || '';
             
             // Check if emoji belongs to category (categories can be space-separated)
             const matchesCategory = category === 'all' || emojiCategories.split(' ').includes(category);
-            const matchesSearch = !search || emojiName.includes(search) || emoji.dataset.emoji.includes(search);
+            const matchesSearch = !search || emojiName.includes(search) || emojiChar.includes(search);
             
-            if (matchesCategory && matchesSearch) {
+            // Only show if it matches both AND we haven't shown this exact emoji yet in this view
+            if (matchesCategory && matchesSearch && !seenEmojis.has(emojiChar)) {
                 emoji.style.display = '';
+                seenEmojis.add(emojiChar);
                 visibleCount++;
             } else {
                 emoji.style.display = 'none';
