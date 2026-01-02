@@ -1124,6 +1124,64 @@
     </div>
 
 
+    <!-- Available Employees Modal (for coverage gaps) -->
+    <div id="gapModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h2 id="gapModalTitle">Coverage Gap</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="gap-modal-info" id="gapModalInfo">
+                    <!-- Gap details will be populated -->
+                </div>
+                <h3 class="gap-modal-subtitle">Available Employees</h3>
+                <div class="available-employees-list" id="availableEmployeesList">
+                    <!-- Available employees will be populated -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shift Edit Modal (for reassigning/deleting shifts) -->
+    <div id="shiftEditModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2 id="shiftEditModalTitle">Edit Shift</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="shift-edit-info" id="shiftEditInfo">
+                    <!-- Shift details will be populated -->
+                </div>
+                <div class="shift-edit-actions">
+                    <div class="form-group">
+                        <label>Reassign to:</label>
+                        <select id="shiftEditEmployee" class="form-select">
+                            <!-- Available employees will be populated -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" id="deleteShiftBtn">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Delete Shift
+                </button>
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveShiftEditBtn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>

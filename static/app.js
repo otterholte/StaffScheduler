@@ -93,6 +93,7 @@ const dom = {
     slotModal: document.getElementById('slotModal'),
     confirmModal: document.getElementById('confirmModal'),
     shiftModal: document.getElementById('shiftModal'),
+    shiftEditModal: document.getElementById('shiftEditModal'),
     
     // Loading
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -303,6 +304,16 @@ function setupModals() {
     
     // Slot save
     document.getElementById('saveSlotBtn').addEventListener('click', saveSlotAssignment);
+    
+    // Shift edit (save and delete)
+    const saveShiftEditBtn = document.getElementById('saveShiftEditBtn');
+    const deleteShiftBtn = document.getElementById('deleteShiftBtn');
+    if (saveShiftEditBtn) {
+        saveShiftEditBtn.addEventListener('click', saveShiftEdit);
+    }
+    if (deleteShiftBtn) {
+        deleteShiftBtn.addEventListener('click', deleteShift);
+    }
     
     // Confirm
     document.getElementById('confirmBtn').addEventListener('click', handleConfirm);
@@ -800,7 +811,7 @@ function renderSchedule(schedule) {
     });
     
     // Build gap segments
-    const gapSegments = buildGapSegments(slotAssignments);
+    const gapSegments = buildGapSegments(slotAssignments, schedule);
     
     // Combine all blocks and assign columns together
     const allBlocks = [...shiftSegments, ...gapSegments];
@@ -921,7 +932,12 @@ function renderSchedule(schedule) {
         el.style.zIndex = 50 + (gap.column || 0); // Higher z-index than shifts
         
         el.innerHTML = `<span class="gap-label">+${gap.needed}</span>`;
-        el.title = `Need ${gap.needed} more ${role?.name || 'staff'}\n${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}`;
+        el.title = `Need ${gap.needed} more ${role?.name || 'staff'}\nClick to see available employees`;
+        
+        // Add click handler to show available employees
+        el.addEventListener('click', () => {
+            openGapModal(gap);
+        });
         
         eventsContainer.appendChild(el);
     });
@@ -930,11 +946,82 @@ function renderSchedule(schedule) {
     renderScheduleLegend();
 }
 
-function buildGapSegments(slotAssignments) {
+function buildGapSegments(slotAssignments, schedule) {
+    const gapSegments = [];
+    
+    // Use unfilled_slots from schedule metrics if available (works for all coverage modes)
+    const unfilledSlots = schedule?.metrics?.unfilled_slots || [];
+    
+    if (unfilledSlots.length > 0) {
+        // Group unfilled slots by day
+        const gapsByDay = {};
+        unfilledSlots.forEach(slot => {
+            const day = parseInt(slot.day);
+            if (!gapsByDay[day]) gapsByDay[day] = [];
+            gapsByDay[day].push(slot);
+        });
+        
+        // Convert to segments for each day
+        state.daysOpen.forEach((day, dayIdx) => {
+            const dayGaps = gapsByDay[day] || [];
+            if (dayGaps.length === 0) return;
+            
+            // Group by hour and sum needed
+            const hourGaps = {};
+            dayGaps.forEach(slot => {
+                const hour = parseInt(slot.hour);
+                if (!hourGaps[hour]) {
+                    hourGaps[hour] = { needed: 0, roleId: slot.role_id };
+                }
+                hourGaps[hour].needed += slot.needed || 1;
+                hourGaps[hour].roleId = slot.role_id;
+            });
+            
+            // Convert to array and sort
+            const gapHours = Object.entries(hourGaps)
+                .map(([hour, data]) => ({ hour: parseInt(hour), ...data }))
+                .sort((a, b) => a.hour - b.hour);
+            
+            if (gapHours.length === 0) return;
+            
+            // Build consecutive segments
+            let segStart = gapHours[0].hour;
+            let prevHour = gapHours[0].hour;
+            let maxGap = gapHours[0].needed;
+            let roleId = gapHours[0].roleId;
+            
+            for (let i = 1; i <= gapHours.length; i++) {
+                const current = gapHours[i];
+                
+                if (!current || current.hour !== prevHour + 1) {
+                    gapSegments.push({
+                        roleId,
+                        day,
+                        dayIdx,
+                        startHour: segStart,
+                        endHour: prevHour + 1,
+                        needed: maxGap,
+                        isGap: true
+                    });
+                    
+                    if (current) {
+                        segStart = current.hour;
+                        maxGap = current.needed;
+                        roleId = current.roleId;
+                    }
+                } else {
+                    maxGap = Math.max(maxGap, current.needed);
+                }
+                if (current) prevHour = current.hour;
+            }
+        });
+        
+        return gapSegments;
+    }
+    
+    // Fallback to shift templates if no unfilled_slots data
     const shiftTemplates = state.shiftTemplates || [];
     if (shiftTemplates.length === 0) return [];
-    
-    const gapSegments = [];
     
     state.daysOpen.forEach((day, dayIdx) => {
         // Group consecutive gap hours
@@ -1125,55 +1212,85 @@ function renderSimpleTableView(schedule) {
         });
     }
     
-    // Build gaps row
+    // Build gaps row - use unfilled_slots from schedule metrics if available
     const gaps = { days: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }, totalHours: 0 };
-    const shiftTemplates = state.shiftTemplates || [];
+    const unfilledSlots = schedule?.metrics?.unfilled_slots || [];
     
-    for (let day = 0; day < 7; day++) {
-        const gapHours = [];
-        
-        state.hours.forEach(hour => {
-            const key = `${day},${hour}`;
-            const assignments = slotAssignments[key] || [];
+    if (unfilledSlots.length > 0) {
+        // Use unfilled_slots from schedule
+        for (let day = 0; day < 7; day++) {
+            const dayUnfilled = unfilledSlots.filter(s => parseInt(s.day) === day);
+            if (dayUnfilled.length === 0) continue;
             
-            // Count what's assigned
-            const assignedByRole = {};
-            assignments.forEach(a => {
-                assignedByRole[a.role_id] = (assignedByRole[a.role_id] || 0) + 1;
-            });
+            const gapHours = [...new Set(dayUnfilled.map(s => parseInt(s.hour)))].sort((a, b) => a - b);
             
-            // Check against requirements
-            let hasGap = false;
-            shiftTemplates.forEach(shift => {
-                if (!shift.days || !shift.days.includes(day)) return;
-                if (hour < shift.start_hour || hour >= shift.end_hour) return;
+            if (gapHours.length > 0) {
+                let segStart = gapHours[0];
+                let prevHour = gapHours[0];
                 
-                (shift.roles || []).forEach(roleReq => {
-                    const needed = roleReq.count || 0;
-                    const assigned = assignedByRole[roleReq.role_id] || 0;
-                    if (needed > assigned) hasGap = true;
-                });
-            });
-            
-            if (hasGap) gapHours.push(hour);
-        });
-        
-        // Convert gap hours to segments
-        if (gapHours.length > 0) {
-            gapHours.sort((a, b) => a - b);
-            let segStart = gapHours[0];
-            let prevHour = gapHours[0];
-            
-            for (let i = 1; i <= gapHours.length; i++) {
-                const currentHour = gapHours[i];
-                
-                if (currentHour !== prevHour + 1 || i === gapHours.length) {
-                    gaps.days[day].push({ start: segStart, end: prevHour + 1 });
-                    gaps.totalHours += (prevHour + 1 - segStart);
+                for (let i = 1; i <= gapHours.length; i++) {
+                    const currentHour = gapHours[i];
                     
-                    if (i < gapHours.length) segStart = currentHour;
+                    if (currentHour !== prevHour + 1 || i === gapHours.length) {
+                        gaps.days[day].push({ start: segStart, end: prevHour + 1 });
+                        gaps.totalHours += (prevHour + 1 - segStart);
+                        
+                        if (i < gapHours.length) segStart = currentHour;
+                    }
+                    prevHour = currentHour;
                 }
-                prevHour = currentHour;
+            }
+        }
+    } else {
+        // Fallback to shift templates
+        const shiftTemplates = state.shiftTemplates || [];
+        
+        for (let day = 0; day < 7; day++) {
+            const gapHours = [];
+            
+            state.hours.forEach(hour => {
+                const key = `${day},${hour}`;
+                const assignments = slotAssignments[key] || [];
+                
+                // Count what's assigned
+                const assignedByRole = {};
+                assignments.forEach(a => {
+                    assignedByRole[a.role_id] = (assignedByRole[a.role_id] || 0) + 1;
+                });
+                
+                // Check against requirements
+                let hasGap = false;
+                shiftTemplates.forEach(shift => {
+                    if (!shift.days || !shift.days.includes(day)) return;
+                    if (hour < shift.start_hour || hour >= shift.end_hour) return;
+                    
+                    (shift.roles || []).forEach(roleReq => {
+                        const needed = roleReq.count || 0;
+                        const assigned = assignedByRole[roleReq.role_id] || 0;
+                        if (needed > assigned) hasGap = true;
+                    });
+                });
+                
+                if (hasGap) gapHours.push(hour);
+            });
+            
+            // Convert gap hours to segments
+            if (gapHours.length > 0) {
+                gapHours.sort((a, b) => a - b);
+                let segStart = gapHours[0];
+                let prevHour = gapHours[0];
+                
+                for (let i = 1; i <= gapHours.length; i++) {
+                    const currentHour = gapHours[i];
+                    
+                    if (currentHour !== prevHour + 1 || i === gapHours.length) {
+                        gaps.days[day].push({ start: segStart, end: prevHour + 1 });
+                        gaps.totalHours += (prevHour + 1 - segStart);
+                        
+                        if (i < gapHours.length) segStart = currentHour;
+                    }
+                    prevHour = currentHour;
+                }
             }
         }
     }
@@ -1369,68 +1486,173 @@ function renderTimelineView(schedule) {
             }
         });
         
-        // Add gap indicators
-        const shiftTemplates = state.shiftTemplates || [];
-        const gapHours = [];
-        
-        state.hours.forEach(hour => {
-            const key = `${dayIdx},${hour}`;
-            const assignments = slotAssignments[key] || [];
-            
-            const assignedByRole = {};
-            assignments.forEach(a => {
-                assignedByRole[a.role_id] = (assignedByRole[a.role_id] || 0) + 1;
-            });
-            
-            let hasGap = false;
-            shiftTemplates.forEach(shift => {
-                if (!shift.days || !shift.days.includes(dayIdx)) return;
-                if (hour < shift.start_hour || hour >= shift.end_hour) return;
-                
-                (shift.roles || []).forEach(roleReq => {
-                    const needed = roleReq.count || 0;
-                    const assigned = assignedByRole[roleReq.role_id] || 0;
-                    if (needed > assigned) hasGap = true;
-                });
-            });
-            
-            if (hasGap) gapHours.push(hour);
-        });
-        
-        // Convert gap hours to segments
+        // Add gap indicators (only if a schedule has been generated)
         const gapShifts = [];
-        if (gapHours.length > 0) {
-            gapHours.sort((a, b) => a - b);
-            let segStart = gapHours[0];
-            let prevHour = gapHours[0];
+        const hasSchedule = Object.keys(slotAssignments).length > 0;
+        
+        if (hasSchedule) {
+            // Use unfilled_slots from schedule metrics if available
+            const unfilledSlots = schedule?.metrics?.unfilled_slots || [];
+            // Use parseInt to handle potential type mismatches from JSON
+            const dayUnfilled = unfilledSlots.filter(s => parseInt(s.day) === parseInt(dayIdx));
             
-            for (let i = 1; i <= gapHours.length; i++) {
-                const currentHour = gapHours[i];
+            if (dayUnfilled.length > 0) {
+                // Group by hour (ensure integers) and track role/needed info
+                const hourData = {};
+                dayUnfilled.forEach(slot => {
+                    const hour = parseInt(slot.hour);
+                    if (!hourData[hour]) {
+                        hourData[hour] = { needed: 0, roleId: slot.role_id };
+                    }
+                    hourData[hour].needed += slot.needed || 1;
+                    hourData[hour].roleId = slot.role_id;
+                });
                 
-                if (currentHour !== prevHour + 1 || i === gapHours.length) {
-                    gapShifts.push({
-                        isGap: true,
-                        startHour: segStart,
-                        endHour: prevHour + 1
-                    });
+                const gapHours = Object.keys(hourData).map(h => parseInt(h)).sort((a, b) => a - b);
+                
+                // Convert to segments
+                if (gapHours.length > 0) {
+                    let segStart = gapHours[0];
+                    let prevHour = gapHours[0];
+                    let maxNeeded = hourData[gapHours[0]].needed;
+                    let roleId = hourData[gapHours[0]].roleId;
                     
-                    if (i < gapHours.length) {
-                        segStart = currentHour;
+                    for (let i = 1; i <= gapHours.length; i++) {
+                        const currentHour = gapHours[i];
+                        
+                        if (currentHour !== prevHour + 1 || i === gapHours.length) {
+                            gapShifts.push({
+                                isGap: true,
+                                day: dayIdx,
+                                dayIdx: state.daysOpen.indexOf(dayIdx),
+                                roleId: roleId,
+                                startHour: segStart,
+                                endHour: prevHour + 1,
+                                needed: maxNeeded
+                            });
+                            
+                            if (i < gapHours.length) {
+                                segStart = currentHour;
+                                maxNeeded = hourData[currentHour].needed;
+                                roleId = hourData[currentHour].roleId;
+                            }
+                        } else {
+                            maxNeeded = Math.max(maxNeeded, hourData[currentHour].needed);
+                        }
+                        prevHour = currentHour;
                     }
                 }
-                prevHour = currentHour;
+            } else {
+                // Fallback to shift templates
+                const shiftTemplates = state.shiftTemplates || [];
+                const hourData = {}; // { hour: { needed, roleId } }
+                
+                state.hours.forEach(hour => {
+                    const key = `${dayIdx},${hour}`;
+                    const assignments = slotAssignments[key] || [];
+                    
+                    const assignedByRole = {};
+                    assignments.forEach(a => {
+                        assignedByRole[a.role_id] = (assignedByRole[a.role_id] || 0) + 1;
+                    });
+                    
+                    let totalGap = 0;
+                    let gapRoleId = null;
+                    shiftTemplates.forEach(shift => {
+                        if (!shift.days || !shift.days.includes(dayIdx)) return;
+                        if (hour < shift.start_hour || hour >= shift.end_hour) return;
+                        
+                        (shift.roles || []).forEach(roleReq => {
+                            const needed = roleReq.count || 0;
+                            const assigned = assignedByRole[roleReq.role_id] || 0;
+                            if (needed > assigned) {
+                                totalGap += (needed - assigned);
+                                gapRoleId = roleReq.role_id;
+                            }
+                        });
+                    });
+                    
+                    if (totalGap > 0) {
+                        hourData[hour] = { needed: totalGap, roleId: gapRoleId };
+                    }
+                });
+                
+                // Convert to segments
+                const gapHours = Object.keys(hourData).map(h => parseInt(h)).sort((a, b) => a - b);
+                
+                if (gapHours.length > 0) {
+                    let segStart = gapHours[0];
+                    let prevHour = gapHours[0];
+                    let maxNeeded = hourData[gapHours[0]].needed;
+                    let roleId = hourData[gapHours[0]].roleId;
+                    
+                    for (let i = 1; i <= gapHours.length; i++) {
+                        const currentHour = gapHours[i];
+                        
+                        if (currentHour !== prevHour + 1 || i === gapHours.length) {
+                            gapShifts.push({
+                                isGap: true,
+                                day: dayIdx,
+                                dayIdx: state.daysOpen.indexOf(dayIdx),
+                                roleId: roleId,
+                                startHour: segStart,
+                                endHour: prevHour + 1,
+                                needed: maxNeeded
+                            });
+                            
+                            if (i < gapHours.length) {
+                                segStart = currentHour;
+                                maxNeeded = hourData[currentHour].needed;
+                                roleId = hourData[currentHour].roleId;
+                            }
+                        } else {
+                            maxNeeded = Math.max(maxNeeded, hourData[currentHour].needed);
+                        }
+                        prevHour = currentHour;
+                    }
+                }
             }
         }
-        
-        // Determine number of rows needed (at least 1, show up to 5 by default)
-        const numShiftRows = Math.max(1, shiftRows.length);
-        const displayRows = numShiftRows; // Show all rows (can be limited to 5 + expand if needed)
         
         // Create row containers and render shifts using percentage positioning
         const totalHours = state.hours.length;
         const gapPercent = 0.3; // Small gap between blocks as percentage
         
-        for (let rowIdx = 0; rowIdx < displayRows; rowIdx++) {
+        // Add gap row FIRST (at the top) if there are gaps
+        if (gapShifts.length > 0) {
+            const gapRowContainer = document.createElement('div');
+            gapRowContainer.className = 'timeline-slots-row timeline-gap-row';
+            
+            gapShifts.forEach(gap => {
+                const startIdx = state.hours.indexOf(gap.startHour);
+                const duration = gap.endHour - gap.startHour;
+                
+                const gapBlock = document.createElement('div');
+                gapBlock.className = 'timeline-gap-block';
+                
+                // Calculate percentage positions
+                const leftPercent = (startIdx / totalHours) * 100 + gapPercent;
+                const widthPercent = (duration / totalHours) * 100 - (gapPercent * 2);
+                gapBlock.style.left = `${leftPercent}%`;
+                gapBlock.style.width = `${widthPercent}%`;
+                gapBlock.innerHTML = `<span class="gap-label">+${duration}h</span>`;
+                gapBlock.title = `Click to see available employees`;
+                
+                // Add click handler to show available employees
+                gapBlock.addEventListener('click', () => {
+                    openGapModal(gap);
+                });
+                
+                gapRowContainer.appendChild(gapBlock);
+            });
+            
+            slotsDiv.appendChild(gapRowContainer);
+        }
+        
+        // Add employee shift rows
+        const numShiftRows = shiftRows.length;
+        
+        for (let rowIdx = 0; rowIdx < numShiftRows; rowIdx++) {
             const rowContainer = document.createElement('div');
             rowContainer.className = 'timeline-slots-row';
             
@@ -1450,45 +1672,36 @@ function renderTimelineView(schedule) {
                 block.style.width = `${widthPercent}%`;
                 
                 // Color based on mode
+                const role = roleMap[shift.roleId];
                 if (state.scheduleColorMode === 'employee') {
                     block.style.background = shift.emp.color || '#666';
                 } else {
-                    const role = roleMap[shift.roleId];
                     block.style.background = role?.color || '#666';
                 }
                 
+                // Better tooltip with name, hours, and role
+                const roleName = role?.name || 'Staff';
                 block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>`;
-                block.title = `${shift.emp.name}: ${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
+                block.title = `${shift.emp.name}\nRole: ${roleName}\n${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
+                
+                // Add day info to shift for the editor
+                shift.day = state.days[dayIdx];
+                shift.dayIdx = dayIdx;
+                
+                // Click handler to edit shift
+                block.style.cursor = 'pointer';
+                block.addEventListener('click', () => {
+                    openShiftEditor(shift);
+                });
                 
                 rowContainer.appendChild(block);
             });
             
-            // Add gap blocks to first row only
-            if (rowIdx === 0 && gapShifts.length > 0) {
-                gapShifts.forEach(gap => {
-                    const startIdx = state.hours.indexOf(gap.startHour);
-                    const duration = gap.endHour - gap.startHour;
-                    
-                    const gapBlock = document.createElement('div');
-                    gapBlock.className = 'timeline-gap-block';
-                    
-                    // Calculate percentage positions
-                    const leftPercent = (startIdx / totalHours) * 100 + gapPercent;
-                    const widthPercent = (duration / totalHours) * 100 - (gapPercent * 2);
-                    gapBlock.style.left = `${leftPercent}%`;
-                    gapBlock.style.width = `${widthPercent}%`;
-                    gapBlock.innerHTML = `<span class="gap-label">+${duration}</span>`;
-                    gapBlock.title = `Gap: ${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}`;
-                    
-                    rowContainer.appendChild(gapBlock);
-                });
-            }
-            
             slotsDiv.appendChild(rowContainer);
         }
         
-        // If no shifts at all, add an empty row
-        if (displayRows === 0 || (shiftRows.length === 0 && gapShifts.length === 0)) {
+        // If no shifts and no gaps, add an empty row
+        if (numShiftRows === 0 && gapShifts.length === 0) {
             const emptyRow = document.createElement('div');
             emptyRow.className = 'timeline-slots-row';
             slotsDiv.appendChild(emptyRow);
@@ -1598,6 +1811,411 @@ function updateEmployeeHours(schedule) {
             }
         }
     });
+}
+
+// ==================== GAP MODAL (Coverage Gaps) ====================
+function openGapModal(gap) {
+    const role = roleMap[gap.roleId];
+    const dayName = state.days[gap.day];
+    
+    // Populate gap info
+    const infoEl = document.getElementById('gapModalInfo');
+    infoEl.innerHTML = `
+        <div class="gap-icon">+${gap.needed}</div>
+        <div class="gap-modal-details">
+            <h4>${gap.needed} ${role?.name || 'Staff'} Needed</h4>
+            <p>${dayName}, ${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}</p>
+        </div>
+    `;
+    
+    // Update title
+    document.getElementById('gapModalTitle').textContent = `Coverage Gap - ${dayName}`;
+    
+    // Find available employees
+    const availableEmployees = findAvailableEmployeesForGap(gap);
+    
+    // Populate available employees list
+    const listEl = document.getElementById('availableEmployeesList');
+    listEl.innerHTML = '';
+    
+    if (availableEmployees.length === 0) {
+        listEl.innerHTML = `
+            <div class="no-available-employees">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p>No employees available for this time slot</p>
+            </div>
+        `;
+    } else {
+        availableEmployees.forEach(empData => {
+            const card = createAvailableEmployeeCard(empData, gap);
+            listEl.appendChild(card);
+        });
+    }
+    
+    openModal('gapModal');
+}
+
+function findAvailableEmployeesForGap(gap) {
+    const schedule = state.currentSchedule;
+    if (!schedule) return [];
+    
+    const slotAssignments = schedule.slot_assignments || {};
+    const availableEmps = [];
+    
+    state.employees.forEach(emp => {
+        // Calculate current weekly hours
+        let currentHours = 0;
+        const weeklySchedule = {}; // { dayIdx: [{start, end}] }
+        
+        for (let day = 0; day < 7; day++) {
+            weeklySchedule[day] = [];
+            const dayHours = [];
+            
+            state.hours.forEach(hour => {
+                const key = `${day},${hour}`;
+                const assignments = slotAssignments[key] || [];
+                if (assignments.some(a => a.employee_id === emp.id)) {
+                    dayHours.push(hour);
+                    currentHours++;
+                }
+            });
+            
+            // Convert to segments
+            if (dayHours.length > 0) {
+                dayHours.sort((a, b) => a - b);
+                let segStart = dayHours[0];
+                let prevHour = dayHours[0];
+                
+                for (let i = 1; i <= dayHours.length; i++) {
+                    const currentHour = dayHours[i];
+                    if (currentHour !== prevHour + 1 || i === dayHours.length) {
+                        weeklySchedule[day].push({ start: segStart, end: prevHour + 1 });
+                        if (i < dayHours.length) segStart = currentHour;
+                    }
+                    if (currentHour) prevHour = currentHour;
+                }
+            }
+        }
+        
+        // Check if employee can take more hours
+        const hoursAvailable = emp.max_hours - currentHours;
+        const gapDuration = gap.endHour - gap.startHour;
+        
+        if (hoursAvailable < gapDuration) return; // Can't fit this shift
+        
+        // Check if employee has the required role (if specified)
+        if (gap.roleId && emp.roles && emp.roles.length > 0) {
+            if (!emp.roles.includes(gap.roleId)) return; // Doesn't have required role
+        }
+        
+        // Check availability for the gap time slot
+        const isAvailable = checkEmployeeAvailability(emp, gap.day, gap.startHour, gap.endHour);
+        if (!isAvailable) return;
+        
+        // Check if already scheduled during this time
+        const alreadyScheduled = weeklySchedule[gap.day].some(shift => 
+            gap.startHour < shift.end && gap.endHour > shift.start
+        );
+        if (alreadyScheduled) return;
+        
+        availableEmps.push({
+            employee: emp,
+            currentHours,
+            hoursAvailable,
+            weeklySchedule
+        });
+    });
+    
+    // Sort by who has most hours available (prioritize those who need hours)
+    availableEmps.sort((a, b) => {
+        // Prioritize those under minimum hours
+        const aUnderMin = a.currentHours < a.employee.min_hours;
+        const bUnderMin = b.currentHours < b.employee.min_hours;
+        if (aUnderMin && !bUnderMin) return -1;
+        if (!aUnderMin && bUnderMin) return 1;
+        
+        // Then sort by hours available (descending)
+        return b.hoursAvailable - a.hoursAvailable;
+    });
+    
+    return availableEmps;
+}
+
+function checkEmployeeAvailability(emp, day, startHour, endHour) {
+    // Check if employee is available for all hours in the range
+    for (let hour = startHour; hour < endHour; hour++) {
+        const isAvailable = emp.availability.some(slot => slot.day === day && slot.hour === hour);
+        if (!isAvailable) return false;
+        
+        // Check if it's time off
+        const isTimeOff = emp.time_off && emp.time_off.some(slot => slot.day === day && slot.hour === hour);
+        if (isTimeOff) return false;
+    }
+    return true;
+}
+
+function createAvailableEmployeeCard(empData, gap) {
+    const emp = empData.employee;
+    const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    
+    const card = document.createElement('div');
+    card.className = 'available-employee-card';
+    
+    // Build badges
+    let badgesHtml = '';
+    if (emp.classification === 'full_time') {
+        badgesHtml += '<span class="badge badge-ft">FT</span>';
+    } else {
+        badgesHtml += '<span class="badge badge-pt">PT</span>';
+    }
+    if (emp.can_supervise) {
+        badgesHtml += '<span class="badge badge-sup">SUP</span>';
+    }
+    if (emp.needs_supervision) {
+        badgesHtml += '<span class="badge badge-new">NEW</span>';
+    }
+    if (emp.overtime_allowed) {
+        badgesHtml += '<span class="badge badge-ot">OT</span>';
+    }
+    
+    // Build weekly schedule display
+    let scheduleHtml = '';
+    const dayAbbrevs = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    for (let day = 0; day < 7; day++) {
+        const shifts = empData.weeklySchedule[day];
+        if (shifts.length > 0) {
+            const shiftStrs = shifts.map(s => `${formatHour(s.start)}-${formatHour(s.end)}`).join(', ');
+            scheduleHtml += `<span class="schedule-day"><strong>${dayAbbrevs[day]}:</strong> ${shiftStrs}</span>`;
+        }
+    }
+    
+    // Hours status
+    const hoursClass = empData.currentHours < emp.min_hours ? 'hours-available' : '';
+    const underMinText = empData.currentHours < emp.min_hours 
+        ? ` (needs ${emp.min_hours - empData.currentHours}h more)` 
+        : '';
+    
+    card.innerHTML = `
+        <div class="emp-avatar" style="background: ${emp.color || '#666'}">${initials}</div>
+        <div class="emp-info">
+            <div class="emp-name-row">
+                <span class="emp-name">${emp.name}</span>
+                <div class="emp-badges">${badgesHtml}</div>
+            </div>
+            <div class="emp-hours-info">
+                <span class="hours-current ${hoursClass}">${empData.currentHours}h scheduled</span>
+                <span>•</span>
+                <span>${emp.min_hours}-${emp.max_hours}h range</span>
+                <span>•</span>
+                <span class="hours-available">${empData.hoursAvailable}h available${underMinText}</span>
+            </div>
+            <div class="emp-schedule">
+                ${scheduleHtml ? `<span>Current schedule:</span><div class="emp-schedule-days">${scheduleHtml}</div>` : '<span>No shifts scheduled yet</span>'}
+            </div>
+        </div>
+    `;
+    
+    // Add click to assign (future feature)
+    card.title = `Click to view ${emp.name}'s details`;
+    
+    return card;
+}
+
+// ==================== SHIFT EDITOR (Timeline/Grid Click) ====================
+function openShiftEditor(shift) {
+    const modal = dom.shiftEditModal;
+    if (!modal) return;
+    
+    const role = roleMap[shift.roleId];
+    const emp = shift.emp;
+    const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    
+    // Store shift data for save/delete
+    modal.dataset.shiftData = JSON.stringify({
+        empId: shift.empId,
+        roleId: shift.roleId,
+        dayIdx: shift.dayIdx,
+        startHour: shift.startHour,
+        endHour: shift.endHour
+    });
+    
+    // Populate shift info
+    const infoEl = document.getElementById('shiftEditInfo');
+    infoEl.innerHTML = `
+        <div class="shift-color-dot" style="background: ${emp.color || '#666'}">${initials}</div>
+        <div class="shift-edit-details">
+            <h4>${emp.name}</h4>
+            <p>Role: ${role?.name || 'Staff'}</p>
+            <div class="shift-time">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span>${shift.day}, ${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}</span>
+            </div>
+        </div>
+    `;
+    
+    // Update title
+    document.getElementById('shiftEditModalTitle').textContent = `Edit Shift - ${shift.day}`;
+    
+    // Populate employee select with available employees
+    const empSelect = document.getElementById('shiftEditEmployee');
+    empSelect.innerHTML = '';
+    
+    // Add current employee as first option
+    const currentOpt = document.createElement('option');
+    currentOpt.value = emp.id;
+    currentOpt.textContent = `${emp.name} (current)`;
+    empSelect.appendChild(currentOpt);
+    
+    // Find other available employees for this time slot
+    state.employees.forEach(otherEmp => {
+        if (otherEmp.id === emp.id) return; // Skip current employee
+        
+        // Check availability
+        const isAvailable = checkEmployeeAvailability(otherEmp, shift.dayIdx, shift.startHour, shift.endHour);
+        if (!isAvailable) return;
+        
+        // Check if already scheduled during this time
+        const schedule = state.currentSchedule;
+        if (schedule) {
+            const slotAssignments = schedule.slot_assignments || {};
+            let alreadyScheduled = false;
+            
+            for (let hour = shift.startHour; hour < shift.endHour; hour++) {
+                const key = `${shift.dayIdx},${hour}`;
+                const assignments = slotAssignments[key] || [];
+                if (assignments.some(a => a.employee_id === otherEmp.id)) {
+                    alreadyScheduled = true;
+                    break;
+                }
+            }
+            
+            if (alreadyScheduled) return;
+        }
+        
+        // Check if has required role
+        if (shift.roleId && otherEmp.roles && otherEmp.roles.length > 0) {
+            if (!otherEmp.roles.includes(shift.roleId)) return;
+        }
+        
+        // Calculate current hours
+        let currentHours = 0;
+        if (schedule) {
+            const slotAssignments = schedule.slot_assignments || {};
+            for (const [key, assignments] of Object.entries(slotAssignments)) {
+                if (assignments.some(a => a.employee_id === otherEmp.id)) {
+                    currentHours++;
+                }
+            }
+        }
+        
+        const shiftDuration = shift.endHour - shift.startHour;
+        const wouldExceedMax = currentHours + shiftDuration > otherEmp.max_hours;
+        
+        const opt = document.createElement('option');
+        opt.value = otherEmp.id;
+        opt.textContent = `${otherEmp.name} (${currentHours}h scheduled)`;
+        opt.disabled = wouldExceedMax;
+        if (wouldExceedMax) {
+            opt.textContent += ' - max hours';
+        }
+        empSelect.appendChild(opt);
+    });
+    
+    openModal('shiftEditModal');
+}
+
+function saveShiftEdit() {
+    const modal = dom.shiftEditModal;
+    const shiftData = JSON.parse(modal.dataset.shiftData);
+    const newEmpId = document.getElementById('shiftEditEmployee').value;
+    
+    if (!state.currentSchedule) {
+        showToast('No schedule to edit', 'warning');
+        closeAllModals();
+        return;
+    }
+    
+    const slotAssignments = state.currentSchedule.slot_assignments;
+    
+    // If employee changed, update all slots in the shift range
+    if (newEmpId !== shiftData.empId) {
+        for (let hour = shiftData.startHour; hour < shiftData.endHour; hour++) {
+            const key = `${shiftData.dayIdx},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            
+            // Find and update the assignment for the old employee
+            const idx = assignments.findIndex(a => a.employee_id === shiftData.empId);
+            if (idx !== -1) {
+                assignments[idx].employee_id = newEmpId;
+            }
+        }
+        
+        showToast('Shift reassigned successfully', 'success');
+    }
+    
+    // Re-render the schedule
+    renderSchedule(state.currentSchedule);
+    closeAllModals();
+}
+
+function deleteShift() {
+    const modal = dom.shiftEditModal;
+    const shiftData = JSON.parse(modal.dataset.shiftData);
+    
+    if (!state.currentSchedule) {
+        showToast('No schedule to edit', 'warning');
+        closeAllModals();
+        return;
+    }
+    
+    const slotAssignments = state.currentSchedule.slot_assignments;
+    
+    // Remove the employee from all slots in the shift range
+    for (let hour = shiftData.startHour; hour < shiftData.endHour; hour++) {
+        const key = `${shiftData.dayIdx},${hour}`;
+        const assignments = slotAssignments[key] || [];
+        
+        // Filter out the assignment for this employee
+        const filtered = assignments.filter(a => a.employee_id !== shiftData.empId);
+        
+        if (filtered.length > 0) {
+            slotAssignments[key] = filtered;
+        } else {
+            delete slotAssignments[key];
+        }
+    }
+    
+    // Update unfilled slots (add the deleted shift as a gap)
+    if (!state.currentSchedule.metrics) {
+        state.currentSchedule.metrics = { unfilled_slots: [] };
+    }
+    if (!state.currentSchedule.metrics.unfilled_slots) {
+        state.currentSchedule.metrics.unfilled_slots = [];
+    }
+    
+    // Add each hour as an unfilled slot
+    for (let hour = shiftData.startHour; hour < shiftData.endHour; hour++) {
+        state.currentSchedule.metrics.unfilled_slots.push({
+            day: shiftData.dayIdx,
+            hour: hour,
+            role_id: shiftData.roleId,
+            needed: 1
+        });
+    }
+    
+    showToast('Shift deleted', 'success');
+    
+    // Re-render the schedule
+    renderSchedule(state.currentSchedule);
+    closeAllModals();
 }
 
 // ==================== SLOT EDITOR ====================
