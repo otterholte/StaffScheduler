@@ -36,6 +36,10 @@ const employeeMap = {};
 const roleMap = {};
 
 function buildLookups() {
+    // Clear existing maps before rebuilding
+    Object.keys(employeeMap).forEach(key => delete employeeMap[key]);
+    Object.keys(roleMap).forEach(key => delete roleMap[key]);
+    
     state.employees.forEach(emp => employeeMap[emp.id] = emp);
     state.roles.forEach(role => roleMap[role.id] = role);
 }
@@ -460,7 +464,8 @@ async function switchBusiness(businessId) {
             showToast(data.message || 'Failed to switch business', 'error');
         }
     } catch (error) {
-        showToast('Error switching business', 'error');
+        console.error('Error switching business:', error);
+        showToast('Error switching business: ' + error.message, 'error');
     } finally {
         hideLoading();
     }
@@ -468,7 +473,15 @@ async function switchBusiness(businessId) {
 
 function rebuildScheduleGrid() {
     // Rebuild header with alternating colors (TUE, THU, SAT get alternate color)
+    if (!dom.scheduleGrid) {
+        console.warn('scheduleGrid not found');
+        return;
+    }
     const thead = dom.scheduleGrid.querySelector('thead tr');
+    if (!thead) {
+        console.warn('thead tr not found in scheduleGrid');
+        return;
+    }
     thead.innerHTML = '<th class="time-col">Time</th>';
     state.daysOpen.forEach((dayIdx, colIndex) => {
         const th = document.createElement('th');
@@ -479,6 +492,7 @@ function rebuildScheduleGrid() {
     });
     
     // Rebuild body with alternating colors
+    if (!dom.scheduleBody) return;
     dom.scheduleBody.innerHTML = '';
     state.hours.forEach(hour => {
         const tr = document.createElement('tr');
@@ -503,6 +517,7 @@ function rebuildScheduleGrid() {
 }
 
 function renderEmployeeHoursList() {
+    if (!dom.employeeHoursList) return;
     dom.employeeHoursList.innerHTML = '';
     
     state.employees.forEach(emp => {
@@ -552,6 +567,7 @@ function getBadgesHTML(emp, fullText = false) {
 
 function renderRoleLegend() {
     const legend = document.getElementById('roleLegend');
+    if (!legend) return;
     legend.innerHTML = '';
     
     state.roles.forEach(role => {
@@ -2357,6 +2373,7 @@ function selectFilterOption(option) {
 }
 
 function renderEmployeesGrid() {
+    if (!dom.employeesGrid || !dom.employeeSearch) return;
     const search = dom.employeeSearch.value.toLowerCase();
     
     // Filter by search and selected filter

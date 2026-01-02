@@ -376,12 +376,75 @@ def create_retail_store() -> BusinessScenario:
         emp.preferences = prefs
         employees.append(emp)
     
+    # Create shift templates for the Requirements UI
+    shift_templates = [
+        ShiftTemplate(
+            id="full_day",
+            name="Full Day Coverage",
+            start_hour=10,
+            end_hour=20,
+            days=list(range(6)),  # Mon-Sat
+            color="#6366f1",
+            roles=[
+                ShiftRoleRequirement(role_id="floor", count=1, max_count=3),
+                ShiftRoleRequirement(role_id="cashier", count=1, max_count=2),
+            ]
+        ),
+        ShiftTemplate(
+            id="full_day_sun",
+            name="Sunday Coverage",
+            start_hour=10,
+            end_hour=19,  # Sunday closes at 7pm
+            days=[6],  # Sunday only
+            color="#8b5cf6",
+            roles=[
+                ShiftRoleRequirement(role_id="floor", count=1, max_count=3),
+                ShiftRoleRequirement(role_id="cashier", count=1, max_count=2),
+            ]
+        ),
+        ShiftTemplate(
+            id="opening_supervisor",
+            name="Opening Supervisor",
+            start_hour=10,
+            end_hour=11,
+            days=list(range(7)),  # All days
+            color="#DC143C",
+            roles=[
+                ShiftRoleRequirement(role_id="supervisor", count=1, max_count=1),
+            ]
+        ),
+        ShiftTemplate(
+            id="closing_supervisor",
+            name="Closing Supervisor (Mon-Sat)",
+            start_hour=19,
+            end_hour=20,
+            days=list(range(6)),  # Mon-Sat
+            color="#DC143C",
+            roles=[
+                ShiftRoleRequirement(role_id="supervisor", count=1, max_count=1),
+            ]
+        ),
+        ShiftTemplate(
+            id="closing_supervisor_sun",
+            name="Closing Supervisor (Sun)",
+            start_hour=18,
+            end_hour=19,
+            days=[6],  # Sunday only
+            color="#DC143C",
+            roles=[
+                ShiftRoleRequirement(role_id="supervisor", count=1, max_count=1),
+            ]
+        ),
+    ]
+    
     return BusinessScenario(
         id="retail_store",
         name="Urban Outfitters Plus",
         description="Retail store with 12 staff, 3 roles - 10am-8pm (Sun 7pm)",
         start_hour=10, end_hour=20,
         days_open=list(range(7)),
+        shift_templates=shift_templates,
+        coverage_mode=CoverageMode.SHIFTS,
         roles=roles,
         employees=employees,
         coverage_requirements=coverage
