@@ -294,18 +294,33 @@ def create_retail_store() -> BusinessScenario:
         Role(id="supervisor", name="Supervisor", color="#DC143C")
     ]
     
-    # Coverage: need 2-3 staff per hour
-    # Total: ~12 hours × 7 days × 2.5 avg = ~210 slots
-    # Staff: 12 × ~25 hours = ~300 hours available
+    # Coverage requirements:
+    # - Floor Associates: 1-3 between 10am-8pm
+    # - Cashier: at least 1 during 10am-8pm
+    # - Supervisor: required at opening and closing, preferred throughout
+    # - Sunday closes at 7pm (all other days 8pm)
     coverage = []
     for day in range(7):
-        for hour in range(9, 21):
-            # 1 supervisor always
-            coverage.append(CoverageRequirement(day, hour, "supervisor", min_staff=1, max_staff=1))
-            # 1 cashier always
+        # Sunday (day 6) closes at 7pm, others at 8pm
+        close_hour = 19 if day == 6 else 20
+        
+        for hour in range(10, close_hour):
+            is_opening = (hour == 10)
+            is_closing = (hour == close_hour - 1)
+            
+            # Supervisor: required at opening and closing, optional mid-day
+            if is_opening or is_closing:
+                # Required during opening and closing
+                coverage.append(CoverageRequirement(day, hour, "supervisor", min_staff=1, max_staff=1))
+            else:
+                # Preferred but not required during mid-day (min=0, max=1)
+                coverage.append(CoverageRequirement(day, hour, "supervisor", min_staff=0, max_staff=1))
+            
+            # Cashier: at least 1 always
             coverage.append(CoverageRequirement(day, hour, "cashier", min_staff=1, max_staff=2))
-            # 1 floor always
-            coverage.append(CoverageRequirement(day, hour, "floor", min_staff=1, max_staff=2))
+            
+            # Floor Associates: 1-3
+            coverage.append(CoverageRequirement(day, hour, "floor", min_staff=1, max_staff=3))
     
     employees = []
     
@@ -322,7 +337,8 @@ def create_retail_store() -> BusinessScenario:
             color="#DC143C"
         )
         for day in range(7):
-            emp.add_availability(day, 9, 21)
+            close_hour = 19 if day == 6 else 20  # Sunday closes at 7pm
+            emp.add_availability(day, 10, close_hour)
         employees.append(emp)
     
     # 4 Full-time floor/cashier
@@ -338,7 +354,8 @@ def create_retail_store() -> BusinessScenario:
             color="#32CD32" if i % 2 == 0 else "#4169E1"
         )
         for day in range(7):
-            emp.add_availability(day, 9, 21)
+            close_hour = 19 if day == 6 else 20  # Sunday closes at 7pm
+            emp.add_availability(day, 10, close_hour)
         employees.append(emp)
     
     # 6 Part-time staff
@@ -354,7 +371,7 @@ def create_retail_store() -> BusinessScenario:
             hourly_rate=14.0,
             color="#228B22" if i % 2 == 0 else "#6495ED"
         )
-        avail, prefs = _random_availability(list(range(7)), 9, 21, False, i + 20)
+        avail, prefs = _random_availability(list(range(7)), 10, 20, False, i + 20)
         emp.availability = avail
         emp.preferences = prefs
         employees.append(emp)
@@ -362,8 +379,8 @@ def create_retail_store() -> BusinessScenario:
     return BusinessScenario(
         id="retail_store",
         name="Urban Outfitters Plus",
-        description="Retail store with 12 staff, 3 roles",
-        start_hour=9, end_hour=21,
+        description="Retail store with 12 staff, 3 roles - 10am-8pm (Sun 7pm)",
+        start_hour=10, end_hour=20,
         days_open=list(range(7)),
         roles=roles,
         employees=employees,
