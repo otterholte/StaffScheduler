@@ -27,6 +27,37 @@
                     </svg>
                     <span class="logo-text">Staff Scheduler</span>
                 </div>
+                <div class="business-selector" id="globalBusinessSelector">
+                    <button class="business-btn" id="businessSelectorBtn">
+                        <svg class="business-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                        </svg>
+                        <span class="business-name" id="currentBusinessName">{{ business.name }}</span>
+                        <svg class="chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <div class="business-dropdown" id="businessDropdown">
+                        <div class="dropdown-header">Switch Location</div>
+                        {% for b in businesses %}
+                        <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}">
+                            <div class="option-icon" style="background: {% if b.id == 'coffee_shop' %}#06d6a0{% elif b.id == 'retail_store' %}#6366f1{% elif b.id == 'restaurant' %}#f59e0b{% elif b.id == 'call_center' %}#3b82f6{% else %}#8b5cf6{% endif %}">
+                                {% if b.id == 'coffee_shop' %}☕{% elif b.id == 'retail_store' %}🏪{% elif b.id == 'restaurant' %}🍽️{% elif b.id == 'call_center' %}📞{% else %}📦{% endif %}
+                            </div>
+                            <div class="option-details">
+                                <span class="option-name">{{ b.name }}</span>
+                                <span class="option-meta">{{ b.total_employees }} staff · {{ b.total_roles }} roles</span>
+                            </div>
+                            {% if b.id == business.id %}
+                            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            {% endif %}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
             <div class="header-center">
                 <nav class="main-nav">
@@ -83,15 +114,6 @@
                 <div class="tab-header">
                     <div class="tab-header-left">
                         <h1>Weekly Schedule</h1>
-                        <div class="business-badge">
-                            <select id="businessSelect" class="business-select">
-                                {% for b in businesses %}
-                                <option value="{{ b.id }}" {% if b.id == business.id %}selected{% endif %}>
-                                    {{ b.name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
                     </div>
                     <div class="tab-header-right">
                         <button id="generateBtn" class="btn btn-primary" data-tooltip="Create an optimal schedule based on your employees and settings">

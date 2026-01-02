@@ -54,6 +54,12 @@ const dom = {
     // Theme
     themeToggle: document.getElementById('themeToggle'),
     
+    // Global Business Selector
+    globalBusinessSelector: document.getElementById('globalBusinessSelector'),
+    businessSelectorBtn: document.getElementById('businessSelectorBtn'),
+    businessDropdown: document.getElementById('businessDropdown'),
+    currentBusinessName: document.getElementById('currentBusinessName'),
+    
     // Schedule Tab
     businessSelect: document.getElementById('businessSelect'),
     generateBtn: document.getElementById('generateBtn'),
@@ -115,6 +121,7 @@ function init() {
     applyTheme(state.theme);
     
     // Setup event listeners
+    setupGlobalBusinessSelector();
     setupNavigation();
     setupScheduleTab();
     setupEmployeesTab();
@@ -335,9 +342,68 @@ function closeAllModals() {
     state.editingAvailability = null;
 }
 
+// ==================== GLOBAL BUSINESS SELECTOR ====================
+function setupGlobalBusinessSelector() {
+    if (!dom.businessSelectorBtn || !dom.globalBusinessSelector) return;
+    
+    // Toggle dropdown on button click
+    dom.businessSelectorBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dom.globalBusinessSelector.classList.toggle('open');
+    });
+    
+    // Handle business option clicks
+    dom.businessDropdown.querySelectorAll('.business-option').forEach(option => {
+        option.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const businessId = option.dataset.businessId;
+            
+            // Close dropdown
+            dom.globalBusinessSelector.classList.remove('open');
+            
+            // Switch business
+            await switchBusiness(businessId);
+            
+            // Update active state in dropdown
+            dom.businessDropdown.querySelectorAll('.business-option').forEach(opt => {
+                opt.classList.remove('active');
+                const checkIcon = opt.querySelector('.check-icon');
+                if (checkIcon) checkIcon.remove();
+            });
+            option.classList.add('active');
+            
+            // Add check icon
+            const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            checkSvg.setAttribute('class', 'check-icon');
+            checkSvg.setAttribute('viewBox', '0 0 24 24');
+            checkSvg.setAttribute('fill', 'none');
+            checkSvg.setAttribute('stroke', 'currentColor');
+            checkSvg.setAttribute('stroke-width', '2');
+            checkSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+            option.appendChild(checkSvg);
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!dom.globalBusinessSelector.contains(e.target)) {
+            dom.globalBusinessSelector.classList.remove('open');
+        }
+    });
+    
+    // Close on escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            dom.globalBusinessSelector.classList.remove('open');
+        }
+    });
+}
+
 // ==================== SCHEDULE TAB ====================
 function setupScheduleTab() {
-    dom.businessSelect.addEventListener('change', (e) => switchBusiness(e.target.value));
+    if (dom.businessSelect) {
+        dom.businessSelect.addEventListener('change', (e) => switchBusiness(e.target.value));
+    }
     dom.generateBtn.addEventListener('click', generateSchedule);
     dom.alternativeBtn.addEventListener('click', findAlternative);
     dom.resetBtn.addEventListener('click', resetSchedule);
@@ -458,6 +524,16 @@ async function switchBusiness(businessId) {
             updateScheduleStatus('Ready to generate', '');
             dom.alternativeBtn.disabled = true;
             dom.exportBtn.disabled = true;
+            
+            // Update global business selector display
+            if (dom.currentBusinessName) {
+                dom.currentBusinessName.textContent = data.business.name;
+            }
+            
+            // Sync schedule page dropdown if it exists
+            if (dom.businessSelect) {
+                dom.businessSelect.value = businessId;
+            }
             
             showToast(`Switched to ${data.business.name}`, 'success');
         } else {
