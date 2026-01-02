@@ -2396,7 +2396,7 @@ a[data-tooltip] {
     visibility: hidden;
     opacity: 0;
     transition: opacity 0.2s ease, visibility 0.2s ease;
-    z-index: 1000;
+    z-index: 10001;
     pointer-events: none;
 }
 
@@ -4189,21 +4189,13 @@ body[data-theme="light"] .toast.warning {
 
 /* ---------- Polish & Animations ---------- */
 
-/* Button hover glow effect */
-.btn-primary::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    background: var(--accent-gradient);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: -1;
-    filter: blur(10px);
+/* Button hover glow effect - using box-shadow to avoid ::before conflict with tooltips */
+.btn-primary {
+    position: relative;
 }
 
-.btn-primary:hover::before {
-    opacity: 0.5;
+.btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 20px var(--accent-glow), 0 0 40px rgba(99, 102, 241, 0.3);
 }
 
 /* Card hover lift */
