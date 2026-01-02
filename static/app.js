@@ -18,7 +18,7 @@ const state = {
     currentTab: 'schedule',
     editingEmployee: null,
     editingAvailability: null,
-    theme: localStorage.getItem('theme') || 'dark',
+    theme: localStorage.getItem('theme') || 'dark', // Default to dark mode
     peakPeriods: INITIAL_DATA.business.peak_periods || [],
     roleCoverageConfigs: INITIAL_DATA.business.role_coverage_configs || [],
     // Coverage mode state
@@ -51,8 +51,8 @@ const dom = {
     navTabs: document.querySelectorAll('.nav-tab'),
     tabContents: document.querySelectorAll('.tab-content'),
     
-    // Theme
-    themeToggle: document.getElementById('themeToggle'),
+    // Settings button (now a link to /settings page)
+    settingsBtn: document.getElementById('settingsBtn'),
     
     // Global Business Selector
     globalBusinessSelector: document.getElementById('globalBusinessSelector'),
@@ -195,18 +195,11 @@ function getAllPolicies() {
 function applyTheme(theme) {
     if (theme === 'light') {
         document.body.setAttribute('data-theme', 'light');
-        dom.themeToggle.querySelector('.theme-icon').innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
     } else {
         document.body.removeAttribute('data-theme');
-        dom.themeToggle.querySelector('.theme-icon').innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
     }
     state.theme = theme;
     localStorage.setItem('theme', theme);
-}
-
-function toggleTheme() {
-    const newTheme = state.theme === 'dark' ? 'light' : 'dark';
-    applyTheme(newTheme);
 }
 
 // ==================== NAVIGATION ====================
@@ -214,8 +207,7 @@ function setupNavigation() {
     dom.navTabs.forEach(tab => {
         tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
-    
-    dom.themeToggle.addEventListener('click', toggleTheme);
+    // Theme toggle is now on the Settings page (/settings)
 }
 
 function switchTab(tabId) {

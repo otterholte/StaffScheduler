@@ -168,6 +168,12 @@ def index():
     )
 
 
+@app.route('/settings')
+def settings_page():
+    """Render the settings page with account management and theme toggle."""
+    return render_template('settings.html')
+
+
 # ==================== BUSINESS API ====================
 
 @app.route('/api/businesses', methods=['GET'])
