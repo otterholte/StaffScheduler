@@ -508,7 +508,7 @@ function rebuildScheduleGrid() {
             td.className = 'slot ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
             td.dataset.day = dayIdx;
             td.dataset.hour = hour;
-            td.innerHTML = '<div class="slot-content"><span class="slot-empty">—</span></div>';
+            td.innerHTML = '<div class="slot-content"><span class="slot-empty"></span></div>';
             tr.appendChild(td);
         });
         
