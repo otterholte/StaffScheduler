@@ -907,7 +907,6 @@ body[data-theme="light"] .advanced-panel {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    min-width: max-content;
 }
 
 .timeline-header {
@@ -929,12 +928,13 @@ body[data-theme="light"] .advanced-panel {
 
 .timeline-header-hours {
     display: flex;
+    flex: 1;
     gap: 0;
 }
 
 .timeline-hour-label {
-    width: 60px;
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 40px;
     text-align: center;
     font-size: 0.7rem;
     font-weight: 600;
@@ -979,14 +979,14 @@ body[data-theme="light"] .advanced-panel {
     min-height: 42px;
     padding: 4px 0;
     gap: 2px;
+    min-width: 0; /* Allow flex shrinking */
 }
 
 .timeline-slots-row {
     position: relative;
     height: 34px;
     flex-shrink: 0;
-    /* Width is set by number of hours * 60px */
-    min-width: max-content;
+    width: 100%;
 }
 
 .timeline-slot {

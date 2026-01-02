@@ -1426,14 +1426,13 @@ function renderTimelineView(schedule) {
         const numShiftRows = Math.max(1, shiftRows.length);
         const displayRows = numShiftRows; // Show all rows (can be limited to 5 + expand if needed)
         
-        // Create row containers and render shifts
-        const slotWidth = 60;
-        const totalWidth = state.hours.length * slotWidth;
+        // Create row containers and render shifts using percentage positioning
+        const totalHours = state.hours.length;
+        const gapPercent = 0.3; // Small gap between blocks as percentage
         
         for (let rowIdx = 0; rowIdx < displayRows; rowIdx++) {
             const rowContainer = document.createElement('div');
             rowContainer.className = 'timeline-slots-row';
-            rowContainer.style.width = `${totalWidth}px`;
             
             // Add shifts for this row
             const rowShifts = shiftRows[rowIdx] || [];
@@ -1444,8 +1443,11 @@ function renderTimelineView(schedule) {
                 const block = document.createElement('div');
                 block.className = 'timeline-shift-block';
                 
-                block.style.left = `${startIdx * slotWidth + 2}px`;
-                block.style.width = `${duration * slotWidth - 4}px`;
+                // Calculate percentage positions
+                const leftPercent = (startIdx / totalHours) * 100 + gapPercent;
+                const widthPercent = (duration / totalHours) * 100 - (gapPercent * 2);
+                block.style.left = `${leftPercent}%`;
+                block.style.width = `${widthPercent}%`;
                 
                 // Color based on mode
                 if (state.scheduleColorMode === 'employee') {
@@ -1470,8 +1472,11 @@ function renderTimelineView(schedule) {
                     const gapBlock = document.createElement('div');
                     gapBlock.className = 'timeline-gap-block';
                     
-                    gapBlock.style.left = `${startIdx * slotWidth + 2}px`;
-                    gapBlock.style.width = `${duration * slotWidth - 4}px`;
+                    // Calculate percentage positions
+                    const leftPercent = (startIdx / totalHours) * 100 + gapPercent;
+                    const widthPercent = (duration / totalHours) * 100 - (gapPercent * 2);
+                    gapBlock.style.left = `${leftPercent}%`;
+                    gapBlock.style.width = `${widthPercent}%`;
                     gapBlock.innerHTML = `<span class="gap-label">+${duration}</span>`;
                     gapBlock.title = `Gap: ${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}`;
                     
@@ -1486,7 +1491,6 @@ function renderTimelineView(schedule) {
         if (displayRows === 0 || (shiftRows.length === 0 && gapShifts.length === 0)) {
             const emptyRow = document.createElement('div');
             emptyRow.className = 'timeline-slots-row';
-            emptyRow.style.width = `${totalWidth}px`;
             slotsDiv.appendChild(emptyRow);
         }
         
