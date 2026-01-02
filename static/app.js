@@ -104,6 +104,7 @@ const dom = {
     confirmModal: document.getElementById('confirmModal'),
     shiftModal: document.getElementById('shiftModal'),
     shiftEditModal: document.getElementById('shiftEditModal'),
+    businessModal: document.getElementById('businessModal'),
     
     // Loading
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -365,24 +366,30 @@ function setupGlobalBusinessSelector() {
             await switchBusiness(businessId);
             
             // Update active state in dropdown
-            dom.businessDropdown.querySelectorAll('.business-option').forEach(opt => {
-                opt.classList.remove('active');
-                const checkIcon = opt.querySelector('.check-icon');
-                if (checkIcon) checkIcon.remove();
-            });
-            option.classList.add('active');
-            
-            // Add check icon
-            const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            checkSvg.setAttribute('class', 'check-icon');
-            checkSvg.setAttribute('viewBox', '0 0 24 24');
-            checkSvg.setAttribute('fill', 'none');
-            checkSvg.setAttribute('stroke', 'currentColor');
-            checkSvg.setAttribute('stroke-width', '2');
-            checkSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
-            option.appendChild(checkSvg);
+            updateBusinessDropdownSelection(businessId);
+        });
+        
+        // Right-click to edit
+        option.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const businessId = option.dataset.businessId;
+            openBusinessEditor(businessId);
         });
     });
+    
+    // Add business button
+    const addBusinessBtn = document.getElementById('addBusinessBtn');
+    if (addBusinessBtn) {
+        addBusinessBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dom.globalBusinessSelector.classList.remove('open');
+            openBusinessEditor(null); // null = new business
+        });
+    }
+    
+    // Setup business modal
+    setupBusinessModal();
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
@@ -397,6 +404,491 @@ function setupGlobalBusinessSelector() {
             dom.globalBusinessSelector.classList.remove('open');
         }
     });
+}
+
+function updateBusinessDropdownSelection(businessId) {
+    dom.businessDropdown.querySelectorAll('.business-option').forEach(opt => {
+        opt.classList.remove('active');
+        const checkIcon = opt.querySelector('.check-icon');
+        if (checkIcon) checkIcon.remove();
+    });
+    
+    const selectedOption = dom.businessDropdown.querySelector(`[data-business-id="${businessId}"]`);
+    if (selectedOption) {
+        selectedOption.classList.add('active');
+        
+        // Add check icon
+        const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        checkSvg.setAttribute('class', 'check-icon');
+        checkSvg.setAttribute('viewBox', '0 0 24 24');
+        checkSvg.setAttribute('fill', 'none');
+        checkSvg.setAttribute('stroke', 'currentColor');
+        checkSvg.setAttribute('stroke-width', '2');
+        checkSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+        selectedOption.appendChild(checkSvg);
+    }
+}
+
+function setupBusinessModal() {
+    const modal = dom.businessModal;
+    if (!modal) return;
+    
+    const emojiBtn = document.getElementById('businessEmojiBtn');
+    const emojiPicker = document.getElementById('emojiPicker');
+    const colorInput = document.getElementById('businessEditColor');
+    const colorPresets = modal.querySelectorAll('.color-preset');
+    const saveBtn = document.getElementById('saveBusinessBtn');
+    const deleteBtn = document.getElementById('deleteBusinessBtn');
+    
+    // Emoji picker toggle
+    const emojiBackdrop = document.getElementById('emojiPickerBackdrop');
+    const emojiClose = document.getElementById('emojiPickerClose');
+    const emojiSearch = document.getElementById('emojiSearch');
+    const emojiCategoryDropdown = document.getElementById('emojiCategoryDropdown');
+    const emojiCategorySelect = document.getElementById('emojiCategorySelect');
+    const emojiCategoryOptions = document.getElementById('emojiCategoryOptions');
+    const emojiGrid = document.getElementById('emojiGrid');
+    const emojiNoResults = document.getElementById('emojiNoResults');
+    
+    let currentCategory = 'favorites';
+    
+    const closeEmojiPicker = () => {
+        emojiPicker?.classList.remove('open');
+        emojiBackdrop?.classList.remove('open');
+        emojiCategoryDropdown?.classList.remove('open');
+        // Reset search when closing but keep category
+        if (emojiSearch) emojiSearch.value = '';
+        // Reset to favorites
+        currentCategory = 'favorites';
+        filterEmojis('', 'favorites');
+        updateCategorySelectDisplay('favorites');
+    };
+    
+    const updateCategorySelectDisplay = (category) => {
+        const option = emojiCategoryOptions?.querySelector(`[data-category="${category}"]`);
+        if (option && emojiCategorySelect) {
+            const icon = option.querySelector('.option-icon')?.textContent || '⭐';
+            const name = option.textContent.trim().replace(icon, '').trim();
+            emojiCategorySelect.querySelector('.category-icon').textContent = icon;
+            emojiCategorySelect.querySelector('.category-name').textContent = name;
+        }
+        // Update active state in options
+        emojiCategoryOptions?.querySelectorAll('.emoji-category-option').forEach(opt => {
+            opt.classList.toggle('active', opt.dataset.category === category);
+        });
+    };
+    
+    const filterEmojis = (searchTerm, category) => {
+        const allEmojis = emojiGrid?.querySelectorAll('.emoji-option');
+        if (!allEmojis) return;
+        
+        const search = searchTerm.toLowerCase().trim();
+        let visibleCount = 0;
+        
+        allEmojis.forEach(emoji => {
+            const emojiCategories = emoji.dataset.category || '';
+            const emojiName = emoji.dataset.name?.toLowerCase() || '';
+            
+            // Check if emoji belongs to category (categories can be space-separated)
+            const matchesCategory = category === 'all' || emojiCategories.split(' ').includes(category);
+            const matchesSearch = !search || emojiName.includes(search) || emoji.dataset.emoji.includes(search);
+            
+            if (matchesCategory && matchesSearch) {
+                emoji.style.display = '';
+                visibleCount++;
+            } else {
+                emoji.style.display = 'none';
+            }
+        });
+        
+        // Show/hide no results message
+        if (emojiNoResults) {
+            emojiNoResults.style.display = visibleCount === 0 ? 'block' : 'none';
+        }
+        if (emojiGrid) {
+            emojiGrid.style.display = visibleCount === 0 ? 'none' : 'grid';
+        }
+    };
+    
+    // Initialize with favorites
+    filterEmojis('', 'favorites');
+    
+    if (emojiBtn && emojiPicker) {
+        emojiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            emojiPicker.classList.toggle('open');
+            emojiBackdrop?.classList.toggle('open');
+            // Focus search input when opening
+            if (emojiPicker.classList.contains('open')) {
+                setTimeout(() => emojiSearch?.focus(), 100);
+            }
+        });
+        
+        // Search functionality
+        emojiSearch?.addEventListener('input', (e) => {
+            filterEmojis(e.target.value, currentCategory);
+        });
+        
+        // Category dropdown toggle
+        emojiCategorySelect?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            emojiCategoryDropdown?.classList.toggle('open');
+        });
+        
+        // Category selection
+        emojiCategoryOptions?.querySelectorAll('.emoji-category-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                currentCategory = option.dataset.category;
+                updateCategorySelectDisplay(currentCategory);
+                filterEmojis(emojiSearch?.value || '', currentCategory);
+                emojiCategoryDropdown?.classList.remove('open');
+            });
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!emojiCategoryDropdown?.contains(e.target)) {
+                emojiCategoryDropdown?.classList.remove('open');
+            }
+        });
+        
+        // Emoji selection (including clear button)
+        emojiPicker.querySelectorAll('.emoji-option, .emoji-clear-btn').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const emoji = option.dataset.emoji;
+                const emojiEl = document.getElementById('businessEditEmoji');
+                const emojiBtnEl = document.getElementById('businessEmojiBtn');
+                
+                if (emoji) {
+                    emojiEl.textContent = emoji;
+                    emojiBtnEl.classList.remove('empty');
+                } else {
+                    emojiEl.textContent = '';
+                    emojiBtnEl.classList.add('empty');
+                }
+                closeEmojiPicker();
+            });
+        });
+        
+        // Close on backdrop click
+        emojiBackdrop?.addEventListener('click', closeEmojiPicker);
+        
+        // Close button
+        emojiClose?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeEmojiPicker();
+        });
+        
+        // Close on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && emojiPicker.classList.contains('open')) {
+                closeEmojiPicker();
+            }
+        });
+    }
+    
+    // Color presets
+    colorPresets.forEach(preset => {
+        preset.addEventListener('click', () => {
+            const color = preset.dataset.color;
+            colorInput.value = color;
+            colorPresets.forEach(p => p.classList.remove('selected'));
+            preset.classList.add('selected');
+        });
+    });
+    
+    // Save button
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveBusiness);
+    }
+    
+    // Delete button
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', deleteBusiness);
+    }
+    
+    // Close button
+    modal.querySelectorAll('[data-close]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+    });
+    
+    // Close on backdrop click
+    modal.querySelector('.modal-backdrop')?.addEventListener('click', () => {
+        modal.classList.remove('active');
+    });
+}
+
+// List of sample/built-in business IDs that cannot be deleted
+const SAMPLE_BUSINESS_IDS = ['coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'];
+
+function openBusinessEditor(businessId) {
+    const modal = dom.businessModal;
+    if (!modal) return;
+    
+    const titleEl = document.getElementById('businessModalTitle');
+    const idInput = document.getElementById('businessEditId');
+    const nameInput = document.getElementById('businessEditName');
+    const emojiEl = document.getElementById('businessEditEmoji');
+    const colorInput = document.getElementById('businessEditColor');
+    const deleteBtn = document.getElementById('deleteBusinessBtn');
+    const deleteWrapper = document.getElementById('deleteBusinessWrapper');
+    
+    // Reset color preset selection
+    modal.querySelectorAll('.color-preset').forEach(p => p.classList.remove('selected'));
+    
+    // Close emoji picker if open
+    const emojiPicker = document.getElementById('emojiPicker');
+    if (emojiPicker) emojiPicker.classList.remove('open');
+    
+    const emojiBtn = document.getElementById('businessEmojiBtn');
+    
+    if (businessId) {
+        // Editing existing business
+        titleEl.textContent = 'Edit Location';
+        idInput.value = businessId;
+        
+        // Find business data
+        const business = state.businesses.find(b => b.id === businessId);
+        if (business) {
+            nameInput.value = business.name;
+            
+            // Handle emoji - could be empty
+            if (business.emoji) {
+                emojiEl.textContent = business.emoji;
+                emojiBtn.classList.remove('empty');
+            } else {
+                emojiEl.textContent = '';
+                emojiBtn.classList.add('empty');
+            }
+            
+            colorInput.value = business.color || '#6366f1';
+            
+            // Select matching color preset if any
+            const matchingPreset = modal.querySelector(`.color-preset[data-color="${business.color}"]`);
+            if (matchingPreset) matchingPreset.classList.add('selected');
+        }
+        
+        // Check if this is a sample business
+        const isSampleBusiness = SAMPLE_BUSINESS_IDS.includes(businessId);
+        const isCurrentBusiness = businessId === state.business.id;
+        
+        // Show delete wrapper but disable for sample businesses or current business
+        deleteWrapper.style.display = 'flex';
+        
+        if (isSampleBusiness) {
+            deleteBtn.disabled = true;
+            deleteWrapper.classList.add('sample');
+        } else if (isCurrentBusiness) {
+            deleteBtn.disabled = true;
+            deleteWrapper.classList.add('sample');
+            document.getElementById('deleteHint').textContent = 'Cannot delete the active location';
+        } else {
+            deleteBtn.disabled = false;
+            deleteWrapper.classList.remove('sample');
+        }
+    } else {
+        // Creating new business - default to no emoji
+        titleEl.textContent = 'Add New Location';
+        idInput.value = '';
+        nameInput.value = '';
+        emojiEl.textContent = '';
+        emojiBtn.classList.add('empty');
+        colorInput.value = '#6366f1';
+        deleteWrapper.style.display = 'none';
+        
+        // Reset hint text
+        document.getElementById('deleteHint').textContent = 'Sample locations cannot be deleted';
+    }
+    
+    modal.classList.add('active');
+    nameInput.focus();
+}
+
+async function saveBusiness() {
+    const idInput = document.getElementById('businessEditId');
+    const nameInput = document.getElementById('businessEditName');
+    const emojiEl = document.getElementById('businessEditEmoji');
+    const colorInput = document.getElementById('businessEditColor');
+    
+    const name = nameInput.value.trim();
+    if (!name) {
+        showToast('Please enter a location name', 'error');
+        return;
+    }
+    
+    const businessData = {
+        id: idInput.value || null,
+        name: name,
+        emoji: emojiEl.textContent,
+        color: colorInput.value
+    };
+    
+    try {
+        const response = await fetch('/api/business/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(businessData)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(idInput.value ? 'Location updated' : 'Location created', 'success');
+            dom.businessModal.classList.remove('active');
+            
+            // Refresh business list
+            await refreshBusinessList();
+            
+            // If this was a new business, switch to it
+            if (!idInput.value && result.business_id) {
+                await switchBusiness(result.business_id);
+            }
+        } else {
+            showToast(result.error || 'Failed to save location', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving business:', error);
+        showToast('Failed to save location', 'error');
+    }
+}
+
+async function deleteBusiness() {
+    const businessId = document.getElementById('businessEditId').value;
+    if (!businessId) return;
+    
+    if (!confirm('Are you sure you want to delete this location? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/business/${businessId}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast('Location deleted', 'success');
+            dom.businessModal.classList.remove('active');
+            
+            // Refresh business list and switch to first business if needed
+            await refreshBusinessList();
+        } else {
+            showToast(result.error || 'Failed to delete location', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting business:', error);
+        showToast('Failed to delete location', 'error');
+    }
+}
+
+async function refreshBusinessList() {
+    try {
+        const response = await fetch('/api/businesses');
+        const data = await response.json();
+        
+        if (data.businesses) {
+            state.businesses = data.businesses;
+            
+            // Rebuild dropdown
+            rebuildBusinessDropdown();
+        }
+    } catch (error) {
+        console.error('Error refreshing business list:', error);
+    }
+}
+
+function rebuildBusinessDropdown() {
+    const dropdown = dom.businessDropdown;
+    if (!dropdown) return;
+    
+    // Clear existing options (keep header and add button)
+    const header = dropdown.querySelector('.dropdown-header');
+    const divider = dropdown.querySelector('.dropdown-divider');
+    const addBtn = dropdown.querySelector('.add-business-btn');
+    
+    dropdown.innerHTML = '';
+    if (header) dropdown.appendChild(header);
+    
+    // Recreate header if missing
+    if (!header) {
+        const newHeader = document.createElement('div');
+        newHeader.className = 'dropdown-header';
+        newHeader.textContent = 'Switch Location';
+        dropdown.appendChild(newHeader);
+    }
+    
+    // Add business options
+    state.businesses.forEach(b => {
+        const option = document.createElement('button');
+        option.className = `business-option ${b.id === state.business.id ? 'active' : ''}`;
+        option.dataset.businessId = b.id;
+        
+        // Show first letter of business name if no emoji
+        const iconContent = b.emoji || b.name.charAt(0).toUpperCase();
+        const iconClass = b.emoji ? '' : 'text-icon';
+        
+        option.innerHTML = `
+            <div class="option-icon ${iconClass}" style="background: ${b.color || '#6366f1'}">
+                ${iconContent}
+            </div>
+            <div class="option-details">
+                <span class="option-name">${b.name}</span>
+                <span class="option-meta">${b.total_employees || 0} staff · ${b.total_roles || 0} roles</span>
+            </div>
+            ${b.id === state.business.id ? '<svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>' : ''}
+        `;
+        
+        // Click to switch
+        option.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            dom.globalBusinessSelector.classList.remove('open');
+            await switchBusiness(b.id);
+            updateBusinessDropdownSelection(b.id);
+        });
+        
+        // Right-click to edit
+        option.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openBusinessEditor(b.id);
+        });
+        
+        dropdown.appendChild(option);
+    });
+    
+    // Add divider and add button
+    const newDivider = document.createElement('div');
+    newDivider.className = 'dropdown-divider';
+    dropdown.appendChild(newDivider);
+    
+    const newAddBtn = document.createElement('button');
+    newAddBtn.className = 'add-business-btn';
+    newAddBtn.id = 'addBusinessBtn';
+    newAddBtn.innerHTML = `
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="16"></line>
+            <line x1="8" y1="12" x2="16" y2="12"></line>
+        </svg>
+        Add New Location
+    `;
+    newAddBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dom.globalBusinessSelector.classList.remove('open');
+        openBusinessEditor(null);
+    });
+    dropdown.appendChild(newAddBtn);
+    
+    // Update header button text
+    const currentNameEl = document.getElementById('currentBusinessName');
+    if (currentNameEl) {
+        currentNameEl.textContent = state.business.name;
+    }
 }
 
 // ==================== SCHEDULE TAB ====================

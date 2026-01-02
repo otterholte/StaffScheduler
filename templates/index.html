@@ -42,8 +42,8 @@
                         <div class="dropdown-header">Switch Location</div>
                         {% for b in businesses %}
                         <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}">
-                            <div class="option-icon" style="background: {% if b.id == 'coffee_shop' %}#06d6a0{% elif b.id == 'retail_store' %}#6366f1{% elif b.id == 'restaurant' %}#f59e0b{% elif b.id == 'call_center' %}#3b82f6{% else %}#8b5cf6{% endif %}">
-                                {% if b.id == 'coffee_shop' %}☕{% elif b.id == 'retail_store' %}🏪{% elif b.id == 'restaurant' %}🍽️{% elif b.id == 'call_center' %}📞{% else %}📦{% endif %}
+                            <div class="option-icon {% if not b.emoji %}text-icon{% endif %}" style="background: {{ b.color }}">
+                                {% if b.emoji %}{{ b.emoji }}{% else %}{{ b.name[0]|upper }}{% endif %}
                             </div>
                             <div class="option-details">
                                 <span class="option-name">{{ b.name }}</span>
@@ -56,6 +56,15 @@
                             {% endif %}
                         </button>
                         {% endfor %}
+                        <div class="dropdown-divider"></div>
+                        <button class="add-business-btn" id="addBusinessBtn">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="16"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                            </svg>
+                            Add New Location
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1200,6 +1209,253 @@
                 </button>
                 <button type="button" class="btn btn-ghost" data-close>Cancel</button>
                 <button type="button" class="btn btn-primary" id="saveShiftEditBtn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Edit Modal -->
+    <div id="businessModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 id="businessModalTitle">Edit Location</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="businessEditId">
+                <div class="form-group">
+                    <label for="businessEditEmoji">Icon</label>
+                    <div class="emoji-picker-container">
+                        <button type="button" class="emoji-picker-btn" id="businessEmojiBtn">
+                            <span id="businessEditEmoji">🏢</span>
+                        </button>
+                        <div class="emoji-picker-backdrop" id="emojiPickerBackdrop"></div>
+                        <div class="emoji-picker" id="emojiPicker">
+                            <button type="button" class="emoji-picker-close" id="emojiPickerClose">&times;</button>
+                            <div class="emoji-picker-header">Choose an icon</div>
+                            <div class="emoji-search-container">
+                                <svg class="emoji-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="M21 21l-4.35-4.35"></path>
+                                </svg>
+                                <input type="text" class="emoji-search-input" id="emojiSearch" placeholder="Search icons...">
+                            </div>
+                            <div class="emoji-category-select-container">
+                                <label class="emoji-category-label">Category:</label>
+                                <div class="emoji-category-dropdown" id="emojiCategoryDropdown">
+                                    <button type="button" class="emoji-category-select" id="emojiCategorySelect">
+                                        <span class="category-icon">⭐</span>
+                                        <span class="category-name">Favorites</span>
+                                        <svg class="dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </button>
+                                    <div class="emoji-category-options" id="emojiCategoryOptions">
+                                        <button type="button" class="emoji-category-option active" data-category="favorites">
+                                            <span class="option-icon">⭐</span> Favorites
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="all">
+                                            <span class="option-icon">📋</span> All Icons
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="buildings">
+                                            <span class="option-icon">🏢</span> Buildings & Places
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="food">
+                                            <span class="option-icon">☕</span> Food & Drink
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="business">
+                                            <span class="option-icon">💼</span> Business & Work
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="retail">
+                                            <span class="option-icon">🛒</span> Retail & Shopping
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="transport">
+                                            <span class="option-icon">🚚</span> Logistics & Transport
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="tools">
+                                            <span class="option-icon">🔧</span> Services & Tools
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="entertainment">
+                                            <span class="option-icon">🎬</span> Entertainment
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="nature">
+                                            <span class="option-icon">🌳</span> Nature & Outdoors
+                                        </button>
+                                        <button type="button" class="emoji-category-option" data-category="education">
+                                            <span class="option-icon">📚</span> Education
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="emoji-clear-btn" data-emoji="">
+                                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                                </svg>
+                                No icon
+                            </button>
+                            <div class="emoji-grid-container">
+                            <div class="emoji-grid" id="emojiGrid">
+                                <!-- Favorites - Most commonly used -->
+                                <button type="button" class="emoji-option" data-emoji="🏢" data-category="favorites buildings" data-name="office building corporate">🏢</button>
+                                <button type="button" class="emoji-option" data-emoji="☕" data-category="favorites food" data-name="coffee cafe hot drink">☕</button>
+                                <button type="button" class="emoji-option" data-emoji="🏪" data-category="favorites buildings" data-name="convenience store shop retail">🏪</button>
+                                <button type="button" class="emoji-option" data-emoji="🍽️" data-category="favorites food" data-name="restaurant dining plate food">🍽️</button>
+                                <button type="button" class="emoji-option" data-emoji="💼" data-category="favorites business" data-name="briefcase business work office">💼</button>
+                                <button type="button" class="emoji-option" data-emoji="📞" data-category="favorites business" data-name="phone telephone call center">📞</button>
+                                <button type="button" class="emoji-option" data-emoji="🏭" data-category="favorites buildings" data-name="factory manufacturing industrial warehouse">🏭</button>
+                                <button type="button" class="emoji-option" data-emoji="📦" data-category="favorites transport" data-name="package box shipping delivery">📦</button>
+                                <button type="button" class="emoji-option" data-emoji="🛒" data-category="favorites retail" data-name="shopping cart grocery store">🛒</button>
+                                <button type="button" class="emoji-option" data-emoji="🏥" data-category="favorites buildings" data-name="hospital medical health clinic">🏥</button>
+                                <button type="button" class="emoji-option" data-emoji="💻" data-category="favorites business" data-name="laptop computer tech IT">💻</button>
+                                <button type="button" class="emoji-option" data-emoji="🔧" data-category="favorites tools" data-name="wrench repair maintenance fix">🔧</button>
+                                <button type="button" class="emoji-option" data-emoji="🚚" data-category="favorites transport" data-name="truck delivery shipping logistics">🚚</button>
+                                <button type="button" class="emoji-option" data-emoji="🏫" data-category="favorites buildings" data-name="school education learning">🏫</button>
+                                <button type="button" class="emoji-option" data-emoji="🎬" data-category="favorites entertainment" data-name="movie film cinema theater">🎬</button>
+                                <button type="button" class="emoji-option" data-emoji="🏋️" data-category="favorites entertainment" data-name="gym fitness weightlifting exercise">🏋️</button>
+                                <button type="button" class="emoji-option" data-emoji="✈️" data-category="favorites transport" data-name="airplane flight travel airport">✈️</button>
+                                <button type="button" class="emoji-option" data-emoji="🏨" data-category="favorites buildings" data-name="hotel hospitality lodging">🏨</button>
+                                <!-- Buildings & Places -->
+                                <button type="button" class="emoji-option" data-emoji="🏬" data-category="buildings" data-name="department store mall shopping">🏬</button>
+                                <button type="button" class="emoji-option" data-emoji="🏬" data-category="buildings" data-name="department store mall shopping">🏬</button>
+                                <button type="button" class="emoji-option" data-emoji="🏪" data-category="buildings" data-name="convenience store shop retail">🏪</button>
+                                <button type="button" class="emoji-option" data-emoji="🏭" data-category="buildings" data-name="factory manufacturing industrial warehouse">🏭</button>
+                                <button type="button" class="emoji-option" data-emoji="🏥" data-category="buildings" data-name="hospital medical health clinic">🏥</button>
+                                <button type="button" class="emoji-option" data-emoji="🏫" data-category="buildings" data-name="school education learning">🏫</button>
+                                <button type="button" class="emoji-option" data-emoji="🏨" data-category="buildings" data-name="hotel hospitality lodging">🏨</button>
+                                <button type="button" class="emoji-option" data-emoji="🏠" data-category="buildings" data-name="house home residential">🏠</button>
+                                <button type="button" class="emoji-option" data-emoji="🏗️" data-category="buildings" data-name="construction building site">🏗️</button>
+                                <button type="button" class="emoji-option" data-emoji="⛪" data-category="buildings" data-name="church religious chapel">⛪</button>
+                                <!-- Food & Drink -->
+                                <button type="button" class="emoji-option" data-emoji="☕" data-category="food" data-name="coffee cafe hot drink">☕</button>
+                                <button type="button" class="emoji-option" data-emoji="🍽️" data-category="food" data-name="restaurant dining plate food">🍽️</button>
+                                <button type="button" class="emoji-option" data-emoji="🍕" data-category="food" data-name="pizza italian food">🍕</button>
+                                <button type="button" class="emoji-option" data-emoji="🍔" data-category="food" data-name="burger hamburger fast food">🍔</button>
+                                <button type="button" class="emoji-option" data-emoji="🍜" data-category="food" data-name="noodles ramen asian food">🍜</button>
+                                <button type="button" class="emoji-option" data-emoji="🍦" data-category="food" data-name="ice cream dessert sweet">🍦</button>
+                                <button type="button" class="emoji-option" data-emoji="🍺" data-category="food" data-name="beer bar pub drink">🍺</button>
+                                <button type="button" class="emoji-option" data-emoji="🥐" data-category="food" data-name="croissant bakery pastry bread">🥐</button>
+                                <button type="button" class="emoji-option" data-emoji="🍳" data-category="food" data-name="cooking egg breakfast kitchen">🍳</button>
+                                <button type="button" class="emoji-option" data-emoji="🧁" data-category="food" data-name="cupcake bakery dessert sweet">🧁</button>
+                                <!-- Business & Work -->
+                                <button type="button" class="emoji-option" data-emoji="💼" data-category="business" data-name="briefcase business work office">💼</button>
+                                <button type="button" class="emoji-option" data-emoji="📞" data-category="business" data-name="phone telephone call center">📞</button>
+                                <button type="button" class="emoji-option" data-emoji="💻" data-category="business" data-name="laptop computer tech IT">💻</button>
+                                <button type="button" class="emoji-option" data-emoji="🖥️" data-category="business" data-name="desktop computer monitor screen">🖥️</button>
+                                <button type="button" class="emoji-option" data-emoji="📊" data-category="business" data-name="chart analytics data graph">📊</button>
+                                <button type="button" class="emoji-option" data-emoji="📈" data-category="business" data-name="growth chart trending up sales">📈</button>
+                                <button type="button" class="emoji-option" data-emoji="💰" data-category="business" data-name="money bag finance wealth">💰</button>
+                                <button type="button" class="emoji-option" data-emoji="🏦" data-category="business" data-name="bank finance money">🏦</button>
+                                <button type="button" class="emoji-option" data-emoji="⚖️" data-category="business" data-name="scales justice law legal">⚖️</button>
+                                <button type="button" class="emoji-option" data-emoji="📝" data-category="business" data-name="memo notes writing document">📝</button>
+                                <!-- Retail & Shopping -->
+                                <button type="button" class="emoji-option" data-emoji="🛒" data-category="retail" data-name="shopping cart grocery store">🛒</button>
+                                <button type="button" class="emoji-option" data-emoji="🛍️" data-category="retail" data-name="shopping bags retail fashion">🛍️</button>
+                                <button type="button" class="emoji-option" data-emoji="👗" data-category="retail" data-name="dress fashion clothing apparel">👗</button>
+                                <button type="button" class="emoji-option" data-emoji="👟" data-category="retail" data-name="sneaker shoes footwear athletic">👟</button>
+                                <button type="button" class="emoji-option" data-emoji="💄" data-category="retail" data-name="lipstick makeup cosmetics beauty">💄</button>
+                                <button type="button" class="emoji-option" data-emoji="💎" data-category="retail" data-name="gem diamond jewelry luxury">💎</button>
+                                <button type="button" class="emoji-option" data-emoji="🎁" data-category="retail" data-name="gift present box wrapped">🎁</button>
+                                <button type="button" class="emoji-option" data-emoji="🏷️" data-category="retail" data-name="label tag price sale">🏷️</button>
+                                <button type="button" class="emoji-option" data-emoji="📱" data-category="retail" data-name="phone mobile smartphone device">📱</button>
+                                <button type="button" class="emoji-option" data-emoji="🎮" data-category="retail" data-name="game controller gaming video">🎮</button>
+                                <!-- Logistics & Transport -->
+                                <button type="button" class="emoji-option" data-emoji="📦" data-category="transport" data-name="package box shipping delivery">📦</button>
+                                <button type="button" class="emoji-option" data-emoji="🚚" data-category="transport" data-name="truck delivery shipping logistics">🚚</button>
+                                <button type="button" class="emoji-option" data-emoji="✈️" data-category="transport" data-name="airplane flight travel airport">✈️</button>
+                                <button type="button" class="emoji-option" data-emoji="🚢" data-category="transport" data-name="ship boat cargo maritime">🚢</button>
+                                <button type="button" class="emoji-option" data-emoji="🚗" data-category="transport" data-name="car auto vehicle driving">🚗</button>
+                                <button type="button" class="emoji-option" data-emoji="🚌" data-category="transport" data-name="bus transit public transport">🚌</button>
+                                <button type="button" class="emoji-option" data-emoji="🚂" data-category="transport" data-name="train rail locomotive">🚂</button>
+                                <button type="button" class="emoji-option" data-emoji="⛽" data-category="transport" data-name="gas fuel station pump">⛽</button>
+                                <button type="button" class="emoji-option" data-emoji="🅿️" data-category="transport" data-name="parking lot garage">🅿️</button>
+                                <button type="button" class="emoji-option" data-emoji="🛫" data-category="transport" data-name="departure takeoff airport flight">🛫</button>
+                                <!-- Services & Tools -->
+                                <button type="button" class="emoji-option" data-emoji="🔧" data-category="tools" data-name="wrench repair maintenance fix">🔧</button>
+                                <button type="button" class="emoji-option" data-emoji="🔨" data-category="tools" data-name="hammer construction build">🔨</button>
+                                <button type="button" class="emoji-option" data-emoji="⚙️" data-category="tools" data-name="gear settings mechanical engineering">⚙️</button>
+                                <button type="button" class="emoji-option" data-emoji="🔌" data-category="tools" data-name="plug electric power outlet">🔌</button>
+                                <button type="button" class="emoji-option" data-emoji="💡" data-category="tools" data-name="lightbulb idea bright electric">💡</button>
+                                <button type="button" class="emoji-option" data-emoji="🧹" data-category="tools" data-name="broom cleaning janitorial sweep">🧹</button>
+                                <button type="button" class="emoji-option" data-emoji="🧪" data-category="tools" data-name="test tube lab science chemistry">🧪</button>
+                                <button type="button" class="emoji-option" data-emoji="💊" data-category="tools" data-name="pill medicine pharmacy drug">💊</button>
+                                <button type="button" class="emoji-option" data-emoji="🩺" data-category="tools" data-name="stethoscope doctor medical health">🩺</button>
+                                <button type="button" class="emoji-option" data-emoji="🔬" data-category="tools" data-name="microscope science lab research">🔬</button>
+                                <!-- Entertainment & Leisure -->
+                                <button type="button" class="emoji-option" data-emoji="🎬" data-category="entertainment" data-name="movie film cinema theater">🎬</button>
+                                <button type="button" class="emoji-option" data-emoji="🎵" data-category="entertainment" data-name="music note song audio">🎵</button>
+                                <button type="button" class="emoji-option" data-emoji="🎨" data-category="entertainment" data-name="art palette painting creative">🎨</button>
+                                <button type="button" class="emoji-option" data-emoji="🎭" data-category="entertainment" data-name="theater drama performing arts mask">🎭</button>
+                                <button type="button" class="emoji-option" data-emoji="🎪" data-category="entertainment" data-name="circus tent carnival fair">🎪</button>
+                                <button type="button" class="emoji-option" data-emoji="🎰" data-category="entertainment" data-name="slot machine casino gambling">🎰</button>
+                                <button type="button" class="emoji-option" data-emoji="🎳" data-category="entertainment" data-name="bowling ball pins alley">🎳</button>
+                                <button type="button" class="emoji-option" data-emoji="🏋️" data-category="entertainment" data-name="gym fitness weightlifting exercise">🏋️</button>
+                                <button type="button" class="emoji-option" data-emoji="⚽" data-category="entertainment" data-name="soccer football sports ball">⚽</button>
+                                <button type="button" class="emoji-option" data-emoji="🎯" data-category="entertainment" data-name="target bullseye darts goal">🎯</button>
+                                <!-- Nature & Outdoors -->
+                                <button type="button" class="emoji-option" data-emoji="🌳" data-category="nature" data-name="tree nature forest park">🌳</button>
+                                <button type="button" class="emoji-option" data-emoji="🌻" data-category="nature" data-name="sunflower garden flower plant">🌻</button>
+                                <button type="button" class="emoji-option" data-emoji="🌊" data-category="nature" data-name="wave ocean sea water beach">🌊</button>
+                                <button type="button" class="emoji-option" data-emoji="⛰️" data-category="nature" data-name="mountain hiking outdoor adventure">⛰️</button>
+                                <button type="button" class="emoji-option" data-emoji="🏖️" data-category="nature" data-name="beach umbrella vacation resort">🏖️</button>
+                                <button type="button" class="emoji-option" data-emoji="🐾" data-category="nature" data-name="paw prints pet animal">🐾</button>
+                                <button type="button" class="emoji-option" data-emoji="🐕" data-category="nature" data-name="dog pet animal canine">🐕</button>
+                                <button type="button" class="emoji-option" data-emoji="🌾" data-category="nature" data-name="wheat grain farm agriculture">🌾</button>
+                                <button type="button" class="emoji-option" data-emoji="🚜" data-category="nature" data-name="tractor farm agriculture vehicle">🚜</button>
+                                <button type="button" class="emoji-option" data-emoji="🌿" data-category="nature" data-name="herb plant leaf green organic">🌿</button>
+                                <!-- Education & Learning -->
+                                <button type="button" class="emoji-option" data-emoji="📚" data-category="education" data-name="books library reading study">📚</button>
+                                <button type="button" class="emoji-option" data-emoji="✏️" data-category="education" data-name="pencil writing school draw">✏️</button>
+                                <button type="button" class="emoji-option" data-emoji="🎓" data-category="education" data-name="graduation cap education university college">🎓</button>
+                                <button type="button" class="emoji-option" data-emoji="📖" data-category="education" data-name="book reading open page">📖</button>
+                                <button type="button" class="emoji-option" data-emoji="🔭" data-category="education" data-name="telescope astronomy science space">🔭</button>
+                                <button type="button" class="emoji-option" data-emoji="🎹" data-category="education" data-name="piano keyboard music instrument">🎹</button>
+                                <button type="button" class="emoji-option" data-emoji="🎸" data-category="education" data-name="guitar music instrument rock">🎸</button>
+                                <button type="button" class="emoji-option" data-emoji="📷" data-category="education" data-name="camera photo photography picture">📷</button>
+                                <button type="button" class="emoji-option" data-emoji="🖌️" data-category="education" data-name="paintbrush art creative painting">🖌️</button>
+                                <button type="button" class="emoji-option" data-emoji="✂️" data-category="education" data-name="scissors cut craft salon">✂️</button>
+                            </div>
+                            </div>
+                            <div class="emoji-no-results" id="emojiNoResults" style="display: none;">
+                                No icons found
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="businessEditName">Location Name</label>
+                    <input type="text" id="businessEditName" class="form-input" placeholder="e.g., Downtown Office">
+                </div>
+                <div class="form-group">
+                    <label for="businessEditColor">Theme Color</label>
+                    <div class="color-picker-row">
+                        <input type="color" id="businessEditColor" class="color-input" value="#6366f1">
+                        <div class="color-presets">
+                            <button type="button" class="color-preset" data-color="#06d6a0" style="background: #06d6a0"></button>
+                            <button type="button" class="color-preset" data-color="#6366f1" style="background: #6366f1"></button>
+                            <button type="button" class="color-preset" data-color="#f59e0b" style="background: #f59e0b"></button>
+                            <button type="button" class="color-preset" data-color="#3b82f6" style="background: #3b82f6"></button>
+                            <button type="button" class="color-preset" data-color="#8b5cf6" style="background: #8b5cf6"></button>
+                            <button type="button" class="color-preset" data-color="#ec4899" style="background: #ec4899"></button>
+                            <button type="button" class="color-preset" data-color="#ef4444" style="background: #ef4444"></button>
+                            <button type="button" class="color-preset" data-color="#14b8a6" style="background: #14b8a6"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="delete-btn-wrapper" id="deleteBusinessWrapper">
+                    <button type="button" class="btn btn-danger" id="deleteBusinessBtn" disabled>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
+                        Delete
+                    </button>
+                    <span class="delete-hint" id="deleteHint">Sample locations cannot be deleted</span>
+                </div>
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveBusinessBtn">Save</button>
             </div>
         </div>
     </div>

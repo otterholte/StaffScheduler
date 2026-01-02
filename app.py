@@ -10,6 +10,8 @@ A comprehensive staff scheduling solution with:
 
 from flask import Flask, render_template, jsonify, request
 import uuid
+import json
+import os
 from scheduler import (
     AdvancedScheduleSolver,
     get_all_businesses,
@@ -27,6 +29,29 @@ app = Flask(__name__)
 # Global state
 _current_business = None
 _solver = None
+
+# Custom businesses storage
+CUSTOM_BUSINESSES_FILE = 'custom_businesses.json'
+_custom_businesses = {}
+
+def load_custom_businesses():
+    """Load custom businesses from JSON file."""
+    global _custom_businesses
+    if os.path.exists(CUSTOM_BUSINESSES_FILE):
+        try:
+            with open(CUSTOM_BUSINESSES_FILE, 'r') as f:
+                _custom_businesses = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            _custom_businesses = {}
+    return _custom_businesses
+
+def save_custom_businesses():
+    """Save custom businesses to JSON file."""
+    with open(CUSTOM_BUSINESSES_FILE, 'w') as f:
+        json.dump(_custom_businesses, f, indent=2)
+
+# Load custom businesses on startup
+load_custom_businesses()
 
 
 def get_current_business():
@@ -96,12 +121,43 @@ def index():
     business = get_current_business()
     businesses = get_all_businesses()
     
+    # Default emoji/color mapping for built-in businesses
+    business_meta = {
+        'coffee_shop': {'emoji': '☕', 'color': '#06d6a0'},
+        'retail_store': {'emoji': '🏪', 'color': '#6366f1'},
+        'restaurant': {'emoji': '🍽️', 'color': '#f59e0b'},
+        'call_center': {'emoji': '📞', 'color': '#3b82f6'},
+        'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
+    }
+    
+    # Build business list with custom metadata
+    businesses_data = []
+    for b in businesses:
+        meta = business_meta.get(b.id, {'emoji': '🏢', 'color': '#6366f1'})
+        # Apply custom metadata if exists
+        if b.id in _custom_businesses:
+            meta = {
+                'emoji': _custom_businesses[b.id].get('emoji', meta['emoji']),
+                'color': _custom_businesses[b.id].get('color', meta['color'])
+            }
+            name = _custom_businesses[b.id].get('name', b.name)
+        else:
+            name = b.name
+            
+        businesses_data.append({
+            "id": b.id,
+            "name": name,
+            "description": b.description,
+            "total_employees": len(b.employees),
+            "total_roles": len(b.roles),
+            "emoji": meta['emoji'],
+            "color": meta['color']
+        })
+    
     return render_template(
         'index.html',
         business=business.to_dict(),
-        businesses=[{"id": b.id, "name": b.name, "description": b.description, 
-                     "total_employees": len(b.employees), "total_roles": len(b.roles)} 
-                    for b in businesses],
+        businesses=businesses_data,
         employees=[emp.to_dict() for emp in business.employees],
         roles=[r.to_dict() for r in business.roles],
         days=DAYS_OF_WEEK,
@@ -118,20 +174,43 @@ def index():
 def list_businesses():
     """List all available business scenarios."""
     businesses = get_all_businesses()
-    return jsonify({
-        'businesses': [
-            {
-                "id": b.id,
-                "name": b.name,
-                "description": b.description,
-                "total_employees": len(b.employees),
-                "total_roles": len(b.roles),
-                "hours": f"{b.start_hour}:00-{b.end_hour}:00",
-                "days_open": len(b.days_open)
+    
+    # Default emoji/color mapping for built-in businesses
+    business_meta = {
+        'coffee_shop': {'emoji': '☕', 'color': '#06d6a0'},
+        'retail_store': {'emoji': '🏪', 'color': '#6366f1'},
+        'restaurant': {'emoji': '🍽️', 'color': '#f59e0b'},
+        'call_center': {'emoji': '📞', 'color': '#3b82f6'},
+        'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
+    }
+    
+    result = []
+    for b in businesses:
+        meta = business_meta.get(b.id, {'emoji': '🏢', 'color': '#6366f1'})
+        # Check if custom metadata exists
+        if b.id in _custom_businesses:
+            meta = {
+                'emoji': _custom_businesses[b.id].get('emoji', meta['emoji']),
+                'color': _custom_businesses[b.id].get('color', meta['color'])
             }
-            for b in businesses
-        ]
-    })
+            # Use custom name if set
+            name = _custom_businesses[b.id].get('name', b.name)
+        else:
+            name = b.name
+            
+        result.append({
+            "id": b.id,
+            "name": name,
+            "description": b.description,
+            "total_employees": len(b.employees),
+            "total_roles": len(b.roles),
+            "hours": f"{b.start_hour}:00-{b.end_hour}:00",
+            "days_open": len(b.days_open),
+            "emoji": meta['emoji'],
+            "color": meta['color']
+        })
+    
+    return jsonify({'businesses': result})
 
 
 @app.route('/api/business/<business_id>', methods=['POST'])
@@ -143,6 +222,19 @@ def switch_business(business_id):
         _current_business = get_business_by_id(business_id)
         _solver = None  # Reset solver
         
+        # Apply custom name if it exists
+        if business_id in _custom_businesses:
+            custom_name = _custom_businesses[business_id].get('name')
+            if custom_name:
+                # Update the business name temporarily
+                business_dict = _current_business.to_dict()
+                business_dict['name'] = custom_name
+                return jsonify({
+                    'success': True,
+                    'business': business_dict,
+                    'message': f'Switched to {custom_name}'
+                })
+        
         return jsonify({
             'success': True,
             'business': _current_business.to_dict(),
@@ -153,6 +245,68 @@ def switch_business(business_id):
             'success': False,
             'message': str(e)
         }), 400
+
+
+@app.route('/api/business/save', methods=['POST'])
+def save_business():
+    """Save or update business metadata (name, emoji, color)."""
+    global _custom_businesses
+    
+    data = request.json
+    business_id = data.get('id')
+    name = data.get('name')
+    emoji = data.get('emoji', '🏢')
+    color = data.get('color', '#6366f1')
+    
+    if not name:
+        return jsonify({'success': False, 'error': 'Name is required'}), 400
+    
+    # For existing businesses, just update metadata
+    if business_id:
+        try:
+            # Verify business exists
+            get_business_by_id(business_id)
+            
+            _custom_businesses[business_id] = {
+                'name': name,
+                'emoji': emoji,
+                'color': color
+            }
+            save_custom_businesses()
+            
+            return jsonify({
+                'success': True,
+                'business_id': business_id,
+                'message': 'Business updated'
+            })
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+    else:
+        # For now, we don't support creating entirely new businesses
+        # Just return an error suggesting to use existing templates
+        return jsonify({
+            'success': False,
+            'error': 'Creating new businesses from scratch is not yet supported. Please customize an existing business template instead.'
+        }), 400
+
+
+@app.route('/api/business/<business_id>', methods=['DELETE'])
+def delete_business(business_id):
+    """Delete custom business metadata (reverts to default)."""
+    global _custom_businesses
+    
+    if business_id in _custom_businesses:
+        del _custom_businesses[business_id]
+        save_custom_businesses()
+        return jsonify({
+            'success': True,
+            'message': 'Business customizations removed'
+        })
+    
+    return jsonify({
+        'success': False,
+        'error': 'No custom settings found for this business'
+    }), 404
 
 
 # ==================== SCHEDULE API ====================
