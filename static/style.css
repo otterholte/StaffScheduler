@@ -1581,6 +1581,183 @@ body[data-theme="light"] .advanced-panel {
     padding: 0.5rem 0.75rem;
 }
 
+.week-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 4px;
+    color: var(--accent-primary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.week-nav-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+    transform: scale(1.05);
+}
+
+.week-nav-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ==================== WEEK NAVIGATION BAR ==================== */
+.week-navigation-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-md);
+    margin-bottom: 1rem;
+}
+
+.week-nav-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: var(--radius-md);
+    color: var(--accent-primary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.week-nav-arrow:hover {
+    background: var(--accent-primary);
+    color: white;
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.week-nav-arrow svg {
+    width: 20px;
+    height: 20px;
+}
+
+.week-nav-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    min-width: 200px;
+}
+
+.week-navigation-bar .week-type-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent-primary);
+}
+
+.week-date-range {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.02em;
+}
+
+/* Light theme */
+body[data-theme="light"] .week-navigation-bar {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+    border-color: rgba(99, 102, 241, 0.15);
+}
+
+/* Legacy week nav label styles (for day column headers) */
+.week-type-label {
+    font-size: 0.6rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    opacity: 0.8;
+}
+
+.week-nav-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    color: var(--text-primary);
+}
+
+/* Week navigation in Grid/Table views */
+.grid-week-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+}
+
+.grid-week-nav .week-nav-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.week-nav-header {
+    min-width: 130px !important;
+}
+
+th.week-nav-header .grid-week-nav {
+    padding: 0.15rem 0;
+}
+
+/* Day header with date */
+.schedule-grid th .day-name,
+.simple-schedule-table th .day-name {
+    display: block;
+    font-weight: 700;
+    font-size: 0.85rem;
+}
+
+.schedule-grid th .day-date,
+.simple-schedule-table th .day-date {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+/* Day Label with Date */
+.timeline-day-label {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+}
+
+.timeline-day-label .day-name {
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-primary);
+}
+
+.timeline-day-label .day-date {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
 .timeline-header-hours {
     display: flex;
     flex: 1;
@@ -1624,15 +1801,11 @@ body[data-theme="light"] .advanced-panel {
     border-radius: var(--radius-sm);
 }
 
+/* Note: .timeline-day-label main styles are above in "Day Label with Date" section */
 .timeline-day-label {
     width: 100px;
     flex-shrink: 0;
-    display: flex;
-    align-items: center;
     padding: 0.5rem 0.75rem;
-    font-weight: 700;
-    font-size: 0.85rem;
-    color: var(--text-primary);
     background: rgba(0, 0, 0, 0.15);
     border-radius: var(--radius-sm) 0 0 var(--radius-sm);
 }
@@ -1936,6 +2109,75 @@ body[data-theme="light"] .shift-resize-handle.right {
     display: flex;
     flex-wrap: wrap;
     gap: 0.75rem;
+}
+
+/* Schedule Footer - Coverage Status + Publish Button */
+.schedule-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.footer-spacer {
+    flex: 1;
+}
+
+.footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.footer-status {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.75rem;
+}
+
+.btn-publish {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #4f46e5 100%);
+    border: none;
+    border-radius: var(--radius-md);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.btn-publish:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.btn-publish:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.btn-publish svg {
+    width: 16px;
+    height: 16px;
+}
+
+.btn-publish.published {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.5);
+    animation: publishPulse 0.3s ease;
+}
+
+@keyframes publishPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
 }
 
 .legend-item {

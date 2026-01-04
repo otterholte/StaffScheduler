@@ -27,8 +27,10 @@ const state = {
     hasCompletedSetup: INITIAL_DATA.business.has_completed_setup !== false,
     editingShift: null,
     // Schedule view state
-    scheduleViewMode: 'grid', // 'grid' or 'table'
-    scheduleColorMode: 'role' // 'role' or 'employee'
+    scheduleViewMode: 'timeline', // 'grid', 'timeline', or 'table'
+    scheduleColorMode: 'role', // 'role' or 'employee'
+    // Week navigation state
+    weekOffset: 0 // 0 = current week, -1 = last week, 1 = next week, etc.
 };
 
 // ==================== TIMELINE DRAG STATE ====================
@@ -59,6 +61,129 @@ function buildLookups() {
 }
 buildLookups();
 
+// ==================== WEEK NAVIGATION HELPERS ====================
+/**
+ * Get the dates for a week based on offset from current week.
+ * Returns an array of Date objects for Mon-Sun.
+ * @param {number} offset - 0 = current week, -1 = last week, 1 = next week
+ */
+function getWeekDates(offset = 0) {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    
+    // Calculate Monday of current week
+    // If today is Sunday (0), go back 6 days to get Monday
+    // Otherwise, go back (dayOfWeek - 1) days
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - daysToMonday + (offset * 7));
+    monday.setHours(0, 0, 0, 0);
+    
+    // Generate all 7 days of the week
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        weekDates.push(date);
+    }
+    
+    return weekDates;
+}
+
+/**
+ * Format a date as short month + day (e.g., "Jan 6")
+ */
+function formatShortDate(date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[date.getMonth()]} ${date.getDate()}`;
+}
+
+/**
+ * Navigate to a different week and re-render the current view
+ */
+function navigateWeek(direction) {
+    state.weekOffset += direction;
+    
+    // Update the week navigation bar
+    updateWeekNavigationBar();
+    
+    // Re-render based on current view mode
+    if (state.scheduleViewMode === 'timeline') {
+        renderTimelineView(state.currentSchedule || {});
+    } else if (state.scheduleViewMode === 'grid') {
+        rebuildScheduleGrid();
+        if (state.currentSchedule) {
+            renderSchedule(state.currentSchedule);
+        }
+    } else if (state.scheduleViewMode === 'table') {
+        if (state.currentSchedule) {
+            renderSimpleTableView(state.currentSchedule);
+        } else {
+            // Just rebuild the header for empty state
+            const table = document.getElementById('simpleScheduleTable');
+            const tbody = document.getElementById('simpleScheduleBody');
+            if (table && tbody) {
+                renderSimpleTableView({ slot_assignments: {} });
+            }
+        }
+    }
+}
+
+/**
+ * Update the week navigation bar display
+ */
+function updateWeekNavigationBar() {
+    if (dom.weekTypeLabel) {
+        dom.weekTypeLabel.textContent = getWeekTypeLabel(state.weekOffset);
+    }
+    if (dom.weekDateRange) {
+        dom.weekDateRange.textContent = getWeekRangeString(state.weekOffset);
+    }
+}
+
+/**
+ * Get the week range string (e.g., "Jan 6 - Jan 12, 2025")
+ */
+function getWeekRangeString(offset = 0) {
+    const dates = getWeekDates(offset);
+    const monday = dates[0];
+    const sunday = dates[6];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (monday.getMonth() === sunday.getMonth()) {
+        return `${months[monday.getMonth()]} ${monday.getDate()} - ${sunday.getDate()}, ${sunday.getFullYear()}`;
+    } else {
+        return `${months[monday.getMonth()]} ${monday.getDate()} - ${months[sunday.getMonth()]} ${sunday.getDate()}, ${sunday.getFullYear()}`;
+    }
+}
+
+/**
+ * Get a short week label for the header (e.g., "Jan 6-12")
+ */
+function getShortWeekLabel(offset = 0) {
+    const dates = getWeekDates(offset);
+    const monday = dates[0];
+    const sunday = dates[6];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (monday.getMonth() === sunday.getMonth()) {
+        return `${months[monday.getMonth()]} ${monday.getDate()}-${sunday.getDate()}`;
+    } else {
+        return `${months[monday.getMonth()]} ${monday.getDate()} - ${months[sunday.getMonth()]} ${sunday.getDate()}`;
+    }
+}
+
+/**
+ * Get the week type label based on offset ("Current Week", "Last Week", "Next Week", etc.)
+ */
+function getWeekTypeLabel(offset = 0) {
+    if (offset === 0) return 'Current Week';
+    if (offset === -1) return 'Last Week';
+    if (offset === 1) return 'Next Week';
+    if (offset < -1) return `${Math.abs(offset)} Weeks Ago`;
+    return `In ${offset} Weeks`;
+}
+
 // ==================== DOM REFERENCES ====================
 const dom = {
     // Navigation
@@ -80,7 +205,13 @@ const dom = {
     alternativeBtn: document.getElementById('alternativeBtn'),
     resetBtn: document.getElementById('resetBtn'),
     exportBtn: document.getElementById('exportBtn'),
-    scheduleStatus: document.getElementById('scheduleStatus'),
+    scheduleStatus: document.getElementById('scheduleStatusFooter'), // Status badge now only in footer
+    publishBtn: document.getElementById('publishBtn'),
+    // Week Navigation Bar
+    weekNavPrev: document.getElementById('weekNavPrev'),
+    weekNavNext: document.getElementById('weekNavNext'),
+    weekTypeLabel: document.getElementById('weekTypeLabel'),
+    weekDateRange: document.getElementById('weekDateRange'),
     scheduleGrid: document.getElementById('scheduleGrid'),
     scheduleBody: document.getElementById('scheduleBody'),
     
@@ -924,6 +1055,21 @@ function setupScheduleTab() {
     dom.alternativeBtn.addEventListener('click', findAlternative);
     dom.resetBtn.addEventListener('click', resetSchedule);
     
+    // Publish button
+    if (dom.publishBtn) {
+        dom.publishBtn.addEventListener('click', publishSchedule);
+    }
+    
+    // Week Navigation Bar
+    if (dom.weekNavPrev) {
+        dom.weekNavPrev.addEventListener('click', () => navigateWeek(-1));
+    }
+    if (dom.weekNavNext) {
+        dom.weekNavNext.addEventListener('click', () => navigateWeek(1));
+    }
+    // Initialize week navigation bar display
+    updateWeekNavigationBar();
+    
     // Click on slots
     dom.scheduleBody.addEventListener('click', (e) => {
         const slot = e.target.closest('.slot');
@@ -949,10 +1095,12 @@ function setupScheduleTab() {
             
             // Re-render current schedule (or empty view)
             if (view === 'table') {
-                if (state.currentSchedule) renderSimpleTableView(state.currentSchedule);
+                renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
             } else if (view === 'timeline') {
                 renderTimelineView(state.currentSchedule || {});
             } else {
+                // Grid view - rebuild grid structure with dates first
+                rebuildScheduleGrid();
                 if (state.currentSchedule) renderSchedule(state.currentSchedule);
             }
         });
@@ -1074,12 +1222,22 @@ function rebuildScheduleGrid() {
         console.warn('thead tr not found in scheduleGrid');
         return;
     }
+    
+    // Get week dates for the current week offset
+    const weekDates = getWeekDates(state.weekOffset);
+    
+    // First column: Time label (week nav is now in the bar above)
     thead.innerHTML = '<th class="time-col">Time</th>';
+    
     state.daysOpen.forEach((dayIdx, colIndex) => {
         const th = document.createElement('th');
         // Use actual day index: TUE(1), THU(3), SAT(5) are odd days
         th.className = 'day-col ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
-        th.textContent = state.days[dayIdx].substring(0, 3);
+        const dayDate = weekDates[dayIdx];
+        th.innerHTML = `
+            <span class="day-name">${state.days[dayIdx].substring(0, 3)}</span>
+            <span class="day-date">${formatShortDate(dayDate)}</span>
+        `;
         thead.appendChild(th);
     });
     
@@ -1316,10 +1474,43 @@ async function resetSchedule() {
     }
 }
 
+function publishSchedule() {
+    if (!state.currentSchedule || !state.currentSchedule.slot_assignments) {
+        showToast('No schedule to publish', 'warning');
+        return;
+    }
+    
+    // Get the week range for the confirmation message
+    const weekRange = getWeekRangeString(state.weekOffset);
+    
+    // Show success toast with week info
+    showToast(`Schedule published for ${weekRange}`, 'success');
+    
+    // Visual feedback - briefly highlight the publish button
+    if (dom.publishBtn) {
+        dom.publishBtn.classList.add('published');
+        setTimeout(() => {
+            dom.publishBtn.classList.remove('published');
+        }, 1500);
+    }
+}
+
 function updateScheduleStatus(text, type) {
-    dom.scheduleStatus.textContent = text;
-    dom.scheduleStatus.className = 'status-badge';
-    if (type) dom.scheduleStatus.classList.add(type);
+    // Update status badge (now only in footer)
+    if (dom.scheduleStatus) {
+        dom.scheduleStatus.textContent = text;
+        dom.scheduleStatus.className = 'status-badge footer-status';
+        if (type) dom.scheduleStatus.classList.add(type);
+    }
+    
+    // Enable/disable publish button based on schedule state
+    if (dom.publishBtn) {
+        // Enable publish only when there's a generated schedule (not "Ready to generate")
+        const hasSchedule = state.currentSchedule && 
+                           state.currentSchedule.slot_assignments && 
+                           Object.keys(state.currentSchedule.slot_assignments).length > 0;
+        dom.publishBtn.disabled = !hasSchedule;
+    }
 }
 
 function clearScheduleGrid() {
@@ -1762,7 +1953,35 @@ function renderScheduleLegend() {
 // ==================== SIMPLE TABLE VIEW ====================
 function renderSimpleTableView(schedule) {
     const tbody = document.getElementById('simpleScheduleBody');
-    if (!tbody) return;
+    const table = document.getElementById('simpleScheduleTable');
+    if (!tbody || !table) return;
+    
+    // Rebuild header with dates and week navigation
+    const thead = table.querySelector('thead tr');
+    if (thead) {
+        const weekDates = getWeekDates(state.weekOffset);
+        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        
+        // First column: Name label (week nav is now in the bar above)
+        thead.innerHTML = '<th class="name-col">Name</th>';
+        
+        // Add day columns with dates
+        for (let i = 0; i < 7; i++) {
+            const th = document.createElement('th');
+            th.className = i % 2 === 0 ? 'day-even' : 'day-odd';
+            th.innerHTML = `
+                <span class="day-name">${dayNames[i]}</span>
+                <span class="day-date">${formatShortDate(weekDates[i])}</span>
+            `;
+            thead.appendChild(th);
+        }
+        
+        // Add hours column
+        const hoursCol = document.createElement('th');
+        hoursCol.className = 'hours-col';
+        hoursCol.textContent = 'Hours';
+        thead.appendChild(hoursCol);
+    }
     
     tbody.innerHTML = '';
     const slotAssignments = schedule.slot_assignments || {};
@@ -2099,22 +2318,32 @@ function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toSt
     return true;
 }
 
-// Resize shift (change start or end time) - 15-minute snapping during drag, hourly storage
+// Resize shift (change start or end time) - supports 15-minute precision
 function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) {
     if (!state.currentSchedule) return false;
     
     const slotAssignments = state.currentSchedule.slot_assignments;
     
-    // Round to hours for storage (floor for start, ceil for end)
-    const newStartHour = Math.floor(newStart);
-    const newEndHour = Math.ceil(newEnd);
+    // Initialize shift_times if needed (stores precise start/end for display)
+    if (!state.currentSchedule.shift_times) {
+        state.currentSchedule.shift_times = {};
+    }
+    
+    // Round to nearest 15 minutes (0.25 hour increments)
+    const roundTo15Min = (time) => Math.round(time * 4) / 4;
+    const preciseStart = roundTo15Min(newStart);
+    const preciseEnd = roundTo15Min(newEnd);
+    
+    // Calculate which hours need slot coverage (floor start, ceil end)
+    const newStartHour = Math.floor(preciseStart);
+    const newEndHour = Math.ceil(preciseEnd);
     
     // Validate new times
-    if (newStartHour >= newEndHour) {
-        showToast('Shift must be at least 1 hour', 'error');
+    if (preciseStart >= preciseEnd) {
+        showToast('Shift must be at least 15 minutes', 'error');
         return false;
     }
-    if (newStartHour < state.startHour || newEndHour > state.endHour) {
+    if (preciseStart < state.startHour || preciseEnd > state.endHour) {
         showToast('Shift would extend outside business hours', 'error');
         return false;
     }
@@ -2139,7 +2368,7 @@ function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) 
         }
     });
     
-    // Add new assignments for the new range (hourly slots)
+    // Add new assignments for the new range (hourly slots for coverage)
     for (let hour = newStartHour; hour < newEndHour; hour++) {
         const key = `${dayIdx},${hour}`;
         if (!slotAssignments[key]) {
@@ -2154,13 +2383,33 @@ function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) 
         }
     }
     
+    // Store precise times for this shift (for display purposes)
+    const shiftKey = `${empId}_${dayIdx}`;
+    state.currentSchedule.shift_times[shiftKey] = {
+        start: preciseStart,
+        end: preciseEnd,
+        roleId: roleId
+    };
+    
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
     
     const emp = employeeMap[empId];
-    showToast(`${emp?.name}'s shift adjusted to ${formatHour(newStartHour)}-${formatHour(newEndHour)}`, 'success');
+    showToast(`${emp?.name}'s shift adjusted to ${formatHourMinute(preciseStart)}-${formatHourMinute(preciseEnd)}`, 'success');
     
     return true;
+}
+
+// Format hour with minutes (e.g., 9.25 -> "9:15am")
+function formatHourMinute(time) {
+    const hour = Math.floor(time);
+    const minutes = Math.round((time - hour) * 60);
+    const period = hour >= 12 ? 'pm' : 'am';
+    const displayHour = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    if (minutes === 0) {
+        return `${displayHour}${period}`;
+    }
+    return `${displayHour}:${minutes.toString().padStart(2, '0')}${period}`;
 }
 
 // Delete shift from schedule
@@ -2343,10 +2592,14 @@ function renderTimelineView(schedule) {
         });
     }
     
+    // Get week dates based on current offset
+    const weekDates = getWeekDates(state.weekOffset);
+    
     // Build header row with hours
     const headerDiv = document.createElement('div');
     headerDiv.className = 'timeline-header';
     
+    // Day column header (simple label, week nav is now in the bar above)
     const dayLabelHeader = document.createElement('div');
     dayLabelHeader.className = 'timeline-header-day';
     dayLabelHeader.textContent = 'Day';
@@ -2377,10 +2630,14 @@ function renderTimelineView(schedule) {
         rowDiv.className = 'timeline-row ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
         rowDiv.dataset.dayIdx = dayIdx;
         
-        // Day label
+        // Day label with date
         const dayLabel = document.createElement('div');
         dayLabel.className = 'timeline-day-label';
-        dayLabel.textContent = state.days[dayIdx];
+        const dayDate = weekDates[dayIdx];
+        dayLabel.innerHTML = `
+            <span class="day-name">${state.days[dayIdx].substring(0, 3)}</span>
+            <span class="day-date">${formatShortDate(dayDate)}</span>
+        `;
         rowDiv.appendChild(dayLabel);
         
         // Slots container
@@ -2732,8 +2989,14 @@ function renderTimelineView(schedule) {
             // Add shifts for this row
             const rowShifts = shiftRows[rowIdx] || [];
             rowShifts.forEach(shift => {
-                const startIdx = state.hours.indexOf(shift.startHour);
-                const duration = shift.endHour - shift.startHour;
+                // Check for precise times in shift_times
+                const shiftKey = `${shift.empId}_${dayIdx}`;
+                const preciseTimes = schedule?.shift_times?.[shiftKey];
+                
+                // Use precise times if available, otherwise use hourly slot times
+                const displayStart = preciseTimes ? preciseTimes.start : shift.startHour;
+                const displayEnd = preciseTimes ? preciseTimes.end : shift.endHour;
+                const duration = displayEnd - displayStart;
                 
                 const block = document.createElement('div');
                 block.className = 'timeline-shift-block';
@@ -2743,11 +3006,11 @@ function renderTimelineView(schedule) {
                 block.dataset.empId = shift.empId;
                 block.dataset.roleId = shift.roleId;
                 block.dataset.dayIdx = dayIdx;
-                block.dataset.startHour = shift.startHour;
-                block.dataset.endHour = shift.endHour;
+                block.dataset.startHour = displayStart;
+                block.dataset.endHour = displayEnd;
                 
-                // Calculate percentage positions - align exactly with hour columns
-                const leftPercent = (startIdx / totalHours) * 100;
+                // Calculate percentage positions using precise times
+                const leftPercent = ((displayStart - state.startHour) / totalHours) * 100;
                 const widthPercent = (duration / totalHours) * 100;
                 block.style.left = `${leftPercent}%`;
                 block.style.width = `${widthPercent}%`;
@@ -2776,14 +3039,21 @@ function renderTimelineView(schedule) {
                     <span class="shift-name">${shift.emp.name}</span>
                     <div class="shift-resize-handle right" data-edge="right"></div>
                 `;
-                block.title = `${shift.emp.name} (${empType})\nRole: ${roleName}\n${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}\n\nWeekly: ${hoursWorked}h / ${minHours}-${maxHours}h range\nDays this week: ${daysWorked}\n\nDrag to move · Drag edges to resize`;
+                const timeDisplay = preciseTimes 
+                    ? `${formatHourMinute(displayStart)} - ${formatHourMinute(displayEnd)}`
+                    : `${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
+                block.title = `${shift.emp.name} (${empType})\nRole: ${roleName}\n${timeDisplay}\n\nWeekly: ${hoursWorked}h / ${minHours}-${maxHours}h range\nDays this week: ${daysWorked}\n\nDrag to move · Drag edges to resize`;
                 
                 // Add day info to shift for the editor
                 shift.day = state.days[dayIdx];
                 shift.dayIdx = dayIdx;
                 
-                // Store shift reference for drag operations
-                block._shiftData = { ...shift };
+                // Store shift reference for drag operations (use precise times)
+                block._shiftData = { 
+                    ...shift,
+                    startHour: displayStart,
+                    endHour: displayEnd
+                };
                 
                 // Click handler to edit shift (only if not dragging/resizing)
                 block.addEventListener('click', (e) => {

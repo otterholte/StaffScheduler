@@ -153,19 +153,9 @@
                         <div class="panel-card">
                             <div class="schedule-toolbar">
                                 <div class="toolbar-left">
-                                    <span id="scheduleStatus" class="status-badge">Ready to generate</span>
                                     <!-- View Toggle -->
                                     <div class="view-toggle" id="viewToggle">
-                                        <button class="view-toggle-btn active" data-view="grid" title="Hourly Grid View">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <rect x="3" y="3" width="7" height="7"></rect>
-                                                <rect x="14" y="3" width="7" height="7"></rect>
-                                                <rect x="3" y="14" width="7" height="7"></rect>
-                                                <rect x="14" y="14" width="7" height="7"></rect>
-                                            </svg>
-                                            Grid
-                                        </button>
-                                        <button class="view-toggle-btn" data-view="timeline" title="Timeline View - Days as rows">
+                                        <button class="view-toggle-btn active" data-view="timeline" title="Timeline View - Days as rows">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <line x1="3" y1="6" x2="21" y2="6"></line>
                                                 <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -175,6 +165,15 @@
                                                 <rect x="7" y="16" width="5" height="4" rx="1"></rect>
                                             </svg>
                                             Timeline
+                                        </button>
+                                        <button class="view-toggle-btn" data-view="grid" title="Hourly Grid View">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <rect x="3" y="3" width="7" height="7"></rect>
+                                                <rect x="14" y="3" width="7" height="7"></rect>
+                                                <rect x="3" y="14" width="7" height="7"></rect>
+                                                <rect x="14" y="14" width="7" height="7"></rect>
+                                            </svg>
+                                            Grid
                                         </button>
                                         <button class="view-toggle-btn" data-view="table" title="Simple Table View">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -219,8 +218,27 @@
                                     </button>
                                 </div>
                             </div>
+                            
+                            <!-- Week Navigation Bar -->
+                            <div class="week-navigation-bar" id="weekNavigationBar">
+                                <button class="week-nav-arrow week-nav-prev" id="weekNavPrev" title="Previous week">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="15 18 9 12 15 6"></polyline>
+                                    </svg>
+                                </button>
+                                <div class="week-nav-center">
+                                    <span class="week-type-label" id="weekTypeLabel">Current Week</span>
+                                    <span class="week-date-range" id="weekDateRange">Dec 29 - Jan 4, 2025</span>
+                                </div>
+                                <button class="week-nav-arrow week-nav-next" id="weekNavNext" title="Next week">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
+                            
                             <!-- Grid View -->
-                            <div class="schedule-view schedule-view-grid active" id="scheduleViewGrid">
+                            <div class="schedule-view schedule-view-grid" id="scheduleViewGrid">
                                 <div class="schedule-grid-wrapper" id="scheduleGridWrapper">
                                     <table class="schedule-grid" id="scheduleGrid">
                                         <thead>
@@ -250,7 +268,7 @@
                             </div>
 
                             <!-- Timeline View (Days as rows, Hours as columns) -->
-                            <div class="schedule-view schedule-view-timeline" id="scheduleViewTimeline">
+                            <div class="schedule-view schedule-view-timeline active" id="scheduleViewTimeline">
                                 <div class="timeline-wrapper" id="timelineWrapper">
                                     <div class="timeline-grid" id="timelineGrid">
                                         <!-- Will be populated by JS -->
@@ -285,6 +303,21 @@
                                 <div class="legend-title" id="legendTitle">Roles</div>
                                 <div class="schedule-legend" id="scheduleLegend">
                                     <!-- Legend items populated by JS -->
+                                </div>
+                            </div>
+                            
+                            <!-- Schedule Footer with Coverage Status + Publish -->
+                            <div class="schedule-footer" id="scheduleFooter">
+                                <div class="footer-spacer"></div>
+                                <div class="footer-actions">
+                                    <span id="scheduleStatusFooter" class="status-badge footer-status">Ready to generate</span>
+                                    <button id="publishBtn" class="btn btn-primary btn-publish" disabled>
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M22 2L11 13"></path>
+                                            <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                                        </svg>
+                                        Publish
+                                    </button>
                                 </div>
                             </div>
                         </div>
