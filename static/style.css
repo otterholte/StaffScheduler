@@ -2035,9 +2035,17 @@ th.week-nav-header .grid-week-nav {
     border-radius: var(--radius-sm);
 }
 
+.timeline-row.day-even .timeline-slots {
+    background: #222341;
+}
+
 .timeline-row.day-odd {
     background: #3e4269;
     border-radius: var(--radius-sm);
+}
+
+.timeline-row.day-odd .timeline-slots {
+    background: #2a2b4d;
 }
 
 /* Note: .timeline-day-label main styles are above in "Day Label with Date" section */
@@ -3741,13 +3749,6 @@ select.full-width {
     z-index: 0;
     border: 1px dashed rgba(255, 255, 255, 0.12);
     border-radius: var(--radius-sm);
-    background: repeating-linear-gradient(
-        -45deg,
-        rgba(255, 255, 255, 0.04),
-        rgba(255, 255, 255, 0.04) 12px,
-        rgba(255, 255, 255, 0.02) 12px,
-        rgba(255, 255, 255, 0.02) 24px
-    );
     pointer-events: none;
 }
 
@@ -3860,13 +3861,7 @@ select.full-width {
 
 /* Empty row - clickable hint */
 .timeline-empty-row {
-    background: repeating-linear-gradient(
-        -45deg,
-        transparent,
-        transparent 10px,
-        rgba(99, 102, 241, 0.03) 10px,
-        rgba(99, 102, 241, 0.03) 20px
-    );
+    background: transparent;
     border: 1px dashed rgba(99, 102, 241, 0.2);
     border-radius: var(--radius-sm);
     transition: all 0.2s ease;

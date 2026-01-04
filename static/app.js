@@ -1370,7 +1370,7 @@ function rebuildScheduleGrid() {
         
         const timeCell = document.createElement('td');
         timeCell.className = 'time-cell';
-        timeCell.textContent = `${hour.toString().padStart(2, '0')}:00`;
+        timeCell.textContent = formatHour(hour);
         tr.appendChild(timeCell);
         
         state.daysOpen.forEach((dayIdx, colIndex) => {
