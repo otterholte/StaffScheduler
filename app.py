@@ -1307,15 +1307,21 @@ def delete_shift_template(shift_id):
 
 
 if __name__ == '__main__':
+    import os
+    
+    # Production settings from environment variables
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    port = int(os.environ.get('PORT', 5000))
+    
     print("\n" + "=" * 60)
     print("   STAFF SCHEDULER PRO")
     print("   Professional Staff Management System")
     print("=" * 60)
-    print("\n Starting server at http://localhost:5000\n")
+    print(f"\n Starting server at http://localhost:{port}\n")
     
     # List available businesses
     for b in get_all_businesses():
         print(f"  [{b.id}] {b.name} - {len(b.employees)} staff, {len(b.roles)} roles")
     
     print("\n")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=debug_mode, host='0.0.0.0', port=port)

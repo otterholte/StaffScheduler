@@ -1,3 +1,2 @@
-flask>=3.0.0
-ortools>=9.8.3296
-
+Flask==3.0.0
+gunicorn==21.2.0
