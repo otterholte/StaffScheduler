@@ -513,11 +513,24 @@ function initializeFromUrl() {
     updateUrl(false);
     
     // Render tab-specific content
-    if (initialTab === 'help') {
-        requestAnimationFrame(() => renderShiftTemplates());
-    } else if (initialTab === 'settings') {
-        renderAvailabilityPage();
-    }
+    // Use setTimeout to ensure DOM is fully ready and CSS is applied
+    setTimeout(() => {
+        if (initialTab === 'schedule') {
+            // Render the schedule view based on current view mode
+            if (state.scheduleViewMode === 'timeline') {
+                renderTimelineView(state.currentSchedule || {});
+            } else if (state.scheduleViewMode === 'table') {
+                renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+            } else {
+                rebuildScheduleGrid();
+                if (state.currentSchedule) renderSchedule(state.currentSchedule);
+            }
+        } else if (initialTab === 'help') {
+            renderShiftTemplates();
+        } else if (initialTab === 'settings') {
+            renderAvailabilityPage();
+        }
+    }, 0);
 }
 
 function parseUrlAndNavigate(updateHistory = true) {
