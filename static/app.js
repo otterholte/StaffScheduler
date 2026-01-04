@@ -826,7 +826,7 @@ function setupModals() {
         saveShiftEditBtn.addEventListener('click', saveShiftEdit);
     }
     if (deleteShiftBtn) {
-        deleteShiftBtn.addEventListener('click', deleteShift);
+        deleteShiftBtn.addEventListener('click', deleteScheduleShift);
     }
     
     // Confirm
@@ -4650,7 +4650,7 @@ function saveShiftEdit() {
     closeAllModals();
 }
 
-function deleteShift() {
+function deleteScheduleShift() {
     const modal = dom.shiftEditModal;
     const shiftData = JSON.parse(modal.dataset.shiftData);
     
