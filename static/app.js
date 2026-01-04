@@ -1593,6 +1593,9 @@ async function resetSchedule() {
         dom.alternativeBtn.disabled = true;
         dom.exportBtn.disabled = true;
         
+        // Reset the publish state for this week
+        resetWeekPublishState(state.weekOffset);
+        
         updateScheduleStatus('Ready to generate', '');
         // Clear timeline/grid views
         renderTimelineView(state.currentSchedule);
@@ -1600,6 +1603,19 @@ async function resetSchedule() {
     } catch (error) {
         showToast('Error resetting schedule', 'error');
     }
+}
+
+/**
+ * Reset the publish state for a week (when schedule is cleared/reset)
+ */
+function resetWeekPublishState(offset = 0) {
+    const weekKey = getWeekKey(offset);
+    state.publishedWeeks[weekKey] = {
+        hasSchedule: false,
+        published: false,
+        editCount: 0
+    };
+    updateWeekNavigationBar();
 }
 
 function publishSchedule() {
@@ -1880,6 +1896,15 @@ function renderSchedule(schedule) {
 
 function buildGapSegments(slotAssignments, schedule) {
     const gapSegments = [];
+    
+    // Only show gaps if there's actual schedule data (a schedule has been generated)
+    // Don't show red gaps before generating or after resetting
+    const hasScheduleData = Object.keys(slotAssignments).length > 0 && 
+        Object.values(slotAssignments).some(arr => arr && arr.length > 0);
+    
+    if (!hasScheduleData) {
+        return gapSegments; // Return empty - no gaps to show
+    }
     
     // Use unfilled_slots from schedule metrics if available (works for all coverage modes)
     const unfilledSlots = schedule?.metrics?.unfilled_slots || [];
@@ -2260,18 +2285,18 @@ function renderSimpleTableView(schedule) {
         Object.values(slotAssignments).some(arr => arr && arr.length > 0);
     
     if (!hasScheduleData) {
-        // No schedule generated yet - show a single blank placeholder row
+        // No schedule generated yet - show a single blank row
         const row = document.createElement('tr');
         row.className = 'placeholder-row';
         
-        let html = `<td class="name-col"><div class="emp-name placeholder-text"><span>No schedule generated</span></div></td>`;
+        let html = `<td class="name-col"></td>`;
         
         for (let day = 0; day < 7; day++) {
             const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
-            html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
+            html += `<td class="shift-times ${dayClass}"></td>`;
         }
         
-        html += `<td class="total-hours">—</td>`;
+        html += `<td class="total-hours"></td>`;
         row.innerHTML = html;
         tbody.appendChild(row);
         return; // Don't render anything else
@@ -2970,9 +2995,10 @@ function renderTimelineView(schedule) {
             }
         });
         
-        // Add gap indicators (only if a schedule has been generated)
+        // Add gap indicators (only if a schedule has been generated with actual data)
         const gapShifts = [];
-        const hasSchedule = Object.keys(slotAssignments).length > 0;
+        const hasSchedule = Object.keys(slotAssignments).length > 0 && 
+            Object.values(slotAssignments).some(arr => arr && arr.length > 0);
         
         if (hasSchedule) {
             // Use unfilled_slots from schedule metrics if available
