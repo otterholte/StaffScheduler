@@ -12,7 +12,7 @@ Coverage requirements are calibrated to be achievable with the available staff.
 """
 
 import random
-from typing import List
+from typing import List, Dict
 from .models import (
     BusinessScenario, Employee, Role, CoverageRequirement,
     TimeSlot, EmployeeClassification, PeakPeriod, RoleCoverageConfig,
@@ -819,29 +819,38 @@ def create_warehouse() -> BusinessScenario:
 # REGISTRY
 # =============================================================================
 
+# Cache for business instances to persist changes across page loads
+_business_cache = {}  # type: Dict[str, BusinessScenario]
+
+# Map of business IDs to their creator functions
+_business_creators = {
+    "coffee_shop": create_coffee_shop,
+    "retail_store": create_retail_store,
+    "restaurant": create_restaurant,
+    "call_center": create_call_center,
+    "warehouse": create_warehouse
+}
+
+
 def get_all_businesses() -> List[BusinessScenario]:
-    """Get all available business scenarios."""
-    return [
-        create_coffee_shop(),
-        create_retail_store(),
-        create_restaurant(),
-        create_call_center(),
-        create_warehouse()
-    ]
+    """Get all available business scenarios (cached)."""
+    # Ensure all businesses are cached
+    for business_id in _business_creators:
+        if business_id not in _business_cache:
+            _business_cache[business_id] = _business_creators[business_id]()
+    return list(_business_cache.values())
 
 
 def get_business_by_id(business_id: str) -> BusinessScenario:
-    """Get a specific business scenario by ID."""
-    businesses = {
-        "coffee_shop": create_coffee_shop,
-        "retail_store": create_retail_store,
-        "restaurant": create_restaurant,
-        "call_center": create_call_center,
-        "warehouse": create_warehouse
-    }
-    if business_id not in businesses:
+    """Get a specific business scenario by ID (cached)."""
+    if business_id not in _business_creators:
         raise ValueError(f"Unknown business ID: {business_id}")
-    return businesses[business_id]()
+    
+    # Return cached instance or create and cache new one
+    if business_id not in _business_cache:
+        _business_cache[business_id] = _business_creators[business_id]()
+    
+    return _business_cache[business_id]
 
 
 DAYS_OF_WEEK = DAYS
