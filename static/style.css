@@ -2039,6 +2039,10 @@ th.week-nav-header .grid-week-nav {
     background: #222341;
 }
 
+.timeline-row.day-even .timeline-slots:hover {
+    background: #272a4a;
+}
+
 .timeline-row.day-odd {
     background: #3e4269;
     border-radius: var(--radius-sm);
@@ -2046,6 +2050,10 @@ th.week-nav-header .grid-week-nav {
 
 .timeline-row.day-odd .timeline-slots {
     background: #2a2b4d;
+}
+
+.timeline-row.day-odd .timeline-slots:hover {
+    background: #2f3156;
 }
 
 /* Note: .timeline-day-label main styles are above in "Day Label with Date" section */
@@ -2066,6 +2074,15 @@ th.week-nav-header .grid-week-nav {
     padding: 4px 0;
     gap: 2px;
     min-width: 0; /* Allow flex shrinking */
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-left: none;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.timeline-slots:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(99, 102, 241, 0.12);
 }
 
 .timeline-slots-row {
@@ -3742,15 +3759,7 @@ select.full-width {
     cursor: pointer;
 }
 
-.timeline-slots-row::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border: 1px dashed rgba(255, 255, 255, 0.12);
-    border-radius: var(--radius-sm);
-    pointer-events: none;
-}
+/* Border is now on .timeline-slots parent element */
 
 .timeline-shift-block,
 .timeline-gap-block {
@@ -3859,17 +3868,9 @@ select.full-width {
     margin-top: 2px;
 }
 
-/* Empty row - clickable hint */
+/* Empty row - hover is handled by parent .timeline-slots */
 .timeline-empty-row {
     background: transparent;
-    border: 1px dashed rgba(99, 102, 241, 0.2);
-    border-radius: var(--radius-sm);
-    transition: all 0.2s ease;
-}
-
-.timeline-empty-row:hover {
-    background: rgba(99, 102, 241, 0.1);
-    border-color: var(--accent-color);
 }
 
 /* Make timeline rows show hint on hover for blank areas */
