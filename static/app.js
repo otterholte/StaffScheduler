@@ -257,7 +257,11 @@ function updatePublishStatusDisplay(weekState) {
     // Update tooltip on date range
     if (dateRangeEl) {
         const weekLabel = getWeekTypeLabel(state.weekOffset);
-        dateRangeEl.title = `${weekLabel} - ${tooltipText}`;
+        if (state.weekOffset !== 0) {
+            dateRangeEl.title = `${weekLabel} - Double-click to return to current week`;
+        } else {
+            dateRangeEl.title = weekLabel;
+        }
     }
     
     // Update publish button state
@@ -1352,6 +1356,18 @@ function setupScheduleTab() {
     }
     if (dom.weekNavNext) {
         dom.weekNavNext.addEventListener('click', () => navigateWeek(1));
+    }
+    // Double-click date range to return to current week
+    if (dom.weekDateRange) {
+        dom.weekDateRange.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            window.getSelection().removeAllRanges(); // Clear any text selection
+            if (state.weekOffset !== 0) {
+                // Reset to current week by calculating how many weeks to go back
+                const direction = -state.weekOffset;
+                navigateWeek(direction);
+            }
+        });
     }
     // Initialize week navigation bar display
     updateWeekNavigationBar();
