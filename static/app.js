@@ -82,6 +82,43 @@ const state = {
     currentWeekEditCount: 0
 };
 
+// ==================== LOCAL STORAGE PERSISTENCE ====================
+function getScheduleStorageKey() {
+    return `schedule_${state.business.id}_week_${state.weekOffset}`;
+}
+
+function saveScheduleToStorage() {
+    if (!state.currentSchedule) return;
+    try {
+        const key = getScheduleStorageKey();
+        localStorage.setItem(key, JSON.stringify(state.currentSchedule));
+    } catch (e) {
+        console.warn('Failed to save schedule to localStorage:', e);
+    }
+}
+
+function loadScheduleFromStorage() {
+    try {
+        const key = getScheduleStorageKey();
+        const saved = localStorage.getItem(key);
+        if (saved) {
+            return JSON.parse(saved);
+        }
+    } catch (e) {
+        console.warn('Failed to load schedule from localStorage:', e);
+    }
+    return null;
+}
+
+function clearScheduleFromStorage() {
+    try {
+        const key = getScheduleStorageKey();
+        localStorage.removeItem(key);
+    } catch (e) {
+        console.warn('Failed to clear schedule from localStorage:', e);
+    }
+}
+
 // ==================== TIMELINE DRAG STATE ====================
 const timelineDragState = {
     isDragging: false,
@@ -152,6 +189,24 @@ function formatShortDate(date) {
  */
 function navigateWeek(direction) {
     state.weekOffset += direction;
+    
+    // Load schedule from localStorage for this week
+    const savedSchedule = loadScheduleFromStorage();
+    if (savedSchedule) {
+        state.currentSchedule = savedSchedule;
+        // Mark week as having a schedule if there are slot assignments
+        if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
+            const weekKey = getWeekKey(state.weekOffset);
+            if (!state.publishedWeeks[weekKey]) {
+                state.publishedWeeks[weekKey] = { hasSchedule: true, published: false, editCount: 0 };
+            } else {
+                state.publishedWeeks[weekKey].hasSchedule = true;
+            }
+        }
+    } else {
+        // No saved schedule for this week - start fresh
+        state.currentSchedule = null;
+    }
     
     // Update the week navigation bar
     updateWeekNavigationBar();
@@ -531,6 +586,16 @@ function initializeFromUrl() {
     // Replace the current history entry with proper state
     updateUrl(false);
     
+    // Load schedule from localStorage if available
+    const savedSchedule = loadScheduleFromStorage();
+    if (savedSchedule) {
+        state.currentSchedule = savedSchedule;
+        // Mark week as having a schedule if there are slot assignments
+        if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
+            markWeekAsGenerated(state.weekOffset, 0);
+        }
+    }
+    
     // Render tab-specific content
     // Use setTimeout to ensure DOM is fully ready and CSS is applied
     setTimeout(() => {
@@ -652,6 +717,20 @@ function switchTab(tabId, updateHistory = true) {
     // Update URL to reflect tab change
     if (updateHistory) {
         updateUrl(true);
+    }
+    
+    // Re-render schedule when switching to schedule tab
+    if (tabId === 'schedule') {
+        requestAnimationFrame(() => {
+            if (state.scheduleViewMode === 'timeline') {
+                renderTimelineView(state.currentSchedule || {});
+            } else if (state.scheduleViewMode === 'table') {
+                renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+            } else {
+                rebuildScheduleGrid();
+                if (state.currentSchedule) renderSchedule(state.currentSchedule);
+            }
+        });
     }
     
     // Re-render calendar shifts when switching to requirements tab
@@ -1500,10 +1579,27 @@ async function switchBusiness(businessId, updateHistory = true) {
             renderRolesList();
             renderCoverageUI();
             
-            state.currentSchedule = null;
-            updateScheduleStatus('Ready to generate', '');
-            dom.alternativeBtn.disabled = true;
-            dom.exportBtn.disabled = true;
+            // Load schedule from localStorage for this business/week
+            const savedSchedule = loadScheduleFromStorage();
+            if (savedSchedule) {
+                state.currentSchedule = savedSchedule;
+                // Mark week as having a schedule if there are slot assignments
+                if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
+                    markWeekAsGenerated(state.weekOffset, 0);
+                    updateScheduleStatus('Schedule loaded', 'success');
+                    dom.alternativeBtn.disabled = false;
+                    dom.exportBtn.disabled = false;
+                } else {
+                    updateScheduleStatus('Ready to generate', '');
+                    dom.alternativeBtn.disabled = true;
+                    dom.exportBtn.disabled = true;
+                }
+            } else {
+                state.currentSchedule = null;
+                updateScheduleStatus('Ready to generate', '');
+                dom.alternativeBtn.disabled = true;
+                dom.exportBtn.disabled = true;
+            }
             
             // Update global business selector display
             if (dom.currentBusinessName) {
@@ -1710,6 +1806,9 @@ async function generateSchedule() {
                 buildLookups();
             }
             
+            // Save to localStorage
+            saveScheduleToStorage();
+            
             // Mark week as having a generated schedule (draft state)
             markWeekAsGenerated(state.weekOffset, 1);
             
@@ -1774,6 +1873,9 @@ async function findAlternative() {
         if (data.success) {
             state.currentSchedule = data.schedule;
             
+            // Save to localStorage
+            saveScheduleToStorage();
+            
             // Mark week as having a generated schedule (draft state)
             markWeekAsGenerated(state.weekOffset, 1);
             
@@ -1818,6 +1920,9 @@ async function resetSchedule() {
         state.currentSchedule = { slot_assignments: {} };
         dom.alternativeBtn.disabled = true;
         dom.exportBtn.disabled = true;
+        
+        // Clear from localStorage
+        clearScheduleFromStorage();
         
         // Reset the publish state for this week
         resetWeekPublishState(state.weekOffset);
@@ -2715,6 +2820,9 @@ function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toSt
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
     
+    // Save to localStorage
+    saveScheduleToStorage();
+    
     // Mark as having unpublished edits
     incrementWeekEditCount(state.weekOffset);
     
@@ -2801,6 +2909,9 @@ function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) 
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
     
+    // Save to localStorage
+    saveScheduleToStorage();
+    
     // Mark as having unpublished edits
     incrementWeekEditCount(state.weekOffset);
     
@@ -2841,6 +2952,9 @@ function deleteShiftFromTimeline(empId, dayIdx, startHour, endHour) {
     
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
+    
+    // Save to localStorage
+    saveScheduleToStorage();
     
     const emp = employeeMap[empId];
     showToast(`${emp?.name}'s shift deleted`, 'success');
@@ -4184,6 +4298,9 @@ function saveTimelineAddShift(e) {
     
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
+    
+    // Save to localStorage
+    saveScheduleToStorage();
     
     const emp = employeeMap[empId];
     const dayName = state.days[dayIdx];
