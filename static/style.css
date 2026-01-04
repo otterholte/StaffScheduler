@@ -1585,9 +1585,10 @@ body[data-theme="light"] .view-toggle-btn:hover:not(.active) {
     background: rgba(0, 0, 0, 0.05);
 }
 
-/* Color Mode Toggle (keep similar but separate) */
+/* Color Mode Toggle - Integrated Label Style */
 .color-mode-toggle {
     display: flex;
+    align-items: stretch;
     background: rgba(30, 30, 50, 0.5);
     border-radius: 10px;
     padding: 3px;
@@ -1595,11 +1596,22 @@ body[data-theme="light"] .view-toggle-btn:hover:not(.active) {
     border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.toggle-label-integrated {
+    display: flex;
+    align-items: center;
+    padding: 0 0.7rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    margin-right: 3px;
+}
+
 .color-mode-btn {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.45rem 0.6rem;
+    padding: 0.45rem 0.65rem;
     background: transparent;
     border: none;
     border-radius: 8px;
@@ -1631,10 +1643,51 @@ body[data-theme="light"] .view-toggle-btn:hover:not(.active) {
     opacity: 1;
 }
 
-.color-mode-toggle .toggle-label {
-    font-size: 0.7rem;
+/* Light theme for color mode toggle */
+body[data-theme="light"] .toggle-label-integrated {
     color: var(--text-muted);
-    padding: 0 0.4rem;
+    border-right-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Icon-only Button */
+.btn-icon-only {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(30, 30, 50, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-icon-only svg {
+    width: 18px;
+    height: 18px;
+}
+
+.btn-icon-only:hover:not(:disabled) {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.btn-icon-only:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+body[data-theme="light"] .btn-icon-only {
+    background: rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+body[data-theme="light"] .btn-icon-only:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.1);
 }
 
 /* Schedule Views */
