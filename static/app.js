@@ -480,6 +480,11 @@ function init() {
             checkLegendOverflow();
         }, 200);
     });
+    
+    // Global mouseup handler for availability drag selection
+    document.addEventListener('mouseup', () => {
+        availabilityDragState.isDragging = false;
+    });
 }
 
 function setupUrlRouting() {
@@ -3863,6 +3868,14 @@ function createAvailableEmployeeCard(empData, gap) {
 
 // ==================== TIMELINE ADD SHIFT ====================
 
+// State for availability drag selection
+const availabilityDragState = {
+    isDragging: false,
+    isSelecting: true, // true = selecting, false = deselecting
+    currentEmpId: null, // For the availability tab grid
+    startCell: null
+};
+
 // State for drag-to-create
 const timelineCreateState = {
     isDragging: false,
@@ -5083,13 +5096,22 @@ function openAvailabilityEditor(empId) {
                 td.classList.add('available');
             }
             
-            // Click handlers
-            td.addEventListener('click', (e) => toggleAvailability(e.target, 'click'));
-            td.addEventListener('dblclick', (e) => toggleAvailability(e.target, 'dblclick'));
-            td.addEventListener('contextmenu', (e) => {
+            // Drag selection handlers
+            td.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                toggleAvailability(e.target, 'rightclick');
+                availabilityDragState.isDragging = true;
+                availabilityDragState.isSelecting = !td.classList.contains('available');
+                availabilityDragState.startCell = td;
+                toggleAvailabilitySimple(td, availabilityDragState.isSelecting);
             });
+            
+            td.addEventListener('mouseenter', () => {
+                if (availabilityDragState.isDragging) {
+                    toggleAvailabilitySimple(td, availabilityDragState.isSelecting);
+                }
+            });
+            
+            td.addEventListener('contextmenu', (e) => e.preventDefault());
             
             tr.appendChild(td);
         }
@@ -5100,17 +5122,10 @@ function openAvailabilityEditor(empId) {
     openModal('availabilityModal');
 }
 
-function toggleAvailability(cell, action) {
+function toggleAvailabilitySimple(cell, select) {
     cell.classList.remove('available', 'preferred', 'time-off');
-    
-    if (action === 'click') {
-        if (!cell.classList.contains('available')) {
-            cell.classList.add('available');
-        }
-    } else if (action === 'dblclick') {
-        cell.classList.add('preferred');
-    } else if (action === 'rightclick') {
-        cell.classList.add('time-off');
+    if (select) {
+        cell.classList.add('available');
     }
 }
 
@@ -5119,7 +5134,7 @@ function fillAvailability(mode) {
     
     cells.forEach(cell => {
         const day = parseInt(cell.dataset.day);
-        cell.classList.remove('available', 'preferred', 'time-off');
+        cell.classList.remove('available');
         
         if (mode === 'clear') {
             // Leave empty
@@ -5136,19 +5151,12 @@ async function saveAvailability() {
     if (!empId) return;
     
     const availability = [];
-    const preferences = [];
-    const timeOff = [];
     
     document.querySelectorAll('#availabilityBody .avail-cell').forEach(cell => {
         const day = parseInt(cell.dataset.day);
         const hour = parseInt(cell.dataset.hour);
         
-        if (cell.classList.contains('time-off')) {
-            timeOff.push({ day, hour });
-        } else if (cell.classList.contains('preferred')) {
-            availability.push({ day, hour });
-            preferences.push({ day, hour });
-        } else if (cell.classList.contains('available')) {
+        if (cell.classList.contains('available')) {
             availability.push({ day, hour });
         }
     });
@@ -5157,7 +5165,7 @@ async function saveAvailability() {
         const response = await fetch(`/api/employees/${empId}/availability`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ availability, preferences, time_off: timeOff })
+            body: JSON.stringify({ availability, preferences: [], time_off: [] })
         });
         
         const data = await response.json();
@@ -5167,8 +5175,8 @@ async function saveAvailability() {
             const emp = employeeMap[empId];
             if (emp) {
                 emp.availability = availability;
-                emp.preferences = preferences;
-                emp.time_off = timeOff;
+                emp.preferences = [];
+                emp.time_off = [];
             }
             
             closeAllModals();
@@ -5421,13 +5429,23 @@ function renderAvailabilityGrid(emp) {
                 td.classList.add('available');
             }
             
-            // Click handlers
-            td.addEventListener('click', () => toggleAvailabilityCell(td, emp.id, 'click'));
-            td.addEventListener('dblclick', () => toggleAvailabilityCell(td, emp.id, 'dblclick'));
-            td.addEventListener('contextmenu', (e) => {
+            // Drag selection handlers
+            td.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                toggleAvailabilityCell(td, emp.id, 'rightclick');
+                availabilityDragState.isDragging = true;
+                availabilityDragState.isSelecting = !td.classList.contains('available');
+                availabilityDragState.currentEmpId = emp.id;
+                availabilityDragState.startCell = td;
+                toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
             });
+            
+            td.addEventListener('mouseenter', () => {
+                if (availabilityDragState.isDragging && availabilityDragState.currentEmpId === emp.id) {
+                    toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
+                }
+            });
+            
+            td.addEventListener('contextmenu', (e) => e.preventDefault());
             
             tr.appendChild(td);
         });
@@ -5436,38 +5454,19 @@ function renderAvailabilityGrid(emp) {
     }
 }
 
-async function toggleAvailabilityCell(cell, empId, action) {
+async function toggleAvailabilityCellSimple(cell, empId, select) {
     const day = parseInt(cell.dataset.day);
     const hour = parseInt(cell.dataset.hour);
     const emp = employeeMap[empId];
     if (!emp) return;
     
-    // Determine new state based on action
-    const isAvailable = cell.classList.contains('available');
-    const isPreferred = cell.classList.contains('preferred');
-    const isTimeOff = cell.classList.contains('time-off');
-    
     // Remove all classes first
     cell.classList.remove('available', 'preferred', 'time-off');
     
     let newState = 'none';
-    
-    if (action === 'click') {
-        // Click: none -> available -> none
-        if (!isAvailable && !isPreferred && !isTimeOff) {
-            cell.classList.add('available');
-            newState = 'available';
-        }
-    } else if (action === 'dblclick') {
-        // Double-click: set to preferred
-        cell.classList.add('preferred');
-        newState = 'preferred';
-    } else if (action === 'rightclick') {
-        // Right-click: set to time-off
-        if (!isTimeOff) {
-            cell.classList.add('time-off');
-            newState = 'time-off';
-        }
+    if (select) {
+        cell.classList.add('available');
+        newState = 'available';
     }
     
     // Save to server
@@ -5475,7 +5474,10 @@ async function toggleAvailabilityCell(cell, empId, action) {
     
     // Update hours display
     const availHours = calculateAvailableHoursFromGrid();
-    document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
+    const hoursEl = document.getElementById('availPanelHours');
+    if (hoursEl) {
+        hoursEl.textContent = `${availHours} hours/week available`;
+    }
     
     // Update sidebar
     updateSidebarHours(empId, availHours);
@@ -5485,7 +5487,7 @@ function calculateAvailableHoursFromGrid() {
     const cells = document.querySelectorAll('#availabilityTableBody .avail-cell');
     let count = 0;
     cells.forEach(cell => {
-        if (cell.classList.contains('available') || cell.classList.contains('preferred')) {
+        if (cell.classList.contains('available')) {
             count++;
         }
     });
@@ -5545,17 +5547,27 @@ function setupAvailabilityPresets(emp) {
 }
 
 async function applyAvailabilityPreset(empId, preset) {
+    // Confirm before clearing all
+    if (preset === 'clear') {
+        document.getElementById('confirmTitle').textContent = 'Clear Availability';
+        document.getElementById('confirmMessage').textContent = 'Are you sure you want to clear all availability for this employee?';
+        document.getElementById('confirmBtn').textContent = 'Clear All';
+        document.getElementById('confirmBtn').className = 'btn btn-danger';
+        document.getElementById('confirmBtn').dataset.action = 'clearAvailability';
+        document.getElementById('confirmBtn').dataset.id = empId;
+        openModal('confirmModal');
+        return;
+    }
+    
     const tbody = document.getElementById('availabilityTableBody');
     const cells = tbody.querySelectorAll('.avail-cell');
     
     // Clear all first
     cells.forEach(cell => {
-        cell.classList.remove('available', 'preferred', 'time-off');
+        cell.classList.remove('available');
     });
     
-    if (preset === 'clear') {
-        // Just clear - already done above
-    } else if (preset === 'all-9-5') {
+    if (preset === 'all-9-5') {
         // Mon-Sun 9-5
         cells.forEach(cell => {
             const hour = parseInt(cell.dataset.hour);
@@ -5594,24 +5606,40 @@ async function applyAvailabilityPreset(empId, preset) {
     showToast(`Applied ${preset.replace(/-/g, ' ')} preset`, 'success');
 }
 
+async function executeClearAvailability(empId) {
+    const tbody = document.getElementById('availabilityTableBody');
+    const cells = tbody.querySelectorAll('.avail-cell');
+    
+    // Clear all cells
+    cells.forEach(cell => {
+        cell.classList.remove('available');
+    });
+    
+    // Save all changes
+    await saveFullAvailability(empId);
+    
+    // Update hours display
+    const availHours = calculateAvailableHoursFromGrid();
+    const hoursEl = document.getElementById('availPanelHours');
+    if (hoursEl) {
+        hoursEl.textContent = `${availHours} hours/week available`;
+    }
+    updateSidebarHours(empId, availHours);
+    
+    showToast('Availability cleared', 'success');
+}
+
 async function saveFullAvailability(empId) {
     const tbody = document.getElementById('availabilityTableBody');
     const cells = tbody.querySelectorAll('.avail-cell');
     
     const availability = [];
-    const preferences = [];
-    const time_off = [];
     
     cells.forEach(cell => {
         const day = parseInt(cell.dataset.day);
         const hour = parseInt(cell.dataset.hour);
         
-        if (cell.classList.contains('time-off')) {
-            time_off.push({ day, hour });
-        } else if (cell.classList.contains('preferred')) {
-            availability.push({ day, hour });
-            preferences.push({ day, hour });
-        } else if (cell.classList.contains('available')) {
+        if (cell.classList.contains('available')) {
             availability.push({ day, hour });
         }
     });
@@ -5620,7 +5648,7 @@ async function saveFullAvailability(empId) {
         const response = await fetch(`/api/employees/${empId}/availability`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ availability, preferences, time_off })
+            body: JSON.stringify({ availability, preferences: [], time_off: [] })
         });
         
         if (response.ok) {
@@ -5628,8 +5656,8 @@ async function saveFullAvailability(empId) {
             const emp = employeeMap[empId];
             if (emp) {
                 emp.availability = availability;
-                emp.preferences = preferences;
-                emp.time_off = time_off;
+                emp.preferences = [];
+                emp.time_off = [];
             }
         }
     } catch (error) {
@@ -6291,6 +6319,8 @@ function handleConfirm() {
         deleteEmployee(id);
     } else if (action === 'deleteRole') {
         deleteRole(id);
+    } else if (action === 'clearAvailability') {
+        executeClearAvailability(id);
     } else if (action === 'deleteShift') {
         deleteShift(id);
     }

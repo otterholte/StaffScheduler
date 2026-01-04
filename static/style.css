@@ -4862,8 +4862,6 @@ kbd {
 
 .legend-box.unavailable { background: var(--bg-tertiary); }
 .legend-box.available { background: var(--success); border-color: var(--success); }
-.legend-box.preferred { background: #fbbf24; border-color: #fbbf24; }
-.legend-box.time-off { background: var(--danger); border-color: var(--danger); }
 
 .availability-instructions {
     font-size: 0.8rem;
@@ -4913,14 +4911,6 @@ kbd {
 
 .avail-cell.available {
     background: var(--success);
-}
-
-.avail-cell.preferred {
-    background: #fbbf24;
-}
-
-.avail-cell.time-off {
-    background: var(--danger);
 }
 
 .availability-actions {
@@ -7108,8 +7098,6 @@ body[data-theme="light"] .footer-bottom {
     display: grid;
     grid-template-columns: 380px 1fr; /* Slightly wider staff list sidebar */
     gap: 1.5rem;
-    height: calc(100vh - 180px);
-    min-height: 500px;
 }
 
 .availability-sidebar {
@@ -7117,7 +7105,9 @@ body[data-theme="light"] .footer-bottom {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 1rem;
-    overflow-y: auto;
+    position: sticky;
+    top: 1rem;
+    height: fit-content;
 }
 
 .sidebar-title {
@@ -7273,6 +7263,8 @@ body[data-theme="light"] .footer-bottom {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    max-height: 590px;
+    overflow-y: auto;
 }
 
 .avail-staff-item {
@@ -7340,7 +7332,7 @@ body[data-theme="light"] .footer-bottom {
     border: 1px solid var(--border-color);
     border-radius: var(--radius-lg);
     padding: 1.5rem;
-    overflow-y: auto;
+    height: fit-content;
 }
 
 .availability-panel-empty {
@@ -7490,14 +7482,6 @@ body[data-theme="light"] .footer-bottom {
     background: #2a9d8f;
 }
 
-.availability-table .avail-cell.preferred {
-    background: #06d6a0;
-}
-
-.availability-table .avail-cell.time-off {
-    background: #ef4444;
-}
-
 /* Legend bar */
 .availability-legend-bar {
     display: flex;
@@ -7537,13 +7521,6 @@ body[data-theme="light"] .footer-bottom {
     background: #2a9d8f;
 }
 
-.legend-dot.preferred {
-    background: #06d6a0;
-}
-
-.legend-dot.time-off {
-    background: #ef4444;
-}
 
 /* Responsive */
 @media (max-width: 900px) {

@@ -548,14 +548,6 @@
                                         <p id="availPanelHours">0 hours/week available</p>
                                     </div>
                                 </div>
-                                <button class="btn btn-secondary" id="importIcalBtn" disabled>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="17 8 12 3 7 8"></polyline>
-                                        <line x1="12" y1="3" x2="12" y2="15"></line>
-                                    </svg>
-                                    Import iCal
-                                </button>
                             </div>
                             <div class="availability-presets">
                                 <button class="preset-btn" data-preset="all-9-5">Mon-Sun 9-5</button>
@@ -583,11 +575,9 @@
                                 </table>
                             </div>
                             <div class="availability-legend-bar">
-                                <span class="legend-hint">Click to toggle availability. Double-click for preferred. Right-click for time-off.</span>
+                                <span class="legend-hint">Click and drag to select available times</span>
                                 <div class="legend-items">
                                     <span class="legend-item"><span class="legend-dot available"></span> Available</span>
-                                    <span class="legend-item"><span class="legend-dot preferred"></span> Preferred</span>
-                                    <span class="legend-item"><span class="legend-dot time-off"></span> Time Off</span>
                                 </div>
                             </div>
                         </div>
@@ -991,16 +981,8 @@
                         <span class="legend-box available"></span>
                         <span>Available</span>
                     </div>
-                    <div class="legend-item">
-                        <span class="legend-box preferred"></span>
-                        <span>Preferred</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-box time-off"></span>
-                        <span>Time Off</span>
-                    </div>
                 </div>
-                <p class="availability-instructions">Click to toggle availability. Double-click for preferred. Right-click for time-off.</p>
+                <p class="availability-instructions">Click and drag to select available times</p>
                 <div class="availability-grid-wrapper">
                     <table class="availability-grid" id="availabilityGrid">
                         <thead>
