@@ -3,6 +3,51 @@
  * Professional UI/UX with full CRUD operations
  */
 
+// ==================== URL ROUTING HELPERS ====================
+const PAGE_SLUGS = INITIAL_DATA.pageSlugs || {
+    'schedule': 'schedule',
+    'staff': 'employees', 
+    'availability': 'settings',
+    'requirements': 'help'
+};
+
+const TAB_TO_SLUG = INITIAL_DATA.tabToSlug || {
+    'schedule': 'schedule',
+    'employees': 'staff',
+    'settings': 'availability',
+    'help': 'requirements'
+};
+
+function slugify(text) {
+    return text.toLowerCase().trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_]+/g, '-')
+        .replace(/-+/g, '-');
+}
+
+function getLocationSlug() {
+    // Get from state or URL
+    const businessData = state.businesses.find(b => b.id === state.business.id);
+    return businessData?.slug || state.business.slug || slugify(state.business.name);
+}
+
+function getCurrentUrlPath() {
+    const locationSlug = getLocationSlug();
+    const pageSlug = TAB_TO_SLUG[state.currentTab] || 'schedule';
+    return `/${locationSlug}/${pageSlug}`;
+}
+
+function updateUrl(push = true) {
+    const newPath = getCurrentUrlPath();
+    if (window.location.pathname !== newPath) {
+        if (push) {
+            history.pushState({ tab: state.currentTab, businessId: state.business.id }, '', newPath);
+        } else {
+            history.replaceState({ tab: state.currentTab, businessId: state.business.id }, '', newPath);
+        }
+    }
+}
+
 // ==================== STATE ====================
 const state = {
     business: INITIAL_DATA.business,
@@ -15,7 +60,7 @@ const state = {
     startHour: INITIAL_DATA.startHour,
     endHour: INITIAL_DATA.endHour,
     currentSchedule: null,
-    currentTab: 'schedule',
+    currentTab: INITIAL_DATA.initialTab || 'schedule',
     editingEmployee: null,
     editingAvailability: null,
     theme: localStorage.getItem('theme') || 'dark', // Default to dark mode
@@ -388,6 +433,9 @@ function init() {
     // Apply saved theme
     applyTheme(state.theme);
     
+    // Setup URL routing (popstate handler for back/forward buttons)
+    setupUrlRouting();
+    
     // Setup event listeners
     setupGlobalBusinessSelector();
     setupNavigation();
@@ -406,6 +454,9 @@ function init() {
     renderRolesList();
     renderCoverageUI();
     
+    // Initialize to the correct tab from URL
+    initializeFromUrl();
+    
     // Re-render calendar on window resize to fix widths
     let resizeTimeout;
     window.addEventListener('resize', () => {
@@ -415,6 +466,80 @@ function init() {
             checkLegendOverflow();
         }, 200);
     });
+}
+
+function setupUrlRouting() {
+    // Handle browser back/forward navigation
+    window.addEventListener('popstate', (event) => {
+        if (event.state) {
+            // Restore state from history
+            const { tab, businessId } = event.state;
+            
+            if (businessId && businessId !== state.business.id) {
+                // Need to switch business (without updating history)
+                switchBusiness(businessId, false).then(() => {
+                    if (tab && tab !== state.currentTab) {
+                        switchTab(tab, false);
+                    }
+                });
+            } else if (tab && tab !== state.currentTab) {
+                switchTab(tab, false);
+            }
+        } else {
+            // No state - parse from URL
+            parseUrlAndNavigate(false);
+        }
+    });
+}
+
+function initializeFromUrl() {
+    // Set initial tab from INITIAL_DATA (which comes from Flask)
+    const initialTab = INITIAL_DATA.initialTab || 'schedule';
+    
+    // Activate the correct tab (without pushing history since we just loaded)
+    if (initialTab !== state.currentTab) {
+        switchTab(initialTab, false);
+    } else {
+        // Still need to update UI for the current tab
+        dom.navTabs.forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === initialTab);
+        });
+        dom.tabContents.forEach(content => {
+            content.classList.toggle('active', content.id === `tab-${initialTab}`);
+        });
+    }
+    
+    // Replace the current history entry with proper state
+    updateUrl(false);
+    
+    // Render tab-specific content
+    if (initialTab === 'help') {
+        requestAnimationFrame(() => renderShiftTemplates());
+    } else if (initialTab === 'settings') {
+        renderAvailabilityPage();
+    }
+}
+
+function parseUrlAndNavigate(updateHistory = true) {
+    const pathParts = window.location.pathname.split('/').filter(p => p);
+    
+    if (pathParts.length >= 2) {
+        const [locationSlug, pageSlug] = pathParts;
+        
+        // Find business by slug
+        const business = state.businesses.find(b => b.slug === locationSlug);
+        const tabId = PAGE_SLUGS[pageSlug];
+        
+        if (business && business.id !== state.business.id) {
+            switchBusiness(business.id, updateHistory).then(() => {
+                if (tabId && tabId !== state.currentTab) {
+                    switchTab(tabId, updateHistory);
+                }
+            });
+        } else if (tabId && tabId !== state.currentTab) {
+            switchTab(tabId, updateHistory);
+        }
+    }
 }
 
 // ==================== ADVANCED TAB (Three-State Toggles) ====================
@@ -479,7 +604,7 @@ function setupNavigation() {
     // Theme toggle is now on the Settings page (/settings)
 }
 
-function switchTab(tabId) {
+function switchTab(tabId, updateHistory = true) {
     // Update nav tabs
     dom.navTabs.forEach(tab => {
         tab.classList.toggle('active', tab.dataset.tab === tabId);
@@ -491,6 +616,11 @@ function switchTab(tabId) {
     });
     
     state.currentTab = tabId;
+    
+    // Update URL to reflect tab change
+    if (updateHistory) {
+        updateUrl(true);
+    }
     
     // Re-render calendar shifts when switching to requirements tab
     // (needed because calendar dimensions are 0 when tab is hidden)
@@ -1017,6 +1147,16 @@ async function saveBusiness() {
             showToast(idInput.value ? 'Location updated' : 'Location created', 'success');
             dom.businessModal.classList.remove('active');
             
+            // Update slug in state if this is the current business
+            if (result.slug && idInput.value === state.business.id) {
+                state.business.slug = result.slug;
+                // Update URL to reflect new slug
+                updateUrl(false);
+                // Navigate to new URL to keep it in sync
+                const newPath = getCurrentUrlPath();
+                history.replaceState({ tab: state.currentTab, businessId: state.business.id }, '', newPath);
+            }
+            
             // Refresh business list
             await refreshBusinessList();
             
@@ -1104,6 +1244,7 @@ function rebuildBusinessDropdown() {
         const option = document.createElement('button');
         option.className = `business-option ${b.id === state.business.id ? 'active' : ''}`;
         option.dataset.businessId = b.id;
+        option.dataset.businessSlug = b.slug || slugify(b.name);
         
         // Show first letter of business name if no emoji
         const iconContent = b.emoji || b.name.charAt(0).toUpperCase();
@@ -1270,7 +1411,7 @@ function setupCollapsibleCards() {
     });
 }
 
-async function switchBusiness(businessId) {
+async function switchBusiness(businessId, updateHistory = true) {
     showLoading('Loading business...');
     
     try {
@@ -1298,6 +1439,15 @@ async function switchBusiness(businessId) {
                 state.hours.push(h);
             }
             
+            // Update slug in businesses array if returned from API
+            if (data.slug) {
+                const businessIdx = state.businesses.findIndex(b => b.id === businessId);
+                if (businessIdx !== -1) {
+                    state.businesses[businessIdx].slug = data.slug;
+                }
+                state.business.slug = data.slug;
+            }
+            
             buildLookups();
             rebuildScheduleGrid();
             renderEmployeeHoursList();
@@ -1321,6 +1471,14 @@ async function switchBusiness(businessId) {
                 dom.businessSelect.value = businessId;
             }
             
+            // Update URL to reflect business change
+            if (updateHistory) {
+                updateUrl(true);
+            }
+            
+            // Update business dropdown checkmarks
+            updateBusinessDropdownState(businessId);
+            
             showToast(`Switched to ${data.business.name}`, 'success');
         } else {
             showToast(data.message || 'Failed to switch business', 'error');
@@ -1331,6 +1489,29 @@ async function switchBusiness(businessId) {
     } finally {
         hideLoading();
     }
+}
+
+function updateBusinessDropdownState(activeBusinessId) {
+    // Update checkmarks in dropdown
+    document.querySelectorAll('.business-option').forEach(option => {
+        const isActive = option.dataset.businessId === activeBusinessId;
+        option.classList.toggle('active', isActive);
+        
+        // Add/remove check icon
+        const existingCheck = option.querySelector('.check-icon');
+        if (isActive && !existingCheck) {
+            const checkSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            checkSvg.classList.add('check-icon');
+            checkSvg.setAttribute('viewBox', '0 0 24 24');
+            checkSvg.setAttribute('fill', 'none');
+            checkSvg.setAttribute('stroke', 'currentColor');
+            checkSvg.setAttribute('stroke-width', '2');
+            checkSvg.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+            option.appendChild(checkSvg);
+        } else if (!isActive && existingCheck) {
+            existingCheck.remove();
+        }
+    });
 }
 
 function rebuildScheduleGrid() {

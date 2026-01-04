@@ -8,10 +8,11 @@ A comprehensive staff scheduling solution with:
 - Soft and hard constraint optimization
 """
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, url_for
 import uuid
 import json
 import os
+import re
 from scheduler import (
     AdvancedScheduleSolver,
     get_all_businesses,
@@ -25,6 +26,65 @@ from scheduler.models import (
 )
 
 app = Flask(__name__)
+
+
+# ==================== URL SLUG HELPERS ====================
+
+# Valid page slugs and their internal tab IDs
+PAGE_SLUGS = {
+    'schedule': 'schedule',
+    'staff': 'employees',
+    'availability': 'settings',
+    'requirements': 'help'
+}
+
+# Reverse mapping: tab ID to page slug
+TAB_TO_SLUG = {v: k for k, v in PAGE_SLUGS.items()}
+
+
+def slugify(text):
+    """Convert text to URL-friendly slug."""
+    text = text.lower().strip()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[\s_]+', '-', text)
+    text = re.sub(r'-+', '-', text)
+    return text
+
+
+def get_business_slug(business_id):
+    """Get the slug for a business ID (checking custom names first)."""
+    if business_id in _custom_businesses:
+        custom_name = _custom_businesses[business_id].get('name')
+        if custom_name:
+            return slugify(custom_name)
+    
+    try:
+        business = get_business_by_id(business_id)
+        return slugify(business.name)
+    except ValueError:
+        return business_id
+
+
+def get_business_by_slug(slug):
+    """Find a business by its slug (checking custom names first)."""
+    slug = slug.lower()
+    
+    # Check custom business names first
+    for business_id, custom_data in _custom_businesses.items():
+        custom_name = custom_data.get('name')
+        if custom_name and slugify(custom_name) == slug:
+            return get_business_by_id(business_id)
+    
+    # Check all businesses by their default names
+    for business in get_all_businesses():
+        if slugify(business.name) == slug:
+            return business
+    
+    # Finally, try matching directly by ID
+    try:
+        return get_business_by_id(slug)
+    except ValueError:
+        return None
 
 # Global state
 _current_business = None
@@ -117,8 +177,35 @@ def get_solver(policies=None):
 
 @app.route('/')
 def index():
-    """Render the main schedule page."""
+    """Redirect to the current business schedule page."""
     business = get_current_business()
+    location_slug = get_business_slug(business.id)
+    return redirect(f'/{location_slug}/schedule')
+
+
+@app.route('/<location_slug>/<page_slug>')
+def app_page(location_slug, page_slug):
+    """Render the main app with specified location and page."""
+    global _current_business, _solver
+    
+    # Validate page slug
+    if page_slug not in PAGE_SLUGS:
+        # Try to redirect to schedule for this location
+        return redirect(f'/{location_slug}/schedule')
+    
+    # Find business by slug
+    business = get_business_by_slug(location_slug)
+    if not business:
+        # Business not found, redirect to default
+        default_business = get_current_business()
+        location_slug = get_business_slug(default_business.id)
+        return redirect(f'/{location_slug}/{page_slug}')
+    
+    # Set this as the current business
+    if _current_business is None or _current_business.id != business.id:
+        _current_business = business
+        _solver = None  # Reset solver when business changes
+    
     businesses = get_all_businesses()
     
     # Default emoji/color mapping for built-in businesses
@@ -147,12 +234,16 @@ def index():
         businesses_data.append({
             "id": b.id,
             "name": name,
+            "slug": get_business_slug(b.id),
             "description": b.description,
             "total_employees": len(b.employees),
             "total_roles": len(b.roles),
             "emoji": meta['emoji'],
             "color": meta['color']
         })
+    
+    # Get the internal tab ID for the page
+    initial_tab = PAGE_SLUGS.get(page_slug, 'schedule')
     
     return render_template(
         'index.html',
@@ -164,8 +255,19 @@ def index():
         days_open=business.days_open,
         hours=list(business.get_operating_hours()),
         start_hour=business.start_hour,
-        end_hour=business.end_hour
+        end_hour=business.end_hour,
+        initial_tab=initial_tab,
+        initial_page_slug=page_slug,
+        location_slug=location_slug,
+        page_slugs=PAGE_SLUGS,
+        tab_to_slug=TAB_TO_SLUG
     )
+
+
+@app.route('/<location_slug>')
+def app_page_default(location_slug):
+    """Redirect to schedule page for a location."""
+    return redirect(f'/{location_slug}/schedule')
 
 
 @app.route('/settings')
@@ -233,6 +335,7 @@ def list_businesses():
         result.append({
             "id": b.id,
             "name": name,
+            "slug": get_business_slug(b.id),
             "description": b.description,
             "total_employees": len(b.employees),
             "total_roles": len(b.roles),
@@ -254,6 +357,9 @@ def switch_business(business_id):
         _current_business = get_business_by_id(business_id)
         _solver = None  # Reset solver
         
+        # Get slug for URL navigation
+        business_slug = get_business_slug(business_id)
+        
         # Apply custom name if it exists
         if business_id in _custom_businesses:
             custom_name = _custom_businesses[business_id].get('name')
@@ -261,15 +367,20 @@ def switch_business(business_id):
                 # Update the business name temporarily
                 business_dict = _current_business.to_dict()
                 business_dict['name'] = custom_name
+                business_dict['slug'] = business_slug
                 return jsonify({
                     'success': True,
                     'business': business_dict,
+                    'slug': business_slug,
                     'message': f'Switched to {custom_name}'
                 })
         
+        business_dict = _current_business.to_dict()
+        business_dict['slug'] = business_slug
         return jsonify({
             'success': True,
-            'business': _current_business.to_dict(),
+            'business': business_dict,
+            'slug': business_slug,
             'message': f'Switched to {_current_business.name}'
         })
     except ValueError as e:
@@ -306,9 +417,13 @@ def save_business():
             }
             save_custom_businesses()
             
+            # Return new slug based on updated name
+            new_slug = get_business_slug(business_id)
+            
             return jsonify({
                 'success': True,
                 'business_id': business_id,
+                'slug': new_slug,
                 'message': 'Business updated'
             })
         except ValueError:

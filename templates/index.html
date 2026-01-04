@@ -41,7 +41,7 @@
                     <div class="business-dropdown" id="businessDropdown">
                         <div class="dropdown-header">Switch Location</div>
                         {% for b in businesses %}
-                        <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}">
+                        <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}" data-business-slug="{{ b.slug }}">
                             <div class="option-icon {% if not b.emoji %}text-icon{% endif %}" style="background: {{ b.color }}">
                                 {% if b.emoji %}{{ b.emoji }}{% else %}{{ b.name[0]|upper }}{% endif %}
                             </div>
@@ -1623,7 +1623,12 @@
             daysOpen: {{ days_open | tojson }},
             hours: {{ hours | tojson }},
             startHour: {{ start_hour }},
-            endHour: {{ end_hour }}
+            endHour: {{ end_hour }},
+            initialTab: {{ initial_tab | tojson | default('"schedule"') }},
+            initialPageSlug: {{ initial_page_slug | tojson | default('"schedule"') }},
+            locationSlug: {{ location_slug | tojson | default('""') }},
+            pageSlugs: {{ page_slugs | tojson | default('{}') }},
+            tabToSlug: {{ tab_to_slug | tojson | default('{}') }}
         };
     </script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
