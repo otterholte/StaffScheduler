@@ -3174,11 +3174,11 @@ select.full-width {
 }
 
 .time-picker-row .time-select-hour {
-    width: 80px;
+    min-width: 90px;
 }
 
 .time-picker-row .time-select-min {
-    width: 65px;
+    min-width: 78px;
 }
 
 .time-separator {
@@ -3238,6 +3238,16 @@ select.full-width {
     position: absolute;
     inset: 0;
     z-index: 0;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(255, 255, 255, 0.04),
+        rgba(255, 255, 255, 0.04) 12px,
+        rgba(255, 255, 255, 0.02) 12px,
+        rgba(255, 255, 255, 0.02) 24px
+    );
+    pointer-events: none;
 }
 
 .timeline-shift-block,

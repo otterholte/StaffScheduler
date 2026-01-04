@@ -1303,11 +1303,13 @@ async function resetSchedule() {
         
         clearScheduleGrid();
         clearMetrics();
-        state.currentSchedule = null;
+        state.currentSchedule = { slot_assignments: {} };
         dom.alternativeBtn.disabled = true;
         dom.exportBtn.disabled = true;
         
         updateScheduleStatus('Ready to generate', '');
+        // Clear timeline/grid views
+        renderTimelineView(state.currentSchedule);
         showToast('Schedule reset', 'info');
     } catch (error) {
         showToast('Error resetting schedule', 'error');
@@ -3189,11 +3191,14 @@ function createAvailableEmployeeCard(empData, gap) {
 const timelineCreateState = {
     isDragging: false,
     startX: null,
-    startHour: null,
+    startHour: null, // Fixed anchor from mousedown
+    currentStart: null, // Left edge of drag
+    currentEnd: null,   // Right edge of drag
     dayIdx: null,
     previewElement: null,
     tooltipElement: null,
-    slotsContainer: null
+    slotsContainer: null,
+    suppressClick: false // Prevent click-after-drag from reopening modal
 };
 
 // Open the add shift modal
@@ -3244,15 +3249,46 @@ function openTimelineAddShiftModal(dayIdx, startHour = null, endHour = null) {
     }
     
     // Set default or provided times
-    const defaultStart = startHour !== null ? Math.floor(startHour) : state.startHour;
-    const defaultEnd = endHour !== null ? Math.ceil(endHour) : Math.min(defaultStart + 8, state.endHour);
-    const startMin = startHour !== null ? Math.round((startHour % 1) * 60) : 0;
-    const endMin = endHour !== null ? Math.round((endHour % 1) * 60) : 0;
+    let startHourVal, startMinVal, endHourVal, endMinVal;
     
-    startHourSelect.value = defaultStart;
-    endHourSelect.value = Math.floor(endHour) || defaultEnd;
-    document.getElementById('timelineAddShiftStartMin').value = startMin;
-    document.getElementById('timelineAddShiftEndMin').value = endMin;
+    // Helper to extract hour and minute from fractional hour
+    const parseFractional = (val) => {
+        const h = Math.floor(val + 0.001); // Handle precision
+        const m = Math.round((val - h) * 60);
+        return [h, Math.round(m / 15) * 15]; // Round to nearest 15
+    };
+
+    if (startHour !== null) {
+        const [h, m] = parseFractional(startHour);
+        startHourVal = h;
+        startMinVal = m;
+        if (startMinVal === 60) {
+            startMinVal = 0;
+            startHourVal++;
+        }
+    } else {
+        startHourVal = state.startHour;
+        startMinVal = 0;
+    }
+    
+    if (endHour !== null) {
+        const [h, m] = parseFractional(endHour);
+        endHourVal = h;
+        endMinVal = m;
+        if (endMinVal === 60) {
+            endMinVal = 0;
+            endHourVal++;
+        }
+    } else {
+        endHourVal = Math.min(startHourVal + 8, state.endHour);
+        endMinVal = 0;
+    }
+    
+    // Important: Convert to strings to ensure matching dropdown values
+    startHourSelect.value = String(startHourVal);
+    endHourSelect.value = String(endHourVal);
+    document.getElementById('timelineAddShiftStartMin').value = String(startMinVal);
+    document.getElementById('timelineAddShiftEndMin').value = String(endMinVal);
     
     // Update duration display
     updateTimelineAddShiftDuration();
@@ -3448,6 +3484,11 @@ function initTimelineAddShiftModal() {
 
 // Handle click on timeline row to add shift
 function handleTimelineRowClick(e, dayIdx, slotsContainer) {
+    // Ignore synthetic click immediately after drag-create
+    if (timelineCreateState.suppressClick) {
+        timelineCreateState.suppressClick = false;
+        return;
+    }
     // Don't trigger if clicking on a shift block
     if (e.target.closest('.timeline-shift-block') || e.target.closest('.timeline-gap-block')) {
         return;
@@ -3528,6 +3569,10 @@ function handleTimelineCreateMouseMove(e) {
     const clampedStart = Math.max(state.startHour, startHour);
     const clampedEnd = Math.min(state.endHour, endHour);
     
+    // Save current range to state to ensure mouseup matches exactly
+    timelineCreateState.currentStart = clampedStart;
+    timelineCreateState.currentEnd = clampedEnd;
+    
     // Create or update preview element (the bar)
     if (!timelineCreateState.previewElement) {
         const preview = document.createElement('div');
@@ -3587,24 +3632,15 @@ function handleTimelineCreateMouseUp(e) {
     }
     
     // If we were dragging, open modal with the range
-    if (timelineCreateState.isDragging) {
-        const rect = timelineCreateState.rect;
-        const totalHours = timelineCreateState.totalHours;
+    if (timelineCreateState.isDragging && timelineCreateState.currentStart !== null) {
+        const start = timelineCreateState.currentStart;
+        const end = timelineCreateState.currentEnd;
         
-        const relativeX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
-        const hourFloat = (relativeX / rect.width) * totalHours;
-        const snappedHour = Math.round(hourFloat * 4) / 4;
-        const currentHour = state.startHour + snappedHour;
-        
-        const startHour = Math.min(timelineCreateState.startHour, currentHour);
-        const endHour = Math.max(timelineCreateState.startHour, currentHour);
-        
-        const clampedStart = Math.max(state.startHour, startHour);
-        const clampedEnd = Math.min(state.endHour, endHour);
-        
-        // Only open if there's a meaningful range
-        if (clampedEnd - clampedStart >= 0.25) {
-            openTimelineAddShiftModal(timelineCreateState.dayIdx, clampedStart, clampedEnd);
+        // Only open if there's a meaningful range (at least 15 mins)
+        if (end - start >= 0.2) {
+            openTimelineAddShiftModal(timelineCreateState.dayIdx, start, end);
+            // Prevent the subsequent click event from reopening the modal
+            timelineCreateState.suppressClick = true;
         }
     }
     
@@ -3612,6 +3648,8 @@ function handleTimelineCreateMouseUp(e) {
     timelineCreateState.isDragging = false;
     timelineCreateState.startX = null;
     timelineCreateState.startHour = null;
+    timelineCreateState.currentStart = null;
+    timelineCreateState.currentEnd = null;
     timelineCreateState.dayIdx = null;
     timelineCreateState.slotsContainer = null;
 }
