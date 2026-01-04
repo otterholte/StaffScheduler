@@ -3162,6 +3162,215 @@ select.full-width {
     gap: 0.75rem;
 }
 
+/* Timeline Add Shift Modal Time Picker */
+.time-picker-grid {
+    grid-template-columns: 1fr 1fr;
+}
+
+.time-picker-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.time-picker-row .time-select-hour {
+    width: 80px;
+}
+
+.time-picker-row .time-select-min {
+    width: 65px;
+}
+
+.time-separator {
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.shift-duration-preview {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.employee-preview-section {
+    background: var(--bg-tertiary);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+}
+
+.employee-preview-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.employee-preview-info .preview-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+.employee-preview-info .preview-label {
+    color: var(--text-secondary);
+}
+
+.employee-preview-info .preview-value {
+    font-weight: 500;
+}
+
+.employee-preview-info .preview-warning {
+    color: var(--color-warning);
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+/* Timeline clickable area for adding shifts */
+.timeline-slots-row {
+    position: relative;
+    cursor: pointer;
+}
+
+.timeline-slots-row::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+.timeline-shift-block,
+.timeline-gap-block {
+    z-index: 1;
+}
+
+/* Drag to create preview - the colored bar */
+.timeline-create-preview {
+    position: absolute;
+    top: 2px;
+    height: calc(100% - 4px);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: 3px solid #34d399;
+    border-radius: var(--radius-sm);
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 
+        0 0 0 2px rgba(16, 185, 129, 0.3),
+        0 4px 12px rgba(16, 185, 129, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation: createPulse 1s ease-in-out infinite;
+}
+
+@keyframes createPulse {
+    0%, 100% {
+        box-shadow: 
+            0 0 0 2px rgba(16, 185, 129, 0.3),
+            0 4px 12px rgba(16, 185, 129, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    50% {
+        box-shadow: 
+            0 0 0 4px rgba(16, 185, 129, 0.2),
+            0 4px 20px rgba(16, 185, 129, 0.6),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+}
+
+/* Edge indicators for create preview */
+.timeline-create-preview::before,
+.timeline-create-preview::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #34d399;
+    border-radius: 2px;
+}
+
+.timeline-create-preview::before {
+    left: -2px;
+    box-shadow: -2px 0 8px rgba(52, 211, 153, 0.6);
+}
+
+.timeline-create-preview::after {
+    right: -2px;
+    box-shadow: 2px 0 8px rgba(52, 211, 153, 0.6);
+}
+
+/* Floating tooltip for create preview */
+.timeline-create-tooltip {
+    position: fixed;
+    z-index: 10001;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    font-size: 0.85rem;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.3),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+    transform: translateX(-50%);
+}
+
+.timeline-create-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #059669;
+}
+
+.timeline-create-tooltip .tooltip-label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+    margin-bottom: 2px;
+}
+
+.timeline-create-tooltip .tooltip-time {
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.timeline-create-tooltip .tooltip-duration {
+    font-size: 0.75rem;
+    opacity: 0.9;
+    margin-top: 2px;
+}
+
+/* Empty row - clickable hint */
+.timeline-empty-row {
+    background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 10px,
+        rgba(99, 102, 241, 0.03) 10px,
+        rgba(99, 102, 241, 0.03) 20px
+    );
+    border: 1px dashed rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-sm);
+    transition: all 0.2s ease;
+}
+
+.timeline-empty-row:hover {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: var(--accent-color);
+}
+
+/* Make timeline rows show hint on hover for blank areas */
+.timeline-slots-row:not(.timeline-gap-row):not(.timeline-drop-zone):hover {
+    cursor: crosshair;
+}
+
 .time-separator {
     color: var(--text-muted);
 }

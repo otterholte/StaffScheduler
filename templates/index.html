@@ -1214,6 +1214,87 @@
         </div>
     </div>
 
+    <!-- Timeline Add Shift Modal -->
+    <div id="timelineAddShiftModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-md">
+            <div class="modal-header">
+                <h2 id="timelineAddShiftTitle">Add Shift</h2>
+                <button class="modal-close" data-close>&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="timelineAddShiftForm">
+                    <input type="hidden" id="timelineAddShiftDay">
+                    
+                    <div class="form-section">
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="timelineAddShiftEmployee">Employee *</label>
+                                <select id="timelineAddShiftEmployee" class="form-select" required>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="timelineAddShiftRole">Role *</label>
+                                <select id="timelineAddShiftRole" class="form-select" required>
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
+                        <h4>Shift Time</h4>
+                        <div class="form-grid time-picker-grid">
+                            <div class="form-group">
+                                <label for="timelineAddShiftStartHour">Start Time</label>
+                                <div class="time-picker-row">
+                                    <select id="timelineAddShiftStartHour" class="form-select time-select-hour">
+                                        <!-- Hours populated dynamically -->
+                                    </select>
+                                    <span class="time-separator">:</span>
+                                    <select id="timelineAddShiftStartMin" class="form-select time-select-min">
+                                        <option value="0">00</option>
+                                        <option value="15">15</option>
+                                        <option value="30">30</option>
+                                        <option value="45">45</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="timelineAddShiftEndHour">End Time</label>
+                                <div class="time-picker-row">
+                                    <select id="timelineAddShiftEndHour" class="form-select time-select-hour">
+                                        <!-- Hours populated dynamically -->
+                                    </select>
+                                    <span class="time-separator">:</span>
+                                    <select id="timelineAddShiftEndMin" class="form-select time-select-min">
+                                        <option value="0">00</option>
+                                        <option value="15">15</option>
+                                        <option value="30">30</option>
+                                        <option value="45">45</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="shift-duration-preview" id="timelineAddShiftDuration">Duration: 0 hours</div>
+                    </div>
+
+                    <div class="form-section employee-preview-section" id="timelineAddShiftPreview" style="display: none;">
+                        <h4>Employee Info</h4>
+                        <div class="employee-preview-info" id="timelineAddShiftEmpInfo">
+                            <!-- Populated when employee selected -->
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                <button type="submit" form="timelineAddShiftForm" class="btn btn-primary" id="timelineAddShiftSaveBtn">Add Shift</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Business Edit Modal -->
     <div id="businessModal" class="modal">
         <div class="modal-backdrop"></div>

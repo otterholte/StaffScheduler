@@ -118,6 +118,7 @@ const dom = {
     confirmModal: document.getElementById('confirmModal'),
     shiftModal: document.getElementById('shiftModal'),
     shiftEditModal: document.getElementById('shiftEditModal'),
+    timelineAddShiftModal: document.getElementById('timelineAddShiftModal'),
     businessModal: document.getElementById('businessModal'),
     
     // Loading
@@ -145,6 +146,7 @@ function init() {
     setupModals();
     setupKeyboardShortcuts();
     setupAdvancedTab();
+    initTimelineAddShiftModal();
     
     // Initial render
     renderEmployeesGrid();
@@ -2719,6 +2721,11 @@ function renderTimelineView(schedule) {
         for (let rowIdx = 0; rowIdx < numShiftRows; rowIdx++) {
             const rowContainer = document.createElement('div');
             rowContainer.className = 'timeline-slots-row';
+            rowContainer.dataset.dayIdx = dayIdx;
+            
+            // Add click handler to create shift in blank space
+            rowContainer.addEventListener('click', (e) => handleTimelineRowClick(e, dayIdx, slotsDiv));
+            rowContainer.addEventListener('mousedown', (e) => handleTimelineRowMouseDown(e, dayIdx, slotsDiv));
             
             // Add shifts for this row
             const rowShifts = shiftRows[rowIdx] || [];
@@ -2845,7 +2852,15 @@ function renderTimelineView(schedule) {
         // If no shifts and no gaps, add an empty row
         if (numShiftRows === 0 && gapShifts.length === 0) {
             const emptyRow = document.createElement('div');
-            emptyRow.className = 'timeline-slots-row';
+            emptyRow.className = 'timeline-slots-row timeline-empty-row';
+            emptyRow.dataset.dayIdx = dayIdx;
+            emptyRow.style.minHeight = '40px';
+            emptyRow.title = 'Click or drag to add a shift';
+            
+            // Add click handler to create shift
+            emptyRow.addEventListener('click', (e) => handleTimelineRowClick(e, dayIdx, slotsDiv));
+            emptyRow.addEventListener('mousedown', (e) => handleTimelineRowMouseDown(e, dayIdx, slotsDiv));
+            
             slotsDiv.appendChild(emptyRow);
         }
         
@@ -3166,6 +3181,439 @@ function createAvailableEmployeeCard(empData, gap) {
     card.title = `Click to view ${emp.name}'s details`;
     
     return card;
+}
+
+// ==================== TIMELINE ADD SHIFT ====================
+
+// State for drag-to-create
+const timelineCreateState = {
+    isDragging: false,
+    startX: null,
+    startHour: null,
+    dayIdx: null,
+    previewElement: null,
+    tooltipElement: null,
+    slotsContainer: null
+};
+
+// Open the add shift modal
+function openTimelineAddShiftModal(dayIdx, startHour = null, endHour = null) {
+    const modal = document.getElementById('timelineAddShiftModal');
+    if (!modal) return;
+    
+    const dayName = state.days[dayIdx];
+    document.getElementById('timelineAddShiftTitle').textContent = `Add Shift - ${dayName}`;
+    document.getElementById('timelineAddShiftDay').value = dayIdx;
+    
+    // Populate employee dropdown
+    const empSelect = document.getElementById('timelineAddShiftEmployee');
+    empSelect.innerHTML = '<option value="">Select Employee...</option>';
+    state.employees.forEach(emp => {
+        const option = document.createElement('option');
+        option.value = emp.id;
+        option.textContent = emp.name;
+        empSelect.appendChild(option);
+    });
+    
+    // Populate role dropdown
+    const roleSelect = document.getElementById('timelineAddShiftRole');
+    roleSelect.innerHTML = '<option value="">Select Role...</option>';
+    state.roles.forEach(role => {
+        const option = document.createElement('option');
+        option.value = role.id;
+        option.textContent = role.name;
+        roleSelect.appendChild(option);
+    });
+    
+    // Populate hour dropdowns
+    const startHourSelect = document.getElementById('timelineAddShiftStartHour');
+    const endHourSelect = document.getElementById('timelineAddShiftEndHour');
+    startHourSelect.innerHTML = '';
+    endHourSelect.innerHTML = '';
+    
+    for (let h = state.startHour; h <= state.endHour; h++) {
+        const opt1 = document.createElement('option');
+        opt1.value = h;
+        opt1.textContent = formatHour(h);
+        startHourSelect.appendChild(opt1);
+        
+        const opt2 = document.createElement('option');
+        opt2.value = h;
+        opt2.textContent = formatHour(h);
+        endHourSelect.appendChild(opt2);
+    }
+    
+    // Set default or provided times
+    const defaultStart = startHour !== null ? Math.floor(startHour) : state.startHour;
+    const defaultEnd = endHour !== null ? Math.ceil(endHour) : Math.min(defaultStart + 8, state.endHour);
+    const startMin = startHour !== null ? Math.round((startHour % 1) * 60) : 0;
+    const endMin = endHour !== null ? Math.round((endHour % 1) * 60) : 0;
+    
+    startHourSelect.value = defaultStart;
+    endHourSelect.value = Math.floor(endHour) || defaultEnd;
+    document.getElementById('timelineAddShiftStartMin').value = startMin;
+    document.getElementById('timelineAddShiftEndMin').value = endMin;
+    
+    // Update duration display
+    updateTimelineAddShiftDuration();
+    
+    // Hide employee preview initially
+    document.getElementById('timelineAddShiftPreview').style.display = 'none';
+    
+    // Show modal
+    modal.classList.add('active');
+}
+
+// Update duration display in the modal
+function updateTimelineAddShiftDuration() {
+    const startHour = parseInt(document.getElementById('timelineAddShiftStartHour').value) || 0;
+    const startMin = parseInt(document.getElementById('timelineAddShiftStartMin').value) || 0;
+    const endHour = parseInt(document.getElementById('timelineAddShiftEndHour').value) || 0;
+    const endMin = parseInt(document.getElementById('timelineAddShiftEndMin').value) || 0;
+    
+    const startTime = startHour + startMin / 60;
+    const endTime = endHour + endMin / 60;
+    const duration = endTime - startTime;
+    
+    const durationEl = document.getElementById('timelineAddShiftDuration');
+    if (duration > 0) {
+        const hours = Math.floor(duration);
+        const mins = Math.round((duration % 1) * 60);
+        const timeStr = mins > 0 ? `${hours}h ${mins}m` : `${hours} hours`;
+        durationEl.textContent = `Duration: ${timeStr}`;
+        durationEl.style.color = '';
+    } else {
+        durationEl.textContent = 'End time must be after start time';
+        durationEl.style.color = 'var(--color-danger)';
+    }
+}
+
+// Update employee preview when selection changes
+function updateTimelineAddShiftEmpPreview() {
+    const empId = document.getElementById('timelineAddShiftEmployee').value;
+    const previewSection = document.getElementById('timelineAddShiftPreview');
+    const previewInfo = document.getElementById('timelineAddShiftEmpInfo');
+    
+    if (!empId) {
+        previewSection.style.display = 'none';
+        return;
+    }
+    
+    const emp = employeeMap[empId];
+    if (!emp) {
+        previewSection.style.display = 'none';
+        return;
+    }
+    
+    // Calculate current hours for this employee
+    const slotAssignments = state.currentSchedule?.slot_assignments || {};
+    let currentHours = 0;
+    let daysWorked = new Set();
+    
+    for (let day = 0; day < 7; day++) {
+        state.hours.forEach(hour => {
+            const key = `${day},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            if (assignments.some(a => a.employee_id === empId)) {
+                currentHours++;
+                daysWorked.add(day);
+            }
+        });
+    }
+    
+    const empType = emp.classification === 'full_time' ? 'Full-Time' : 'Part-Time';
+    const minHours = emp.min_hours || 0;
+    const maxHours = emp.max_hours || 40;
+    
+    // Check if adding this shift would exceed max
+    const startHour = parseInt(document.getElementById('timelineAddShiftStartHour').value) || 0;
+    const endHour = parseInt(document.getElementById('timelineAddShiftEndHour').value) || 0;
+    const shiftDuration = endHour - startHour;
+    const newTotal = currentHours + shiftDuration;
+    
+    let warningHtml = '';
+    if (newTotal > maxHours) {
+        warningHtml = `<div class="preview-warning">⚠️ This would exceed max hours (${newTotal}h > ${maxHours}h)</div>`;
+    }
+    
+    previewInfo.innerHTML = `
+        <div class="preview-row">
+            <span class="preview-label">Type:</span>
+            <span class="preview-value">${empType}</span>
+        </div>
+        <div class="preview-row">
+            <span class="preview-label">Current Hours:</span>
+            <span class="preview-value">${currentHours}h / ${minHours}-${maxHours}h</span>
+        </div>
+        <div class="preview-row">
+            <span class="preview-label">Days Working:</span>
+            <span class="preview-value">${daysWorked.size} days</span>
+        </div>
+        <div class="preview-row">
+            <span class="preview-label">After This Shift:</span>
+            <span class="preview-value">${newTotal}h</span>
+        </div>
+        ${warningHtml}
+    `;
+    
+    previewSection.style.display = 'block';
+}
+
+// Save the new shift
+function saveTimelineAddShift(e) {
+    e.preventDefault();
+    
+    const dayIdx = parseInt(document.getElementById('timelineAddShiftDay').value);
+    const empId = document.getElementById('timelineAddShiftEmployee').value;
+    const roleId = document.getElementById('timelineAddShiftRole').value;
+    const startHour = parseInt(document.getElementById('timelineAddShiftStartHour').value);
+    const startMin = parseInt(document.getElementById('timelineAddShiftStartMin').value);
+    const endHour = parseInt(document.getElementById('timelineAddShiftEndHour').value);
+    const endMin = parseInt(document.getElementById('timelineAddShiftEndMin').value);
+    
+    if (!empId || !roleId) {
+        showToast('Please select an employee and role', 'error');
+        return;
+    }
+    
+    const startTime = startHour + startMin / 60;
+    const endTime = endHour + endMin / 60;
+    
+    if (endTime <= startTime) {
+        showToast('End time must be after start time', 'error');
+        return;
+    }
+    
+    // Add the shift to slot assignments
+    const slotAssignments = state.currentSchedule?.slot_assignments;
+    if (!slotAssignments) {
+        showToast('No schedule to add shift to', 'error');
+        return;
+    }
+    
+    // Add hourly assignments (round to hours for storage)
+    const actualStart = Math.floor(startTime);
+    const actualEnd = Math.ceil(endTime);
+    
+    for (let hour = actualStart; hour < actualEnd; hour++) {
+        const key = `${dayIdx},${hour}`;
+        if (!slotAssignments[key]) {
+            slotAssignments[key] = [];
+        }
+        // Check if already assigned
+        if (!slotAssignments[key].some(a => a.employee_id === empId)) {
+            slotAssignments[key].push({
+                employee_id: empId,
+                role_id: roleId
+            });
+        }
+    }
+    
+    // Close modal and refresh
+    const modal = document.getElementById('timelineAddShiftModal');
+    modal.classList.remove('active');
+    
+    // Re-render timeline
+    renderTimelineView(state.currentSchedule);
+    
+    const emp = employeeMap[empId];
+    const dayName = state.days[dayIdx];
+    showToast(`Added ${emp?.name}'s shift on ${dayName}`, 'success');
+}
+
+// Initialize timeline add shift modal events
+function initTimelineAddShiftModal() {
+    const form = document.getElementById('timelineAddShiftForm');
+    if (form) {
+        form.addEventListener('submit', saveTimelineAddShift);
+    }
+    
+    // Time change listeners
+    ['timelineAddShiftStartHour', 'timelineAddShiftStartMin', 'timelineAddShiftEndHour', 'timelineAddShiftEndMin'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', () => {
+                updateTimelineAddShiftDuration();
+                updateTimelineAddShiftEmpPreview();
+            });
+        }
+    });
+    
+    // Employee change listener
+    const empSelect = document.getElementById('timelineAddShiftEmployee');
+    if (empSelect) {
+        empSelect.addEventListener('change', updateTimelineAddShiftEmpPreview);
+    }
+}
+
+// Handle click on timeline row to add shift
+function handleTimelineRowClick(e, dayIdx, slotsContainer) {
+    // Don't trigger if clicking on a shift block
+    if (e.target.closest('.timeline-shift-block') || e.target.closest('.timeline-gap-block')) {
+        return;
+    }
+    
+    // Don't trigger if we were dragging to create
+    if (timelineCreateState.isDragging) {
+        return;
+    }
+    
+    // Calculate hour from click position
+    const rect = slotsContainer.getBoundingClientRect();
+    const relativeX = e.clientX - rect.left;
+    const totalHours = state.endHour - state.startHour;
+    const hourFloat = (relativeX / rect.width) * totalHours + state.startHour;
+    
+    // Snap to nearest hour
+    const clickedHour = Math.floor(hourFloat);
+    
+    // Open modal with clicked hour as start
+    openTimelineAddShiftModal(dayIdx, clickedHour, clickedHour + 1);
+}
+
+// Handle drag to create shift
+function handleTimelineRowMouseDown(e, dayIdx, slotsContainer) {
+    // Don't trigger if clicking on a shift block
+    if (e.target.closest('.timeline-shift-block') || e.target.closest('.timeline-gap-block')) {
+        return;
+    }
+    
+    // Calculate starting hour
+    const rect = slotsContainer.getBoundingClientRect();
+    const relativeX = e.clientX - rect.left;
+    const totalHours = state.endHour - state.startHour;
+    const hourFloat = (relativeX / rect.width) * totalHours;
+    
+    // Snap to 15-minute increments
+    const snappedHour = Math.round(hourFloat * 4) / 4;
+    
+    timelineCreateState.isDragging = false; // Will be set true on mousemove
+    timelineCreateState.startX = e.clientX;
+    timelineCreateState.startHour = state.startHour + snappedHour;
+    timelineCreateState.dayIdx = dayIdx;
+    timelineCreateState.slotsContainer = slotsContainer;
+    timelineCreateState.rect = rect;
+    timelineCreateState.totalHours = totalHours;
+    
+    // Add mouse listeners
+    document.addEventListener('mousemove', handleTimelineCreateMouseMove);
+    document.addEventListener('mouseup', handleTimelineCreateMouseUp);
+}
+
+function handleTimelineCreateMouseMove(e) {
+    const moveDist = Math.abs(e.clientX - timelineCreateState.startX);
+    
+    // Only start drag if moved at least 10px
+    if (moveDist < 10 && !timelineCreateState.isDragging) {
+        return;
+    }
+    
+    timelineCreateState.isDragging = true;
+    
+    const rect = timelineCreateState.rect;
+    const totalHours = timelineCreateState.totalHours;
+    const slotsContainer = timelineCreateState.slotsContainer;
+    
+    // Calculate current hour
+    const relativeX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const hourFloat = (relativeX / rect.width) * totalHours;
+    const snappedHour = Math.round(hourFloat * 4) / 4;
+    const currentHour = state.startHour + snappedHour;
+    
+    // Calculate start and end (ensure start < end)
+    const startHour = Math.min(timelineCreateState.startHour, currentHour);
+    const endHour = Math.max(timelineCreateState.startHour, currentHour);
+    
+    // Clamp to business hours
+    const clampedStart = Math.max(state.startHour, startHour);
+    const clampedEnd = Math.min(state.endHour, endHour);
+    
+    // Create or update preview element (the bar)
+    if (!timelineCreateState.previewElement) {
+        const preview = document.createElement('div');
+        preview.className = 'timeline-create-preview';
+        slotsContainer.appendChild(preview);
+        timelineCreateState.previewElement = preview;
+    }
+    
+    // Create or update tooltip (floating above)
+    if (!timelineCreateState.tooltipElement) {
+        const tooltip = document.createElement('div');
+        tooltip.className = 'timeline-create-tooltip';
+        document.body.appendChild(tooltip);
+        timelineCreateState.tooltipElement = tooltip;
+    }
+    
+    const preview = timelineCreateState.previewElement;
+    const tooltip = timelineCreateState.tooltipElement;
+    const leftPercent = ((clampedStart - state.startHour) / totalHours) * 100;
+    const widthPercent = ((clampedEnd - clampedStart) / totalHours) * 100;
+    
+    preview.style.left = `${leftPercent}%`;
+    preview.style.width = `${Math.max(widthPercent, 2)}%`;
+    
+    // Position tooltip above the preview, centered
+    const previewRect = preview.getBoundingClientRect();
+    tooltip.style.left = `${previewRect.left + previewRect.width / 2}px`;
+    tooltip.style.top = `${previewRect.top - 60}px`;
+    
+    // Update tooltip content
+    const duration = clampedEnd - clampedStart;
+    const hours = Math.floor(duration);
+    const mins = Math.round((duration % 1) * 60);
+    const durationText = hours > 0 && mins > 0 ? `${hours}h ${mins}m` : hours > 0 ? `${hours}h` : `${mins}m`;
+    
+    tooltip.innerHTML = `
+        <span class="tooltip-label">+ New Shift</span>
+        <span class="tooltip-time">${formatHour(clampedStart)} – ${formatHour(clampedEnd)}</span>
+        <span class="tooltip-duration">${durationText}</span>
+    `;
+}
+
+function handleTimelineCreateMouseUp(e) {
+    document.removeEventListener('mousemove', handleTimelineCreateMouseMove);
+    document.removeEventListener('mouseup', handleTimelineCreateMouseUp);
+    
+    // Remove preview bar
+    if (timelineCreateState.previewElement) {
+        timelineCreateState.previewElement.remove();
+        timelineCreateState.previewElement = null;
+    }
+    
+    // Remove tooltip
+    if (timelineCreateState.tooltipElement) {
+        timelineCreateState.tooltipElement.remove();
+        timelineCreateState.tooltipElement = null;
+    }
+    
+    // If we were dragging, open modal with the range
+    if (timelineCreateState.isDragging) {
+        const rect = timelineCreateState.rect;
+        const totalHours = timelineCreateState.totalHours;
+        
+        const relativeX = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+        const hourFloat = (relativeX / rect.width) * totalHours;
+        const snappedHour = Math.round(hourFloat * 4) / 4;
+        const currentHour = state.startHour + snappedHour;
+        
+        const startHour = Math.min(timelineCreateState.startHour, currentHour);
+        const endHour = Math.max(timelineCreateState.startHour, currentHour);
+        
+        const clampedStart = Math.max(state.startHour, startHour);
+        const clampedEnd = Math.min(state.endHour, endHour);
+        
+        // Only open if there's a meaningful range
+        if (clampedEnd - clampedStart >= 0.25) {
+            openTimelineAddShiftModal(timelineCreateState.dayIdx, clampedStart, clampedEnd);
+        }
+    }
+    
+    // Reset state
+    timelineCreateState.isDragging = false;
+    timelineCreateState.startX = null;
+    timelineCreateState.startHour = null;
+    timelineCreateState.dayIdx = null;
+    timelineCreateState.slotsContainer = null;
 }
 
 // ==================== SHIFT EDITOR (Timeline/Grid Click) ====================
