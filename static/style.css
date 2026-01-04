@@ -1578,23 +1578,34 @@ body[data-theme="light"] .advanced-panel {
     text-transform: uppercase;
     letter-spacing: 0.05em;
     color: var(--text-primary);
-    padding: 0.5rem;
+    padding: 0.5rem 0.75rem;
 }
 
 .timeline-header-hours {
     display: flex;
     flex: 1;
     gap: 0;
+    position: relative;
 }
 
 .timeline-hour-label {
     flex: 1;
     min-width: 40px;
-    text-align: center;
+    text-align: left;
     font-size: 0.7rem;
     font-weight: 600;
     color: var(--text-secondary);
     padding: 0.4rem 0;
+    padding-left: 0;
+}
+
+/* Closing hour label (end time marker) - positioned absolutely to not affect flex layout */
+.timeline-hour-label.timeline-closing-hour {
+    position: absolute;
+    right: 0;
+    flex: none;
+    min-width: auto;
+    padding-right: 4px;
 }
 
 .timeline-row {
@@ -1657,8 +1668,8 @@ body[data-theme="light"] .advanced-panel {
 
 .timeline-shift-block {
     position: absolute;
-    top: 0;
-    height: 100%;
+    top: 2px;
+    height: calc(100% - 4px);
     border-radius: 4px;
     display: flex;
     align-items: center;
@@ -1673,6 +1684,9 @@ body[data-theme="light"] .advanced-panel {
     white-space: nowrap;
     z-index: 1;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    /* Use box-sizing and slight inset for visual spacing without affecting position */
+    box-sizing: border-box;
+    margin-right: 1px;
 }
 
 .timeline-shift-block:hover {
@@ -1693,8 +1707,8 @@ body[data-theme="light"] .advanced-panel {
 
 .timeline-gap-block {
     position: absolute;
-    top: 0;
-    height: 100%;
+    top: 2px;
+    height: calc(100% - 4px);
     border-radius: 4px;
     border: 2px dashed var(--danger);
     background: rgba(239, 68, 68, 0.2);
@@ -1703,6 +1717,7 @@ body[data-theme="light"] .advanced-panel {
     justify-content: center;
     cursor: pointer;
     transition: var(--transition-fast);
+    box-sizing: border-box;
 }
 
 .timeline-gap-block:hover {
@@ -1735,6 +1750,170 @@ body[data-theme="light"] .timeline-day-label {
 
 body[data-theme="light"] .timeline-slot {
     border-left-color: rgba(0, 0, 0, 0.05);
+}
+
+/* ---------- Timeline Drag & Drop ---------- */
+
+/* Draggable shift blocks */
+.timeline-shift-block[draggable="true"] {
+    cursor: grab;
+}
+
+.timeline-shift-block[draggable="true"]:active {
+    cursor: grabbing;
+}
+
+.timeline-shift-block.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+    transform: scale(0.95);
+}
+
+.timeline-shift-block.resizing {
+    opacity: 0.7;
+    z-index: 100;
+}
+
+/* Resize handles */
+.shift-resize-handle {
+    position: absolute;
+    top: 0;
+    width: 10px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.shift-resize-handle.left {
+    left: 0;
+    background: linear-gradient(90deg, rgba(255,255,255,0.4), transparent);
+    border-radius: 4px 0 0 4px;
+}
+
+.shift-resize-handle.right {
+    right: 0;
+    background: linear-gradient(-90deg, rgba(255,255,255,0.4), transparent);
+    border-radius: 0 4px 4px 0;
+}
+
+.timeline-shift-block:hover .shift-resize-handle {
+    opacity: 1;
+}
+
+.shift-resize-handle:hover {
+    background: rgba(99, 102, 241, 0.5);
+}
+
+/* Drop zone styling */
+.timeline-drop-zone {
+    position: relative;
+    height: 40px;
+    background: transparent;
+    border: 2px dashed transparent;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    display: none;
+    transition: all 0.2s ease;
+}
+
+.timeline-drop-zone.visible {
+    display: block;
+    border-color: var(--accent);
+    background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent calc(100% / var(--total-hours, 12) - 1px),
+        rgba(99, 102, 241, 0.1) calc(100% / var(--total-hours, 12) - 1px),
+        rgba(99, 102, 241, 0.1) calc(100% / var(--total-hours, 12))
+    );
+}
+
+.timeline-drop-zone.drag-over {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: var(--accent);
+    box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.2);
+}
+
+/* Hour markers in drop zone */
+.drop-zone-hour-marker {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-left: 1px dashed rgba(99, 102, 241, 0.3);
+    pointer-events: none;
+}
+
+.drop-zone-hour-marker:first-child {
+    border-left: none;
+}
+
+/* Ghost preview during drag */
+.timeline-ghost-preview {
+    position: absolute;
+    top: 2px;
+    height: calc(100% - 4px);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    pointer-events: none;
+    opacity: 0.8;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    animation: ghostPulse 1s ease-in-out infinite;
+    box-sizing: border-box;
+}
+
+@keyframes ghostPulse {
+    0%, 100% { 
+        opacity: 0.7;
+        transform: scale(1);
+    }
+    50% { 
+        opacity: 0.9;
+        transform: scale(1.02);
+    }
+}
+
+.timeline-ghost-preview .shift-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Resize preview overlay */
+.resize-preview-overlay {
+    pointer-events: none;
+    z-index: 10000;
+}
+
+/* Light theme drag & drop */
+body[data-theme="light"] .timeline-drop-zone.visible {
+    background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent calc(100% / var(--total-hours, 12) - 1px),
+        rgba(99, 102, 241, 0.15) calc(100% / var(--total-hours, 12) - 1px),
+        rgba(99, 102, 241, 0.15) calc(100% / var(--total-hours, 12))
+    );
+}
+
+body[data-theme="light"] .timeline-drop-zone.drag-over {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+body[data-theme="light"] .shift-resize-handle.left {
+    background: linear-gradient(90deg, rgba(0,0,0,0.2), transparent);
+}
+
+body[data-theme="light"] .shift-resize-handle.right {
+    background: linear-gradient(-90deg, rgba(0,0,0,0.2), transparent);
 }
 
 /* Schedule Legend */

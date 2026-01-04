@@ -31,6 +31,20 @@ const state = {
     scheduleColorMode: 'role' // 'role' or 'employee'
 };
 
+// ==================== TIMELINE DRAG STATE ====================
+const timelineDragState = {
+    isDragging: false,
+    isResizing: false,
+    resizeEdge: null, // 'left' or 'right'
+    activeShift: null,
+    ghostElement: null,
+    originalDayIdx: null,
+    originalStartHour: null,
+    originalEndHour: null,
+    currentTargetDay: null,
+    currentTargetHour: null
+};
+
 // Build lookup maps
 const employeeMap = {};
 const roleMap = {};
@@ -1953,6 +1967,344 @@ function renderSimpleTableView(schedule) {
 }
 
 // ==================== TIMELINE VIEW ====================
+
+// Helper function to calculate hour from mouse position in timeline (snaps to full hours)
+function getTimelineHourFromPosition(x, slotsContainer) {
+    if (!slotsContainer) return null;
+    const rect = slotsContainer.getBoundingClientRect();
+    const relativeX = x - rect.left;
+    const totalWidth = rect.width;
+    const totalHours = state.endHour - state.startHour;
+    
+    // Calculate which hour the mouse is over
+    const hourFloat = (relativeX / totalWidth) * totalHours;
+    
+    // Snap to nearest hour
+    const snappedHour = Math.round(hourFloat);
+    
+    // Clamp to valid range and return the actual hour value
+    const clampedHour = Math.max(0, Math.min(snappedHour, totalHours - 1));
+    return state.startHour + clampedHour;
+}
+
+// Helper function to get day index from a timeline row element
+function getDayIdxFromRow(rowElement) {
+    if (!rowElement) return null;
+    return parseInt(rowElement.dataset.dayIdx);
+}
+
+// Helper function to show drop zones on all days
+function showTimelineDropZones() {
+    document.querySelectorAll('.timeline-drop-zone').forEach(zone => {
+        zone.classList.add('visible');
+    });
+}
+
+// Helper function to hide drop zones
+function hideTimelineDropZones() {
+    document.querySelectorAll('.timeline-drop-zone').forEach(zone => {
+        zone.classList.remove('visible');
+        zone.classList.remove('drag-over');
+    });
+    // Remove any ghost previews
+    document.querySelectorAll('.timeline-ghost-preview').forEach(g => g.remove());
+}
+
+// Helper function to create ghost preview element
+function createGhostPreview(shift, targetHour, slotsContainer) {
+    // Remove existing ghost
+    document.querySelectorAll('.timeline-ghost-preview').forEach(g => g.remove());
+    
+    if (!slotsContainer || targetHour === null) return null;
+    
+    const totalHours = state.endHour - state.startHour;
+    const duration = shift.endHour - shift.startHour;
+    const startIdx = targetHour - state.startHour;
+    
+    // Validate position is within bounds
+    if (startIdx < 0 || startIdx >= totalHours) return null;
+    
+    const ghost = document.createElement('div');
+    ghost.className = 'timeline-ghost-preview';
+    
+    // Align with hour columns
+    const leftPercent = (startIdx / totalHours) * 100;
+    const widthPercent = (duration / totalHours) * 100;
+    ghost.style.left = `${leftPercent}%`;
+    ghost.style.width = `${Math.max(widthPercent, (1 / totalHours) * 100)}%`; // Min 1 hour width
+    
+    const emp = employeeMap[shift.empId];
+    const endHour = targetHour + duration;
+    ghost.style.background = emp?.color || '#6366f1';
+    ghost.innerHTML = `<span class="shift-name">${emp?.name || 'Staff'}</span>`;
+    ghost.title = `${formatHour(targetHour)} - ${formatHour(endHour)}`;
+    
+    return ghost;
+}
+
+// Move shift to new position
+function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toStart) {
+    if (!state.currentSchedule) return false;
+    
+    const slotAssignments = state.currentSchedule.slot_assignments;
+    const duration = fromEnd - fromStart;
+    
+    // Round to nearest hour for storage
+    const toStartHour = Math.floor(toStart);
+    const toEndHour = Math.ceil(toStartHour + duration);
+    
+    // Validate new position is within business hours
+    if (toStartHour < state.startHour || toEndHour > state.endHour) {
+        showToast('Shift would extend outside business hours', 'error');
+        return false;
+    }
+    
+    // Find and remove ALL existing assignments for this employee on the source day
+    for (let hour = state.startHour; hour < state.endHour; hour++) {
+        const key = `${fromDayIdx},${hour}`;
+        if (slotAssignments[key]) {
+            slotAssignments[key] = slotAssignments[key].filter(a => a.employee_id !== empId);
+            if (slotAssignments[key].length === 0) {
+                delete slotAssignments[key];
+            }
+        }
+    }
+    
+    // Add new assignments at target location (hourly slots)
+    for (let hour = toStartHour; hour < toEndHour; hour++) {
+        const key = `${toDayIdx},${hour}`;
+        if (!slotAssignments[key]) {
+            slotAssignments[key] = [];
+        }
+        // Check to avoid duplicates
+        if (!slotAssignments[key].some(a => a.employee_id === empId)) {
+            slotAssignments[key].push({
+                employee_id: empId,
+                role_id: roleId
+            });
+        }
+    }
+    
+    // Re-render timeline
+    renderTimelineView(state.currentSchedule);
+    
+    const emp = employeeMap[empId];
+    const dayName = state.days[toDayIdx];
+    showToast(`${emp?.name}'s shift moved to ${dayName} ${formatHour(toStartHour)}-${formatHour(toEndHour)}`, 'success');
+    
+    return true;
+}
+
+// Resize shift (change start or end time) - 15-minute snapping during drag, hourly storage
+function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) {
+    if (!state.currentSchedule) return false;
+    
+    const slotAssignments = state.currentSchedule.slot_assignments;
+    
+    // Round to hours for storage (floor for start, ceil for end)
+    const newStartHour = Math.floor(newStart);
+    const newEndHour = Math.ceil(newEnd);
+    
+    // Validate new times
+    if (newStartHour >= newEndHour) {
+        showToast('Shift must be at least 1 hour', 'error');
+        return false;
+    }
+    if (newStartHour < state.startHour || newEndHour > state.endHour) {
+        showToast('Shift would extend outside business hours', 'error');
+        return false;
+    }
+    
+    // First, find all hours where this employee is currently assigned on this day
+    const currentHours = [];
+    for (let hour = state.startHour; hour < state.endHour; hour++) {
+        const key = `${dayIdx},${hour}`;
+        if (slotAssignments[key]?.some(a => a.employee_id === empId)) {
+            currentHours.push(hour);
+        }
+    }
+    
+    // Remove ALL existing assignments for this employee on this day
+    currentHours.forEach(hour => {
+        const key = `${dayIdx},${hour}`;
+        if (slotAssignments[key]) {
+            slotAssignments[key] = slotAssignments[key].filter(a => a.employee_id !== empId);
+            if (slotAssignments[key].length === 0) {
+                delete slotAssignments[key];
+            }
+        }
+    });
+    
+    // Add new assignments for the new range (hourly slots)
+    for (let hour = newStartHour; hour < newEndHour; hour++) {
+        const key = `${dayIdx},${hour}`;
+        if (!slotAssignments[key]) {
+            slotAssignments[key] = [];
+        }
+        // Check if this employee is already assigned (shouldn't happen but be safe)
+        if (!slotAssignments[key].some(a => a.employee_id === empId)) {
+            slotAssignments[key].push({
+                employee_id: empId,
+                role_id: roleId
+            });
+        }
+    }
+    
+    // Re-render timeline
+    renderTimelineView(state.currentSchedule);
+    
+    const emp = employeeMap[empId];
+    showToast(`${emp?.name}'s shift adjusted to ${formatHour(newStartHour)}-${formatHour(newEndHour)}`, 'success');
+    
+    return true;
+}
+
+// Delete shift from schedule
+function deleteShiftFromTimeline(empId, dayIdx, startHour, endHour) {
+    if (!state.currentSchedule) return false;
+    
+    const slotAssignments = state.currentSchedule.slot_assignments;
+    
+    // Remove assignments
+    for (let hour = startHour; hour < endHour; hour++) {
+        const key = `${dayIdx},${hour}`;
+        if (slotAssignments[key]) {
+            slotAssignments[key] = slotAssignments[key].filter(a => a.employee_id !== empId);
+            if (slotAssignments[key].length === 0) {
+                delete slotAssignments[key];
+            }
+        }
+    }
+    
+    // Re-render timeline
+    renderTimelineView(state.currentSchedule);
+    
+    const emp = employeeMap[empId];
+    showToast(`${emp?.name}'s shift deleted`, 'success');
+    
+    return true;
+}
+
+// Start resize operation
+function startResize(e, block, edge, dayIdx, shift) {
+    timelineDragState.isResizing = true;
+    timelineDragState.resizeEdge = edge;
+    timelineDragState.activeShift = shift;
+    timelineDragState.originalDayIdx = dayIdx;
+    timelineDragState.originalStartHour = shift.startHour;
+    timelineDragState.originalEndHour = shift.endHour;
+    
+    block.classList.add('resizing');
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    
+    // Get the slots container for this day
+    const slotsContainer = block.closest('.timeline-slots');
+    
+    // Store initial mouse position and block dimensions
+    const blockRect = block.getBoundingClientRect();
+    const containerRect = slotsContainer.getBoundingClientRect();
+    const totalHours = state.hours.length;
+    const hourWidth = containerRect.width / totalHours;
+    
+    let currentStart = shift.startHour;
+    let currentEnd = shift.endHour;
+    
+    // Create resize preview overlay
+    const preview = document.createElement('div');
+    preview.className = 'resize-preview-overlay';
+    preview.style.position = 'fixed';
+    preview.style.top = `${blockRect.top}px`;
+    preview.style.height = `${blockRect.height}px`;
+    preview.style.background = 'rgba(99, 102, 241, 0.3)';
+    preview.style.border = '2px solid var(--accent)';
+    preview.style.borderRadius = '4px';
+    preview.style.pointerEvents = 'none';
+    preview.style.zIndex = '10000';
+    document.body.appendChild(preview);
+    
+    function updatePreview() {
+        const startIdx = currentStart - state.startHour;
+        const endIdx = currentEnd - state.startHour;
+        const duration = currentEnd - currentStart;
+        
+        const left = containerRect.left + (startIdx / totalHours) * containerRect.width;
+        const width = (duration / totalHours) * containerRect.width;
+        
+        preview.style.left = `${left}px`;
+        preview.style.width = `${width}px`;
+        preview.textContent = `${formatHour(currentStart)} - ${formatHour(currentEnd)}`;
+        preview.style.display = 'flex';
+        preview.style.alignItems = 'center';
+        preview.style.justifyContent = 'center';
+        preview.style.color = 'white';
+        preview.style.fontSize = '0.75rem';
+        preview.style.fontWeight = '600';
+    }
+    
+    updatePreview();
+    
+    function onMouseMove(e) {
+        const mouseX = e.clientX;
+        const relativeX = mouseX - containerRect.left;
+        
+        // Calculate which hour boundary the mouse is closest to
+        const hourFloat = (relativeX / containerRect.width) * totalHours;
+        
+        if (edge === 'left') {
+            // Snap to nearest 15 minutes (0.25 hours) - changes at 7.5 min midpoints
+            const snappedHourFloat = Math.round(hourFloat * 4) / 4;
+            const targetHour = state.startHour + Math.max(0, Math.min(snappedHourFloat, totalHours - 0.25));
+            
+            // Adjusting start time - ensure at least 15 min shift
+            if (targetHour >= state.startHour && targetHour < currentEnd - 0.25) {
+                currentStart = targetHour;
+            }
+        } else {
+            // Snap to nearest 15 minutes (0.25 hours) - changes at 7.5 min midpoints
+            const snappedHourFloat = Math.round(hourFloat * 4) / 4;
+            const targetHour = state.startHour + Math.max(0.25, Math.min(snappedHourFloat, totalHours));
+            
+            // Adjusting end time - ensure at least 15 min shift
+            if (targetHour <= state.endHour && targetHour > currentStart + 0.25) {
+                currentEnd = targetHour;
+            }
+        }
+        
+        updatePreview();
+    }
+    
+    function onMouseUp(e) {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        
+        block.classList.remove('resizing');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        preview.remove();
+        
+        timelineDragState.isResizing = false;
+        timelineDragState.resizeEdge = null;
+        timelineDragState.activeShift = null;
+        
+        // Apply the resize if changed
+        if (currentStart !== shift.startHour || currentEnd !== shift.endHour) {
+            resizeShift(
+                shift.empId,
+                shift.roleId,
+                dayIdx,
+                shift.startHour,
+                shift.endHour,
+                currentStart,
+                currentEnd
+            );
+        }
+    }
+    
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+}
+
 function renderTimelineView(schedule) {
     const container = document.getElementById('timelineGrid');
     if (!container) return;
@@ -1968,6 +2320,24 @@ function renderTimelineView(schedule) {
     }
     
     const slotAssignments = schedule?.slot_assignments || {};
+    
+    // Calculate weekly stats for each employee (hours worked, days worked)
+    const employeeWeeklyStats = {}; // { empId: { hoursWorked: number, daysWorked: Set } }
+    
+    for (let day = 0; day < 7; day++) {
+        state.hours.forEach(hour => {
+            const key = `${day},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            assignments.forEach(assignment => {
+                const empId = assignment.employee_id;
+                if (!employeeWeeklyStats[empId]) {
+                    employeeWeeklyStats[empId] = { hoursWorked: 0, daysWorked: new Set() };
+                }
+                employeeWeeklyStats[empId].hoursWorked += 1; // Each slot is 1 hour
+                employeeWeeklyStats[empId].daysWorked.add(day);
+            });
+        });
+    }
     
     // Build header row with hours
     const headerDiv = document.createElement('div');
@@ -1988,6 +2358,12 @@ function renderTimelineView(schedule) {
         hoursHeader.appendChild(hourLabel);
     });
     
+    // Add the closing hour label (e.g., 6pm for a 6am-6pm business)
+    const closingLabel = document.createElement('div');
+    closingLabel.className = 'timeline-hour-label timeline-closing-hour';
+    closingLabel.textContent = formatHour(state.endHour);
+    hoursHeader.appendChild(closingLabel);
+    
     headerDiv.appendChild(hoursHeader);
     container.appendChild(headerDiv);
     
@@ -1995,6 +2371,7 @@ function renderTimelineView(schedule) {
     state.daysOpen.forEach(dayIdx => {
         const rowDiv = document.createElement('div');
         rowDiv.className = 'timeline-row ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
+        rowDiv.dataset.dayIdx = dayIdx;
         
         // Day label
         const dayLabel = document.createElement('div');
@@ -2005,11 +2382,103 @@ function renderTimelineView(schedule) {
         // Slots container
         const slotsDiv = document.createElement('div');
         slotsDiv.className = 'timeline-slots';
+        slotsDiv.dataset.dayIdx = dayIdx;
+        
+        // Create drop zone row (hidden by default, shown during drag)
+        const dropZone = document.createElement('div');
+        dropZone.className = 'timeline-drop-zone timeline-slots-row';
+        dropZone.dataset.dayIdx = dayIdx;
+        
+        // Add hour markers to drop zone for visual guidance
+        state.hours.forEach((hour, idx) => {
+            const marker = document.createElement('div');
+            marker.className = 'drop-zone-hour-marker';
+            marker.style.left = `${(idx / state.hours.length) * 100}%`;
+            marker.style.width = `${100 / state.hours.length}%`;
+            marker.dataset.hour = hour;
+            dropZone.appendChild(marker);
+        });
+        
+        // Drop zone event handlers
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            if (!timelineDragState.activeShift) return;
+            
+            dropZone.classList.add('drag-over');
+            
+            // Calculate target hour from mouse position (this is where center of shift should go)
+            const mouseHour = getTimelineHourFromPosition(e.clientX, dropZone);
+            const shift = timelineDragState.activeShift;
+            const duration = shift.endHour - shift.startHour;
+            
+            // Center the shift on mouse position
+            const centeredStartHour = Math.round(mouseHour - duration / 2);
+            // Clamp to valid range
+            const clampedStartHour = Math.max(state.startHour, Math.min(centeredStartHour, state.endHour - duration));
+            
+            timelineDragState.currentTargetDay = dayIdx;
+            timelineDragState.currentTargetHour = clampedStartHour;
+            
+            // Update ghost preview
+            const existingGhost = dropZone.querySelector('.timeline-ghost-preview');
+            if (existingGhost) existingGhost.remove();
+            
+            const ghost = createGhostPreview(shift, clampedStartHour, dropZone);
+            if (ghost) {
+                dropZone.appendChild(ghost);
+            }
+        });
+        
+        dropZone.addEventListener('dragleave', (e) => {
+            // Only remove if leaving the drop zone entirely
+            if (!dropZone.contains(e.relatedTarget)) {
+                dropZone.classList.remove('drag-over');
+                const ghost = dropZone.querySelector('.timeline-ghost-preview');
+                if (ghost) ghost.remove();
+            }
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            
+            if (!timelineDragState.activeShift) return;
+            
+            const shift = timelineDragState.activeShift;
+            const mouseHour = getTimelineHourFromPosition(e.clientX, dropZone);
+            const duration = shift.endHour - shift.startHour;
+            
+            // Center the shift on mouse position
+            const centeredStartHour = Math.round(mouseHour - duration / 2);
+            // Clamp to valid range
+            const targetStartHour = Math.max(state.startHour, Math.min(centeredStartHour, state.endHour - duration));
+            const targetDayIdx = dayIdx;
+            
+            // Move the shift
+            moveShift(
+                shift.empId,
+                shift.roleId,
+                timelineDragState.originalDayIdx,
+                timelineDragState.originalStartHour,
+                timelineDragState.originalEndHour,
+                targetDayIdx,
+                targetStartHour
+            );
+            
+            // Reset drag state
+            timelineDragState.isDragging = false;
+            timelineDragState.activeShift = null;
+            hideTimelineDropZones();
+        });
+        
+        slotsDiv.appendChild(dropZone);
         
         // Build shift blocks for this day
         const dayAssignments = {};
         
-        // Gather all assignments for this day
+        // Gather all assignments for this day (use integer hours for compatibility)
         state.hours.forEach(hour => {
             const key = `${dayIdx},${hour}`;
             const assignments = slotAssignments[key] || [];
@@ -2030,14 +2499,17 @@ function renderTimelineView(schedule) {
             
             const hours = data.hours.sort((a, b) => a - b);
             
-            // Find continuous segments
+            // Find continuous segments (consecutive hours)
             let segStart = hours[0];
             let prevHour = hours[0];
             
             for (let i = 1; i <= hours.length; i++) {
                 const currentHour = hours[i];
                 
-                if (currentHour !== prevHour + 1 || i === hours.length) {
+                // Check if continuous (consecutive hours)
+                const isGap = currentHour === undefined || currentHour !== prevHour + 1;
+                
+                if (isGap || i === hours.length) {
                     allShifts.push({
                         empId,
                         emp,
@@ -2208,7 +2680,7 @@ function renderTimelineView(schedule) {
         
         // Create row containers and render shifts using percentage positioning
         const totalHours = state.hours.length;
-        const gapPercent = 0.3; // Small gap between blocks as percentage
+        const blockPadding = 2; // Small padding in pixels for visual spacing (applied via CSS)
         
         // Add gap row FIRST (at the top) if there are gaps
         if (gapShifts.length > 0) {
@@ -2222,9 +2694,9 @@ function renderTimelineView(schedule) {
                 const gapBlock = document.createElement('div');
                 gapBlock.className = 'timeline-gap-block';
                 
-                // Calculate percentage positions
-                const leftPercent = (startIdx / totalHours) * 100 + gapPercent;
-                const widthPercent = (duration / totalHours) * 100 - (gapPercent * 2);
+                // Calculate percentage positions - align exactly with hour columns
+                const leftPercent = (startIdx / totalHours) * 100;
+                const widthPercent = (duration / totalHours) * 100;
                 gapBlock.style.left = `${leftPercent}%`;
                 gapBlock.style.width = `${widthPercent}%`;
                 gapBlock.innerHTML = `<span class="gap-label">+${duration}h</span>`;
@@ -2256,35 +2728,113 @@ function renderTimelineView(schedule) {
                 
                 const block = document.createElement('div');
                 block.className = 'timeline-shift-block';
+                block.draggable = true;
                 
-                // Calculate percentage positions
-                const leftPercent = (startIdx / totalHours) * 100 + gapPercent;
-                const widthPercent = (duration / totalHours) * 100 - (gapPercent * 2);
+                // Add data attributes for drag/drop identification
+                block.dataset.empId = shift.empId;
+                block.dataset.roleId = shift.roleId;
+                block.dataset.dayIdx = dayIdx;
+                block.dataset.startHour = shift.startHour;
+                block.dataset.endHour = shift.endHour;
+                
+                // Calculate percentage positions - align exactly with hour columns
+                const leftPercent = (startIdx / totalHours) * 100;
+                const widthPercent = (duration / totalHours) * 100;
                 block.style.left = `${leftPercent}%`;
                 block.style.width = `${widthPercent}%`;
                 
                 // Color based on mode
                 const role = roleMap[shift.roleId];
-                if (state.scheduleColorMode === 'employee') {
-                    block.style.background = shift.emp.color || '#666';
-                } else {
-                    block.style.background = role?.color || '#666';
-                }
+                const blockColor = state.scheduleColorMode === 'employee' 
+                    ? (shift.emp.color || '#666') 
+                    : (role?.color || '#666');
+                block.style.background = blockColor;
                 
                 // Better tooltip with name, hours, and role
                 const roleName = role?.name || 'Staff';
-                block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>`;
-                block.title = `${shift.emp.name}\nRole: ${roleName}\n${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
+                
+                // Get employee weekly stats
+                const empStats = employeeWeeklyStats[shift.empId] || { hoursWorked: 0, daysWorked: new Set() };
+                const hoursWorked = empStats.hoursWorked;
+                const daysWorked = empStats.daysWorked.size;
+                const minHours = shift.emp.min_hours || 0;
+                const maxHours = shift.emp.max_hours || shift.emp.maxHours || 40;
+                const empType = shift.emp.classification === 'full_time' ? 'Full-Time' : 'Part-Time';
+                
+                // Create inner content with resize handles
+                block.innerHTML = `
+                    <div class="shift-resize-handle left" data-edge="left"></div>
+                    <span class="shift-name">${shift.emp.name}</span>
+                    <div class="shift-resize-handle right" data-edge="right"></div>
+                `;
+                block.title = `${shift.emp.name} (${empType})\nRole: ${roleName}\n${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}\n\nWeekly: ${hoursWorked}h / ${minHours}-${maxHours}h range\nDays this week: ${daysWorked}\n\nDrag to move · Drag edges to resize`;
                 
                 // Add day info to shift for the editor
                 shift.day = state.days[dayIdx];
                 shift.dayIdx = dayIdx;
                 
-                // Click handler to edit shift
-                block.style.cursor = 'pointer';
-                block.addEventListener('click', () => {
+                // Store shift reference for drag operations
+                block._shiftData = { ...shift };
+                
+                // Click handler to edit shift (only if not dragging/resizing)
+                block.addEventListener('click', (e) => {
+                    // Don't open editor if clicking on resize handles or during drag
+                    if (e.target.classList.contains('shift-resize-handle') || timelineDragState.isDragging || timelineDragState.isResizing) {
+                        return;
+                    }
                     openShiftEditor(shift);
                 });
+                
+                // Drag start handler
+                block.addEventListener('dragstart', (e) => {
+                    // Don't allow drag if starting from resize handle
+                    if (e.target.classList.contains('shift-resize-handle')) {
+                        e.preventDefault();
+                        return;
+                    }
+                    
+                    timelineDragState.isDragging = true;
+                    timelineDragState.activeShift = block._shiftData;
+                    timelineDragState.originalDayIdx = dayIdx;
+                    timelineDragState.originalStartHour = shift.startHour;
+                    timelineDragState.originalEndHour = shift.endHour;
+                    
+                    block.classList.add('dragging');
+                    
+                    // Set drag data
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', JSON.stringify(block._shiftData));
+                    
+                    // Show drop zones
+                    setTimeout(() => showTimelineDropZones(), 0);
+                });
+                
+                block.addEventListener('dragend', (e) => {
+                    block.classList.remove('dragging');
+                    timelineDragState.isDragging = false;
+                    timelineDragState.activeShift = null;
+                    hideTimelineDropZones();
+                });
+                
+                // Resize handle events
+                const leftHandle = block.querySelector('.shift-resize-handle.left');
+                const rightHandle = block.querySelector('.shift-resize-handle.right');
+                
+                if (leftHandle) {
+                    leftHandle.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        startResize(e, block, 'left', dayIdx, shift);
+                    });
+                }
+                
+                if (rightHandle) {
+                    rightHandle.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        startResize(e, block, 'right', dayIdx, shift);
+                    });
+                }
                 
                 rowContainer.appendChild(block);
             });
@@ -2770,8 +3320,25 @@ function deleteShift() {
     
     const slotAssignments = state.currentSchedule.slot_assignments;
     
-    // Remove the employee from all slots in the shift range
-    for (let hour = shiftData.startHour; hour < shiftData.endHour; hour++) {
+    // Find ALL hours where this employee is currently assigned on this day
+    // This handles cases where the shift was resized and the stored data is stale
+    const hoursToDelete = [];
+    for (let hour = state.startHour; hour < state.endHour; hour++) {
+        const key = `${shiftData.dayIdx},${hour}`;
+        const assignments = slotAssignments[key] || [];
+        if (assignments.some(a => a.employee_id === shiftData.empId)) {
+            hoursToDelete.push(hour);
+        }
+    }
+    
+    if (hoursToDelete.length === 0) {
+        showToast('Shift not found', 'error');
+        closeAllModals();
+        return;
+    }
+    
+    // Remove the employee from all found slots
+    hoursToDelete.forEach(hour => {
         const key = `${shiftData.dayIdx},${hour}`;
         const assignments = slotAssignments[key] || [];
         
@@ -2783,9 +3350,9 @@ function deleteShift() {
         } else {
             delete slotAssignments[key];
         }
-    }
+    });
     
-    // Update unfilled slots (add the deleted shift as a gap)
+    // Update unfilled slots (add the deleted shift as gaps)
     if (!state.currentSchedule.metrics) {
         state.currentSchedule.metrics = { unfilled_slots: [] };
     }
@@ -2794,19 +3361,25 @@ function deleteShift() {
     }
     
     // Add each hour as an unfilled slot
-    for (let hour = shiftData.startHour; hour < shiftData.endHour; hour++) {
+    hoursToDelete.forEach(hour => {
         state.currentSchedule.metrics.unfilled_slots.push({
             day: shiftData.dayIdx,
             hour: hour,
             role_id: shiftData.roleId,
             needed: 1
         });
-    }
+    });
     
     showToast('Shift deleted', 'success');
     
-    // Re-render the schedule
-    renderSchedule(state.currentSchedule);
+    // Re-render the schedule based on current view mode
+    if (state.scheduleViewMode === 'timeline') {
+        renderTimelineView(state.currentSchedule);
+    } else if (state.scheduleViewMode === 'table') {
+        renderSimpleTableView(state.currentSchedule);
+    } else {
+        renderSchedule(state.currentSchedule);
+    }
     closeAllModals();
 }
 
@@ -3818,10 +4391,14 @@ function renderPeakPeriodsOld() {
 }
 
 function formatHour(hour) {
-    if (hour === 0) return '12am';
-    if (hour === 12) return '12pm';
-    if (hour < 12) return `${hour}am`;
-    return `${hour - 12}pm`;
+    const wholeHour = Math.floor(hour);
+    const minutes = Math.round((hour - wholeHour) * 60);
+    const minuteStr = minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : '';
+    
+    if (wholeHour === 0) return `12${minuteStr}am`;
+    if (wholeHour === 12) return `12${minuteStr}pm`;
+    if (wholeHour < 12) return `${wholeHour}${minuteStr}am`;
+    return `${wholeHour - 12}${minuteStr}pm`;
 }
 
 function addPeakPeriod() {
@@ -5569,13 +6146,6 @@ async function deletePeakPeriod(index) {
     } catch (error) {
         showToast('Error removing peak period', 'error');
     }
-}
-
-function formatHour(hour) {
-    if (hour === 0 || hour === 24) return '12am';
-    if (hour === 12) return '12pm';
-    if (hour < 12) return `${hour}am`;
-    return `${hour - 12}pm`;
 }
 
 // ==================== START ====================
