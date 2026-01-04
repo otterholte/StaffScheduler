@@ -3665,17 +3665,7 @@ function openTimelineAddShiftModal(dayIdx, startHour = null, endHour = null) {
     document.getElementById('timelineAddShiftTitle').textContent = `Add Shift - ${dayName}`;
     document.getElementById('timelineAddShiftDay').value = dayIdx;
     
-    // Populate employee dropdown
-    const empSelect = document.getElementById('timelineAddShiftEmployee');
-    empSelect.innerHTML = '<option value="">Select Employee...</option>';
-    state.employees.forEach(emp => {
-        const option = document.createElement('option');
-        option.value = emp.id;
-        option.textContent = emp.name;
-        empSelect.appendChild(option);
-    });
-    
-    // Populate role dropdown
+    // Populate role dropdown first (role selection filters employees)
     const roleSelect = document.getElementById('timelineAddShiftRole');
     roleSelect.innerHTML = '<option value="">Select Role...</option>';
     state.roles.forEach(role => {
@@ -3684,6 +3674,10 @@ function openTimelineAddShiftModal(dayIdx, startHour = null, endHour = null) {
         option.textContent = role.name;
         roleSelect.appendChild(option);
     });
+    
+    // Populate employee dropdown (will be filtered when role is selected)
+    const empSelect = document.getElementById('timelineAddShiftEmployee');
+    populateEmployeeDropdownByRole(empSelect, null); // Show all employees initially
     
     // Populate hour dropdowns
     const startHourSelect = document.getElementById('timelineAddShiftStartHour');
@@ -3777,6 +3771,56 @@ function updateTimelineAddShiftDuration() {
         durationEl.textContent = 'End time must be after start time';
         durationEl.style.color = 'var(--color-danger)';
     }
+}
+
+/**
+ * Populate employee dropdown, optionally filtered by role
+ * @param {HTMLSelectElement} empSelect - The employee dropdown element
+ * @param {string|null} roleId - Role ID to filter by, or null for all employees
+ */
+function populateEmployeeDropdownByRole(empSelect, roleId) {
+    const currentValue = empSelect.value; // Preserve current selection if still valid
+    empSelect.innerHTML = '<option value="">Select Employee...</option>';
+    
+    // Filter employees by role if a role is selected
+    let filteredEmployees = state.employees;
+    if (roleId) {
+        filteredEmployees = state.employees.filter(emp => 
+            emp.roles && emp.roles.includes(roleId)
+        );
+    }
+    
+    // Sort by name
+    filteredEmployees.sort((a, b) => a.name.localeCompare(b.name));
+    
+    filteredEmployees.forEach(emp => {
+        const option = document.createElement('option');
+        option.value = emp.id;
+        option.textContent = emp.name;
+        empSelect.appendChild(option);
+    });
+    
+    // Restore previous selection if the employee is still in the filtered list
+    if (currentValue && filteredEmployees.some(emp => emp.id === currentValue)) {
+        empSelect.value = currentValue;
+    }
+    
+    // Show count in placeholder if filtered
+    if (roleId && filteredEmployees.length === 0) {
+        empSelect.innerHTML = '<option value="">No employees with this role</option>';
+    } else if (roleId) {
+        empSelect.options[0].textContent = `Select Employee... (${filteredEmployees.length} available)`;
+    }
+}
+
+/**
+ * Handle role change in add shift modal - filter employees by selected role
+ */
+function handleAddShiftRoleChange() {
+    const roleId = document.getElementById('timelineAddShiftRole').value;
+    const empSelect = document.getElementById('timelineAddShiftEmployee');
+    populateEmployeeDropdownByRole(empSelect, roleId || null);
+    updateTimelineAddShiftEmpPreview();
 }
 
 // Update employee preview when selection changes
@@ -3934,6 +3978,12 @@ function initTimelineAddShiftModal() {
     const empSelect = document.getElementById('timelineAddShiftEmployee');
     if (empSelect) {
         empSelect.addEventListener('change', updateTimelineAddShiftEmpPreview);
+    }
+    
+    // Role change listener - filter employees by selected role
+    const roleSelect = document.getElementById('timelineAddShiftRole');
+    if (roleSelect) {
+        roleSelect.addEventListener('change', handleAddShiftRoleChange);
     }
 }
 
