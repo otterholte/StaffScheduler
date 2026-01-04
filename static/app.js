@@ -399,6 +399,7 @@ function init() {
     setupKeyboardShortcuts();
     setupAdvancedTab();
     initTimelineAddShiftModal();
+    initAvailabilityFilters();
     
     // Initial render
     renderEmployeesGrid();
@@ -4962,6 +4963,75 @@ async function saveAvailability() {
 
 // ==================== AVAILABILITY PAGE ====================
 let selectedAvailabilityEmpId = null;
+let availabilitySearchTerm = '';
+let availabilityRoleFilter = '';
+let availabilityTypeFilter = '';
+
+function initAvailabilityFilters() {
+    const searchInput = document.getElementById('availabilitySearch');
+    const roleSelect = document.getElementById('availabilityRoleFilter');
+    const typeSelect = document.getElementById('availabilityTypeFilter');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            availabilitySearchTerm = e.target.value.toLowerCase().trim();
+            renderAvailabilityPage();
+        });
+    }
+    
+    if (roleSelect) {
+        roleSelect.addEventListener('change', (e) => {
+            availabilityRoleFilter = e.target.value;
+            renderAvailabilityPage();
+        });
+    }
+
+    if (typeSelect) {
+        typeSelect.addEventListener('change', (e) => {
+            availabilityTypeFilter = e.target.value;
+            renderAvailabilityPage();
+        });
+    }
+}
+
+function populateAvailabilityRoleFilter() {
+    const roleSelect = document.getElementById('availabilityRoleFilter');
+    if (!roleSelect) return;
+    
+    // Build unique role list ONLY from state.roles (current business roles)
+    const roles = [...state.roles]
+        .map(role => ({ id: role.id.toString(), name: role.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Clear existing options except "All Roles"
+    roleSelect.innerHTML = '<option value="">All Roles</option>';
+    
+    roles.forEach(role => {
+        const option = document.createElement('option');
+        option.value = role.id;
+        option.textContent = role.name;
+        roleSelect.appendChild(option);
+    });
+    
+    // Restore selected value if it still exists
+    const roleIds = roles.map(r => r.id);
+    if (availabilityRoleFilter && roleIds.includes(availabilityRoleFilter.toString())) {
+        roleSelect.value = availabilityRoleFilter;
+    } else {
+        availabilityRoleFilter = '';
+        roleSelect.value = '';
+    }
+}
+
+function populateAvailabilityTypeFilter() {
+    const typeSelect = document.getElementById('availabilityTypeFilter');
+    if (!typeSelect) return;
+    const allowed = ['', 'full_time', 'part_time'];
+    if (!allowed.includes(availabilityTypeFilter)) {
+        availabilityTypeFilter = '';
+    }
+    typeSelect.value = availabilityTypeFilter || '';
+}
 
 function renderAvailabilityPage() {
     const staffList = document.getElementById('availabilityStaffList');
@@ -4969,13 +5039,56 @@ function renderAvailabilityPage() {
     
     staffList.innerHTML = '';
     
+    // Populate role filter dropdown
+    populateAvailabilityRoleFilter();
+    populateAvailabilityTypeFilter();
+    
     // Sort employees by name
-    const sorted = [...state.employees].sort((a, b) => a.name.localeCompare(b.name));
+    let sorted = [...state.employees].sort((a, b) => a.name.localeCompare(b.name));
+    
+    // Apply search filter
+    if (availabilitySearchTerm) {
+        sorted = sorted.filter(emp => 
+            emp.name.toLowerCase().includes(availabilitySearchTerm)
+        );
+    }
+    
+    // Apply role filter
+    if (availabilityRoleFilter) {
+        const filterId = availabilityRoleFilter.toString();
+        sorted = sorted.filter(emp => 
+            emp.roles && emp.roles.map(r => r.toString()).includes(filterId)
+        );
+    }
+    
+    // Apply type filter (full time / part time)
+    if (availabilityTypeFilter) {
+        sorted = sorted.filter(emp => emp.classification === availabilityTypeFilter);
+    }
+    
+    // Show "no results" message if empty
+    if (sorted.length === 0) {
+        staffList.innerHTML = `
+            <div class="avail-no-results">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <p>No staff found</p>
+            </div>
+        `;
+        return;
+    }
     
     sorted.forEach(emp => {
         const availHours = calculateAvailableHours(emp);
         const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         const isSelected = selectedAvailabilityEmpId === emp.id;
+        
+        // Get role names for display
+        const roleNames = emp.roles && emp.roles.length > 0 
+            ? emp.roles.map(rid => roleMap[rid]?.name || rid).join(', ')
+            : 'No role';
         
         const item = document.createElement('div');
         item.className = `avail-staff-item${isSelected ? ' selected' : ''}`;
@@ -4987,6 +5100,7 @@ function renderAvailabilityPage() {
                     ${emp.name}
                     <span class="badge badge-${emp.classification === 'full_time' ? 'ft' : 'pt'}">${emp.classification === 'full_time' ? 'FT' : 'PT'}</span>
                 </div>
+                <div class="avail-staff-role">${roleNames}</div>
                 <div class="avail-staff-hours">${availHours} hrs/week available</div>
             </div>
         `;

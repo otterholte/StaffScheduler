@@ -503,6 +503,33 @@
                     <!-- Left sidebar: Staff list -->
                     <div class="availability-sidebar">
                         <h3 class="sidebar-title">Select Staff</h3>
+                        
+                        <!-- Search and Filter Controls -->
+                        <div class="availability-filters">
+                            <div class="avail-search-wrapper">
+                                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <path d="m21 21-4.35-4.35"></path>
+                                </svg>
+                                <input type="text" id="availabilitySearch" class="avail-search-input" placeholder="Search by name...">
+                            </div>
+                            <div class="avail-filter-row">
+                                <div class="avail-role-filter">
+                                    <select id="availabilityRoleFilter" class="avail-role-select">
+                                        <option value="">All Roles</option>
+                                        <!-- Roles populated dynamically -->
+                                    </select>
+                                </div>
+                                <div class="avail-type-filter">
+                                    <select id="availabilityTypeFilter" class="avail-type-select">
+                                        <option value="">All Staff</option>
+                                        <option value="full_time">Full Time</option>
+                                        <option value="part_time">Part Time</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
                         <div class="availability-staff-list" id="availabilityStaffList">
                             <!-- Dynamically populated -->
                         </div>
