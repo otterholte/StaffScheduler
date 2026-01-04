@@ -6716,9 +6716,7 @@ function setupCalendarDrag(gridElement, eventsElement, containerElement) {
         if (shiftEl) {
             e.preventDefault();
             const shiftId = shiftEl.dataset.id;
-            if (confirm('Delete this shift?')) {
-                confirmDeleteShift(shiftId);
-            }
+            confirmDeleteShift(shiftId);
         }
     });
     

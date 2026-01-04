@@ -4899,7 +4899,6 @@ kbd {
 
 .avail-cell {
     background: var(--bg-tertiary);
-    border-radius: 4px;
     cursor: pointer;
     transition: var(--transition-fast);
     user-select: none;
