@@ -1351,7 +1351,8 @@ body[data-theme="light"] .advanced-panel {
 }
 
 .schedule-panel .panel-card {
-    padding: 1.25rem 2rem;
+    padding: 1.5rem 2rem;
+    margin-top: 0.5rem;
 }
 
 .card-title {
@@ -1488,6 +1489,7 @@ body[data-theme="light"] .advanced-panel {
     border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
     gap: 0.75rem;
+    position: relative;
 }
 
 .toolbar-left, .toolbar-right {
@@ -1495,6 +1497,17 @@ body[data-theme="light"] .advanced-panel {
     align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+}
+
+.toolbar-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* View Toggle - Segmented Control (iOS-style) */
@@ -1628,6 +1641,24 @@ body[data-theme="light"] .view-toggle-btn:hover:not(.active) {
     opacity: 0.7;
 }
 
+/* Color Mode Toggle - Icon Only Variant */
+.color-mode-toggle.color-mode-icons {
+    padding: 2px;
+    gap: 2px;
+}
+
+.color-mode-toggle.color-mode-icons .color-mode-btn {
+    padding: 0.45rem;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+}
+
+.color-mode-toggle.color-mode-icons .color-mode-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
 .color-mode-btn:hover:not(.active) {
     color: var(--text-secondary);
     background: rgba(255, 255, 255, 0.05);
@@ -1754,8 +1785,114 @@ body[data-theme="light"] .btn-icon-only:hover:not(:disabled) {
     height: 14px;
 }
 
-/* ==================== WEEK NAVIGATION BAR ==================== */
-.week-navigation-bar {
+/* ==================== WEEK NAVIGATION - INLINE (Toolbar) ==================== */
+.week-nav-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: var(--radius-md);
+    transition: all 0.2s ease;
+}
+
+.week-nav-inline .week-nav-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.week-nav-inline .week-nav-arrow:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: var(--text-primary);
+}
+
+.week-nav-inline .week-nav-arrow svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Badge row below toolbar - absolutely positioned */
+.toolbar-badge-row {
+    display: none;
+    position: absolute;
+    bottom: 1.3rem;
+    left: 0;
+    right: 0;
+    justify-content: center;
+}
+
+.toolbar-badge-row.has-badge {
+    display: flex;
+}
+
+/* Add bottom padding to toolbar when badge is present */
+.schedule-toolbar.has-badge {
+    padding-bottom: 2.4rem;
+}
+
+.week-nav-inline .week-date-range {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0.15rem 0.5rem;
+    cursor: default;
+}
+
+/* Status Badge beneath date range */
+.week-status-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    min-height: 1.1rem;
+    min-width: 1rem;
+}
+
+.week-status-badge.status-draft {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.week-status-badge.status-published {
+    background: rgba(34, 197, 94, 0.2);
+    color: #4ade80;
+}
+
+/* Light theme adjustments for inline week nav */
+body[data-theme="light"] .week-nav-inline .week-nav-arrow {
+    border-color: rgba(0, 0, 0, 0.15);
+    color: var(--text-secondary);
+}
+
+body[data-theme="light"] .week-nav-inline .week-nav-arrow:hover {
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.25);
+}
+
+body[data-theme="light"] .week-status-badge.status-draft {
+    background: rgba(245, 158, 11, 0.15);
+    color: #b45309;
+}
+
+body[data-theme="light"] .week-status-badge.status-published {
+    background: rgba(34, 197, 94, 0.15);
+    color: #15803d;
+}
+
+/* Legacy week navigation bar styles (keeping for backwards compatibility) */
+.week-navigation-bar:not(.week-nav-inline) {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1765,154 +1902,6 @@ body[data-theme="light"] .btn-icon-only:hover:not(:disabled) {
     border: 1px solid rgba(99, 102, 241, 0.2);
     border-radius: var(--radius-md);
     margin-bottom: 1rem;
-}
-
-.week-nav-arrow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    background: rgba(99, 102, 241, 0.15);
-    border: 1px solid rgba(99, 102, 241, 0.3);
-    border-radius: var(--radius-md);
-    color: var(--accent-primary);
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.week-nav-arrow:hover {
-    background: var(--accent-primary);
-    color: white;
-    transform: scale(1.05);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-
-.week-nav-arrow svg {
-    width: 20px;
-    height: 20px;
-}
-
-.week-nav-center {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.15rem;
-    min-width: 200px;
-}
-
-.week-navigation-bar .week-type-label {
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--accent-primary);
-}
-
-.week-date-range {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 0.02em;
-}
-
-/* Week Publish Status Line */
-.week-publish-status {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-    margin-top: 0.25rem;
-    padding: 0.2rem 0.6rem;
-    border-radius: 12px;
-    transition: all 0.3s ease;
-}
-
-.week-publish-status .status-icon {
-    font-size: 0.65rem;
-}
-
-.week-publish-status .status-text {
-    letter-spacing: 0.01em;
-}
-
-/* Draft / Unpublished State (Amber) */
-.week-navigation-bar[data-publish-status="draft"] {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(251, 191, 36, 0.08) 100%);
-    border-color: rgba(245, 158, 11, 0.35);
-}
-
-.week-navigation-bar[data-publish-status="draft"] .week-nav-arrow {
-    background: rgba(245, 158, 11, 0.15);
-    border-color: rgba(245, 158, 11, 0.35);
-    color: #d97706;
-}
-
-.week-navigation-bar[data-publish-status="draft"] .week-nav-arrow:hover {
-    background: #d97706;
-    color: white;
-}
-
-.week-navigation-bar[data-publish-status="draft"] .week-type-label {
-    color: #d97706;
-}
-
-.week-navigation-bar[data-publish-status="draft"] .week-publish-status {
-    background: rgba(245, 158, 11, 0.15);
-    color: #b45309;
-}
-
-/* Published State (Green) */
-.week-navigation-bar[data-publish-status="published"] {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(74, 222, 128, 0.08) 100%);
-    border-color: rgba(34, 197, 94, 0.35);
-}
-
-.week-navigation-bar[data-publish-status="published"] .week-nav-arrow {
-    background: rgba(34, 197, 94, 0.15);
-    border-color: rgba(34, 197, 94, 0.35);
-    color: #16a34a;
-}
-
-.week-navigation-bar[data-publish-status="published"] .week-nav-arrow:hover {
-    background: #16a34a;
-    color: white;
-}
-
-.week-navigation-bar[data-publish-status="published"] .week-type-label {
-    color: #16a34a;
-}
-
-.week-navigation-bar[data-publish-status="published"] .week-publish-status {
-    background: rgba(34, 197, 94, 0.15);
-    color: #15803d;
-}
-
-/* No Schedule State (Neutral/Purple - default) */
-.week-navigation-bar[data-publish-status="none"] {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
-    border-color: rgba(99, 102, 241, 0.2);
-}
-
-.week-navigation-bar[data-publish-status="none"] .week-publish-status {
-    background: rgba(99, 102, 241, 0.1);
-    color: var(--text-muted);
-}
-
-/* Light theme adjustments */
-body[data-theme="light"] .week-navigation-bar[data-publish-status="draft"] {
-    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 191, 36, 0.05) 100%);
-}
-
-body[data-theme="light"] .week-navigation-bar[data-publish-status="published"] {
-    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(74, 222, 128, 0.05) 100%);
-}
-
-body[data-theme="light"] .week-navigation-bar {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
-    border-color: rgba(99, 102, 241, 0.15);
 }
 
 /* Legacy week nav label styles (for day column headers) */

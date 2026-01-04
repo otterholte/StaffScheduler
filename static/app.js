@@ -185,23 +185,12 @@ function updateWeekNavigationBar() {
     const weekKey = getWeekKey(state.weekOffset);
     const weekState = state.publishedWeeks[weekKey] || { published: false, hasSchedule: false, editCount: 0 };
     
-    // Update week type label with status suffix
-    if (dom.weekTypeLabel) {
-        const baseLabel = getWeekTypeLabel(state.weekOffset);
-        if (weekState.hasSchedule) {
-            const statusSuffix = weekState.published ? ' · PUBLISHED' : ' · DRAFT';
-            dom.weekTypeLabel.textContent = baseLabel + statusSuffix;
-        } else {
-            dom.weekTypeLabel.textContent = baseLabel;
-        }
-    }
-    
     // Update date range
     if (dom.weekDateRange) {
         dom.weekDateRange.textContent = getWeekRangeString(state.weekOffset);
     }
     
-    // Update publish status line and bar color
+    // Update publish status color and tooltip
     updatePublishStatusDisplay(weekState);
 }
 
@@ -215,40 +204,61 @@ function getWeekKey(offset = 0) {
 }
 
 /**
- * Update the publish status display (status line and bar color)
+ * Update the publish status display (badge and tooltip)
  */
 function updatePublishStatusDisplay(weekState) {
-    const bar = dom.weekNavigationBar;
-    const statusEl = dom.weekPublishStatus;
+    const dateRangeEl = dom.weekDateRange;
+    const badgeEl = dom.weekStatusBadge;
     
-    if (!bar || !statusEl) return;
-    
-    let status, icon, text;
+    let status, tooltipText, badgeText;
     
     if (!weekState.hasSchedule) {
         status = 'none';
-        icon = '○';
-        text = 'No schedule generated';
+        tooltipText = 'No schedule generated';
+        badgeText = '';
     } else if (weekState.published) {
         status = 'published';
-        icon = '✓';
-        text = 'Published';
+        tooltipText = 'Published';
+        badgeText = 'Published';
     } else {
         status = 'draft';
-        icon = '⚠';
+        badgeText = 'Unpublished';
         const editCount = weekState.editCount || 0;
         if (editCount > 0) {
-            text = `${editCount} edit${editCount !== 1 ? 's' : ''} need to be published`;
+            tooltipText = `Draft - ${editCount} edit${editCount !== 1 ? 's' : ''} to publish`;
         } else {
-            text = 'Unpublished changes';
+            tooltipText = 'Draft - Unpublished changes';
         }
     }
     
-    bar.setAttribute('data-publish-status', status);
-    statusEl.innerHTML = `
-        <span class="status-icon">${icon}</span>
-        <span class="status-text">${text}</span>
-    `;
+    // Update status badge
+    if (badgeEl) {
+        badgeEl.className = 'week-status-badge';
+        badgeEl.textContent = badgeText;
+        if (status === 'draft') {
+            badgeEl.classList.add('status-draft');
+        } else if (status === 'published') {
+            badgeEl.classList.add('status-published');
+        }
+    }
+    
+    // Toggle badge row visibility and toolbar padding
+    if (dom.toolbarBadgeRow) {
+        const toolbar = dom.toolbarBadgeRow.closest('.schedule-toolbar');
+        if (status === 'draft' || status === 'published') {
+            dom.toolbarBadgeRow.classList.add('has-badge');
+            if (toolbar) toolbar.classList.add('has-badge');
+        } else {
+            dom.toolbarBadgeRow.classList.remove('has-badge');
+            if (toolbar) toolbar.classList.remove('has-badge');
+        }
+    }
+    
+    // Update tooltip on date range
+    if (dateRangeEl) {
+        const weekLabel = getWeekTypeLabel(state.weekOffset);
+        dateRangeEl.title = `${weekLabel} - ${tooltipText}`;
+    }
     
     // Update publish button state
     if (dom.publishBtn) {
@@ -374,10 +384,10 @@ const dom = {
     // Week Navigation Bar
     weekNavPrev: document.getElementById('weekNavPrev'),
     weekNavNext: document.getElementById('weekNavNext'),
-    weekTypeLabel: document.getElementById('weekTypeLabel'),
     weekDateRange: document.getElementById('weekDateRange'),
+    weekStatusBadge: document.getElementById('weekStatusBadge'),
+    toolbarBadgeRow: document.getElementById('toolbarBadgeRow'),
     weekNavigationBar: document.getElementById('weekNavigationBar'),
-    weekPublishStatus: document.getElementById('weekPublishStatus'),
     scheduleGrid: document.getElementById('scheduleGrid'),
     scheduleBody: document.getElementById('scheduleBody'),
     

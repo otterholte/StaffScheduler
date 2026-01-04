@@ -188,25 +188,36 @@
                                         </button>
                                     </div>
                                 </div>
-                                <div class="toolbar-right">
-                                    <!-- Color Mode Toggle -->
-                                    <div class="color-mode-toggle" id="colorModeToggle">
-                                        <span class="toggle-label-integrated">Color By:</span>
-                                        <button class="color-mode-btn active" data-mode="role" title="Color shifts by role/position">
+                                <div class="toolbar-center">
+                                    <!-- Week Navigation - Centered -->
+                                    <div class="week-nav-inline" id="weekNavigationBar">
+                                        <button class="week-nav-arrow" id="weekNavPrev" title="Previous week">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <circle cx="12" cy="12" r="10"></circle>
-                                                <path d="M8 14s1.5 2 4 2 4-2 4-2"></path>
-                                                <line x1="9" y1="9" x2="9.01" y2="9"></line>
-                                                <line x1="15" y1="9" x2="15.01" y2="9"></line>
+                                                <polyline points="15 18 9 12 15 6"></polyline>
                                             </svg>
-                                            Role
                                         </button>
-                                        <button class="color-mode-btn" data-mode="employee" title="Color shifts by employee">
+                                        <span class="week-date-range" id="weekDateRange">Dec 29 - Jan 4, 2025</span>
+                                        <button class="week-nav-arrow" id="weekNavNext" title="Next week">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="9 18 15 12 9 6"></polyline>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="toolbar-right">
+                                    <!-- Color Mode Toggle (icons only) -->
+                                    <div class="color-mode-toggle color-mode-icons" id="colorModeToggle">
+                                        <button class="color-mode-btn active" data-mode="role" title="Color by Role">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                                            </svg>
+                                        </button>
+                                        <button class="color-mode-btn" data-mode="employee" title="Color by Person">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
                                                 <circle cx="12" cy="7" r="4"></circle>
                                             </svg>
-                                            Person
                                         </button>
                                     </div>
                                     <button id="exportBtn" class="btn-icon-only" title="Export schedule" disabled>
@@ -217,28 +228,10 @@
                                         </svg>
                                     </button>
                                 </div>
-                            </div>
-                            
-                            <!-- Week Navigation Bar -->
-                            <div class="week-navigation-bar" id="weekNavigationBar" data-publish-status="draft">
-                                <button class="week-nav-arrow week-nav-prev" id="weekNavPrev" title="Previous week">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="15 18 9 12 15 6"></polyline>
-                                    </svg>
-                                </button>
-                                <div class="week-nav-center">
-                                    <span class="week-type-label" id="weekTypeLabel">Current Week</span>
-                                    <span class="week-date-range" id="weekDateRange">Dec 29 - Jan 4, 2025</span>
-                                    <span class="week-publish-status" id="weekPublishStatus">
-                                        <span class="status-icon">○</span>
-                                        <span class="status-text">No schedule generated</span>
-                                    </span>
+                                <!-- Status Badge Row -->
+                                <div class="toolbar-badge-row" id="toolbarBadgeRow">
+                                    <span class="week-status-badge" id="weekStatusBadge"></span>
                                 </div>
-                                <button class="week-nav-arrow week-nav-next" id="weekNavNext" title="Next week">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <polyline points="9 18 15 12 9 6"></polyline>
-                                    </svg>
-                                </button>
                             </div>
                             
                             <!-- Grid View -->
