@@ -30,7 +30,11 @@ const state = {
     scheduleViewMode: 'timeline', // 'grid', 'timeline', or 'table'
     scheduleColorMode: 'role', // 'role' or 'employee'
     // Week navigation state
-    weekOffset: 0 // 0 = current week, -1 = last week, 1 = next week, etc.
+    weekOffset: 0, // 0 = current week, -1 = last week, 1 = next week, etc.
+    // Publish state tracking per week (keyed by week start date string)
+    publishedWeeks: {}, // { 'YYYY-MM-DD': { published: true/false, editCount: 0 } }
+    currentWeekHasSchedule: false,
+    currentWeekEditCount: 0
 };
 
 // ==================== TIMELINE DRAG STATE ====================
@@ -133,11 +137,126 @@ function navigateWeek(direction) {
  * Update the week navigation bar display
  */
 function updateWeekNavigationBar() {
+    const weekKey = getWeekKey(state.weekOffset);
+    const weekState = state.publishedWeeks[weekKey] || { published: false, hasSchedule: false, editCount: 0 };
+    
+    // Update week type label with status suffix
     if (dom.weekTypeLabel) {
-        dom.weekTypeLabel.textContent = getWeekTypeLabel(state.weekOffset);
+        const baseLabel = getWeekTypeLabel(state.weekOffset);
+        if (weekState.hasSchedule) {
+            const statusSuffix = weekState.published ? ' · PUBLISHED' : ' · DRAFT';
+            dom.weekTypeLabel.textContent = baseLabel + statusSuffix;
+        } else {
+            dom.weekTypeLabel.textContent = baseLabel;
+        }
     }
+    
+    // Update date range
     if (dom.weekDateRange) {
         dom.weekDateRange.textContent = getWeekRangeString(state.weekOffset);
+    }
+    
+    // Update publish status line and bar color
+    updatePublishStatusDisplay(weekState);
+}
+
+/**
+ * Get a unique key for a week based on its Monday date
+ */
+function getWeekKey(offset = 0) {
+    const dates = getWeekDates(offset);
+    const monday = dates[0];
+    return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Update the publish status display (status line and bar color)
+ */
+function updatePublishStatusDisplay(weekState) {
+    const bar = dom.weekNavigationBar;
+    const statusEl = dom.weekPublishStatus;
+    
+    if (!bar || !statusEl) return;
+    
+    let status, icon, text;
+    
+    if (!weekState.hasSchedule) {
+        status = 'none';
+        icon = '○';
+        text = 'No schedule generated';
+    } else if (weekState.published) {
+        status = 'published';
+        icon = '✓';
+        text = 'Published';
+    } else {
+        status = 'draft';
+        icon = '⚠';
+        const editCount = weekState.editCount || 0;
+        if (editCount > 0) {
+            text = `${editCount} edit${editCount !== 1 ? 's' : ''} need to be published`;
+        } else {
+            text = 'Unpublished changes';
+        }
+    }
+    
+    bar.setAttribute('data-publish-status', status);
+    statusEl.innerHTML = `
+        <span class="status-icon">${icon}</span>
+        <span class="status-text">${text}</span>
+    `;
+    
+    // Update publish button state
+    if (dom.publishBtn) {
+        if (weekState.hasSchedule && !weekState.published) {
+            dom.publishBtn.disabled = false;
+            dom.publishBtn.textContent = 'Publish';
+        } else if (weekState.published) {
+            dom.publishBtn.disabled = true;
+            dom.publishBtn.innerHTML = '<svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Published';
+        } else {
+            dom.publishBtn.disabled = true;
+            dom.publishBtn.textContent = 'Publish';
+        }
+    }
+}
+
+/**
+ * Mark a week as having a schedule (draft state)
+ */
+function markWeekAsGenerated(offset = 0, editCount = 1) {
+    const weekKey = getWeekKey(offset);
+    state.publishedWeeks[weekKey] = {
+        hasSchedule: true,
+        published: false,
+        editCount: editCount
+    };
+    updateWeekNavigationBar();
+}
+
+/**
+ * Mark a week as published
+ */
+function markWeekAsPublished(offset = 0) {
+    const weekKey = getWeekKey(offset);
+    if (state.publishedWeeks[weekKey]) {
+        state.publishedWeeks[weekKey].published = true;
+        state.publishedWeeks[weekKey].editCount = 0;
+    }
+    updateWeekNavigationBar();
+}
+
+/**
+ * Increment the edit count for a week (when schedule is modified)
+ */
+function incrementWeekEditCount(offset = 0) {
+    const weekKey = getWeekKey(offset);
+    if (state.publishedWeeks[weekKey] && state.publishedWeeks[weekKey].hasSchedule) {
+        // If it was published, it's now a draft again
+        if (state.publishedWeeks[weekKey].published) {
+            state.publishedWeeks[weekKey].published = false;
+        }
+        state.publishedWeeks[weekKey].editCount = (state.publishedWeeks[weekKey].editCount || 0) + 1;
+        updateWeekNavigationBar();
     }
 }
 
@@ -212,6 +331,8 @@ const dom = {
     weekNavNext: document.getElementById('weekNavNext'),
     weekTypeLabel: document.getElementById('weekTypeLabel'),
     weekDateRange: document.getElementById('weekDateRange'),
+    weekNavigationBar: document.getElementById('weekNavigationBar'),
+    weekPublishStatus: document.getElementById('weekPublishStatus'),
     scheduleGrid: document.getElementById('scheduleGrid'),
     scheduleBody: document.getElementById('scheduleBody'),
     
@@ -1363,6 +1484,9 @@ async function generateSchedule() {
                 buildLookups();
             }
             
+            // Mark week as having a generated schedule (draft state)
+            markWeekAsGenerated(state.weekOffset, 1);
+            
             // Render based on current view mode
             if (state.scheduleViewMode === 'table') {
                 renderSimpleTableView(data.schedule);
@@ -1423,6 +1547,10 @@ async function findAlternative() {
         
         if (data.success) {
             state.currentSchedule = data.schedule;
+            
+            // Mark week as having a generated schedule (draft state)
+            markWeekAsGenerated(state.weekOffset, 1);
+            
             // Render based on current view mode
             if (state.scheduleViewMode === 'table') {
                 renderSimpleTableView(data.schedule);
@@ -1482,6 +1610,9 @@ function publishSchedule() {
     
     // Get the week range for the confirmation message
     const weekRange = getWeekRangeString(state.weekOffset);
+    
+    // Mark the week as published
+    markWeekAsPublished(state.weekOffset);
     
     // Show success toast with week info
     showToast(`Schedule published for ${weekRange}`, 'success');
@@ -2124,7 +2255,29 @@ function renderSimpleTableView(schedule) {
         }
     }
     
-    // Render gap row first if there are gaps
+    // Check if we have any schedule data (slot assignments with actual entries)
+    const hasScheduleData = Object.keys(slotAssignments).length > 0 && 
+        Object.values(slotAssignments).some(arr => arr && arr.length > 0);
+    
+    if (!hasScheduleData) {
+        // No schedule generated yet - show a single blank placeholder row
+        const row = document.createElement('tr');
+        row.className = 'placeholder-row';
+        
+        let html = `<td class="name-col"><div class="emp-name placeholder-text"><span>No schedule generated</span></div></td>`;
+        
+        for (let day = 0; day < 7; day++) {
+            const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
+            html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
+        }
+        
+        html += `<td class="total-hours">—</td>`;
+        row.innerHTML = html;
+        tbody.appendChild(row);
+        return; // Don't render anything else
+    }
+    
+    // Render gap row first if there are gaps (only when schedule exists)
     if (gaps.totalHours > 0) {
         const row = document.createElement('tr');
         row.className = 'gap-row';
@@ -2311,6 +2464,9 @@ function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toSt
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
     
+    // Mark as having unpublished edits
+    incrementWeekEditCount(state.weekOffset);
+    
     const emp = employeeMap[empId];
     const dayName = state.days[toDayIdx];
     showToast(`${emp?.name}'s shift moved to ${dayName} ${formatHour(toStartHour)}-${formatHour(toEndHour)}`, 'success');
@@ -2393,6 +2549,9 @@ function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) 
     
     // Re-render timeline
     renderTimelineView(state.currentSchedule);
+    
+    // Mark as having unpublished edits
+    incrementWeekEditCount(state.weekOffset);
     
     const emp = employeeMap[empId];
     showToast(`${emp?.name}'s shift adjusted to ${formatHourMinute(preciseStart)}-${formatHourMinute(preciseEnd)}`, 'success');

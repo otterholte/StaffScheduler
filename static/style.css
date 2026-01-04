@@ -1670,7 +1670,99 @@ body[data-theme="light"] .advanced-panel {
     letter-spacing: 0.02em;
 }
 
-/* Light theme */
+/* Week Publish Status Line */
+.week-publish-status {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-top: 0.25rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.week-publish-status .status-icon {
+    font-size: 0.65rem;
+}
+
+.week-publish-status .status-text {
+    letter-spacing: 0.01em;
+}
+
+/* Draft / Unpublished State (Amber) */
+.week-navigation-bar[data-publish-status="draft"] {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(251, 191, 36, 0.08) 100%);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.week-navigation-bar[data-publish-status="draft"] .week-nav-arrow {
+    background: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.35);
+    color: #d97706;
+}
+
+.week-navigation-bar[data-publish-status="draft"] .week-nav-arrow:hover {
+    background: #d97706;
+    color: white;
+}
+
+.week-navigation-bar[data-publish-status="draft"] .week-type-label {
+    color: #d97706;
+}
+
+.week-navigation-bar[data-publish-status="draft"] .week-publish-status {
+    background: rgba(245, 158, 11, 0.15);
+    color: #b45309;
+}
+
+/* Published State (Green) */
+.week-navigation-bar[data-publish-status="published"] {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(74, 222, 128, 0.08) 100%);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+
+.week-navigation-bar[data-publish-status="published"] .week-nav-arrow {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #16a34a;
+}
+
+.week-navigation-bar[data-publish-status="published"] .week-nav-arrow:hover {
+    background: #16a34a;
+    color: white;
+}
+
+.week-navigation-bar[data-publish-status="published"] .week-type-label {
+    color: #16a34a;
+}
+
+.week-navigation-bar[data-publish-status="published"] .week-publish-status {
+    background: rgba(34, 197, 94, 0.15);
+    color: #15803d;
+}
+
+/* No Schedule State (Neutral/Purple - default) */
+.week-navigation-bar[data-publish-status="none"] {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.08) 100%);
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
+.week-navigation-bar[data-publish-status="none"] .week-publish-status {
+    background: rgba(99, 102, 241, 0.1);
+    color: var(--text-muted);
+}
+
+/* Light theme adjustments */
+body[data-theme="light"] .week-navigation-bar[data-publish-status="draft"] {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(251, 191, 36, 0.05) 100%);
+}
+
+body[data-theme="light"] .week-navigation-bar[data-publish-status="published"] {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(74, 222, 128, 0.05) 100%);
+}
+
 body[data-theme="light"] .week-navigation-bar {
     background: linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
     border-color: rgba(99, 102, 241, 0.15);
@@ -2341,6 +2433,26 @@ body[data-theme="light"] .simple-schedule-table td.day-odd {
 .simple-schedule-table .gap-row .shift-times .shift-block {
     background: rgba(239, 68, 68, 0.15);
     border: 1px dashed var(--danger);
+}
+
+/* Placeholder row (no schedule generated yet) */
+.simple-schedule-table .placeholder-row {
+    background: transparent;
+}
+
+.simple-schedule-table .placeholder-row td {
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.simple-schedule-table .placeholder-row .placeholder-text {
+    color: var(--text-muted);
+    font-style: italic;
+    font-weight: 400;
+}
+
+.simple-schedule-table .placeholder-row .no-shift {
+    color: var(--text-muted);
+    opacity: 0.5;
 }
 
 /* ---------- Schedule Grid ---------- */
