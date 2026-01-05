@@ -2,6 +2,7 @@
 Magic Staff Scheduler - Professional Flask Application
 
 A comprehensive staff scheduling solution with:
+- User authentication with PostgreSQL database
 - Multiple business scenarios
 - Role-based scheduling
 - Full CRUD operations for employees and settings
@@ -9,6 +10,7 @@ A comprehensive staff scheduling solution with:
 """
 
 from flask import Flask, render_template, jsonify, request, redirect, url_for
+from flask_login import LoginManager, login_required, current_user
 import uuid
 import json
 import os
@@ -24,8 +26,40 @@ from scheduler.models import (
     PeakPeriod, RoleCoverageConfig, CoverageRequirement,
     CoverageMode, ShiftTemplate, ShiftRoleRequirement
 )
+from config import get_config
+from models import db, bcrypt, User, init_db
+from auth import auth_bp
 
-app = Flask(__name__)
+
+def create_app():
+    """Create and configure the Flask application."""
+    app = Flask(__name__)
+    
+    # Load configuration
+    config_class = get_config()
+    app.config.from_object(config_class)
+    
+    # Initialize database
+    init_db(app)
+    
+    # Initialize Flask-Login
+    login_manager = LoginManager()
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+    login_manager.login_message = 'Please log in to access this page.'
+    login_manager.login_message_category = 'info'
+    
+    @login_manager.user_loader
+    def load_user(user_id):
+        return User.query.get(int(user_id))
+    
+    # Register authentication blueprint with /auth prefix
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+    
+    return app
+
+
+app = create_app()
 
 
 # ==================== URL SLUG HELPERS ====================
@@ -177,13 +211,16 @@ def get_solver(policies=None):
 
 @app.route('/')
 def index():
-    """Redirect to the current business schedule page."""
-    business = get_current_business()
-    location_slug = get_business_slug(business.id)
-    return redirect(f'/{location_slug}/schedule')
+    """Redirect to login if not authenticated, otherwise to dashboard."""
+    if current_user.is_authenticated:
+        business = get_current_business()
+        location_slug = get_business_slug(business.id)
+        return redirect(f'/{location_slug}/schedule')
+    return redirect(url_for('auth.login'))
 
 
 @app.route('/<location_slug>/<page_slug>')
+@login_required
 def app_page(location_slug, page_slug):
     """Render the main app with specified location and page."""
     global _current_business, _solver
@@ -260,20 +297,30 @@ def app_page(location_slug, page_slug):
         initial_page_slug=page_slug,
         location_slug=location_slug,
         page_slugs=PAGE_SLUGS,
-        tab_to_slug=TAB_TO_SLUG
+        tab_to_slug=TAB_TO_SLUG,
+        user=current_user
     )
 
 
 @app.route('/<location_slug>')
+@login_required
 def app_page_default(location_slug):
     """Redirect to schedule page for a location."""
+    # Check if it's a valid business
+    business = get_business_by_slug(location_slug)
+    if not business:
+        # Not a valid business, redirect to default
+        default_business = get_current_business()
+        location_slug = get_business_slug(default_business.id)
+    
     return redirect(f'/{location_slug}/schedule')
 
 
 @app.route('/settings')
+@login_required
 def settings_page():
     """Render the settings page with account management and theme toggle."""
-    return render_template('settings.html')
+    return render_template('settings.html', user=current_user)
 
 
 # ==================== MARKETING PAGES ====================
@@ -305,6 +352,7 @@ def contact_page():
 # ==================== BUSINESS API ====================
 
 @app.route('/api/businesses', methods=['GET'])
+@login_required
 def list_businesses():
     """List all available business scenarios."""
     businesses = get_all_businesses()
@@ -349,6 +397,7 @@ def list_businesses():
 
 
 @app.route('/api/business/<business_id>', methods=['POST'])
+@login_required
 def switch_business(business_id):
     """Switch to a different business scenario."""
     global _current_business, _solver
@@ -391,6 +440,7 @@ def switch_business(business_id):
 
 
 @app.route('/api/business/save', methods=['POST'])
+@login_required
 def save_business():
     """Save or update business metadata (name, emoji, color)."""
     global _custom_businesses
@@ -438,6 +488,7 @@ def save_business():
 
 
 @app.route('/api/business/<business_id>', methods=['DELETE'])
+@login_required
 def delete_business(business_id):
     """Delete custom business metadata (reverts to default)."""
     global _custom_businesses
@@ -459,6 +510,7 @@ def delete_business(business_id):
 # ==================== SCHEDULE API ====================
 
 @app.route('/api/generate', methods=['POST'])
+@login_required
 def generate_schedule():
     """Generate a new optimal schedule."""
     # Get policies from request if provided
@@ -488,6 +540,7 @@ def generate_schedule():
 
 
 @app.route('/api/alternative', methods=['POST'])
+@login_required
 def find_alternative():
     """Find an alternative schedule different from previous ones."""
     # Get policies from request if provided
@@ -514,6 +567,7 @@ def find_alternative():
 
 
 @app.route('/api/reset', methods=['POST'])
+@login_required
 def reset_solver():
     """Reset the solver to start fresh."""
     global _solver
@@ -530,6 +584,7 @@ def reset_solver():
 # ==================== EMPLOYEE API ====================
 
 @app.route('/api/employees', methods=['GET'])
+@login_required
 def get_employees():
     """Get the list of employees for the current business."""
     business = get_current_business()
@@ -544,6 +599,7 @@ def get_employees():
 
 
 @app.route('/api/employees', methods=['POST'])
+@login_required
 def add_employee():
     """Add a new employee to the current business."""
     global _solver
@@ -585,6 +641,7 @@ def add_employee():
 
 
 @app.route('/api/employees/<emp_id>', methods=['PUT'])
+@login_required
 def update_employee(emp_id):
     """Update an existing employee."""
     global _solver
@@ -636,6 +693,7 @@ def update_employee(emp_id):
 
 
 @app.route('/api/employees/<emp_id>', methods=['DELETE'])
+@login_required
 def delete_employee(emp_id):
     """Delete an employee from the current business."""
     global _solver
@@ -663,6 +721,7 @@ def delete_employee(emp_id):
 
 
 @app.route('/api/employees/<emp_id>/availability', methods=['PUT'])
+@login_required
 def update_availability(emp_id):
     """Update an employee's availability."""
     global _solver
@@ -707,6 +766,7 @@ def update_availability(emp_id):
 
 
 @app.route('/api/employees/<emp_id>/availability-cell', methods=['PUT'])
+@login_required
 def update_availability_cell(emp_id):
     """Update a single availability cell for an employee."""
     global _solver
@@ -757,6 +817,7 @@ def update_availability_cell(emp_id):
 # ==================== SETTINGS API ====================
 
 @app.route('/api/settings', methods=['GET'])
+@login_required
 def get_settings():
     """Get current business settings."""
     business = get_current_business()
@@ -776,6 +837,7 @@ def get_settings():
 
 
 @app.route('/api/settings', methods=['PUT'])
+@login_required
 def update_settings():
     """Update business settings."""
     global _solver
@@ -802,6 +864,7 @@ def update_settings():
 
 
 @app.route('/api/settings/roles', methods=['GET'])
+@login_required
 def get_roles():
     """Get all roles for current business."""
     business = get_current_business()
@@ -813,6 +876,7 @@ def get_roles():
 
 
 @app.route('/api/settings/roles', methods=['POST'])
+@login_required
 def add_role():
     """Add a new role to the current business."""
     global _solver
@@ -839,6 +903,7 @@ def add_role():
 
 
 @app.route('/api/settings/roles/<role_id>', methods=['PUT'])
+@login_required
 def update_role(role_id):
     """Update an existing role."""
     global _solver
@@ -874,6 +939,7 @@ def update_role(role_id):
 
 
 @app.route('/api/settings/roles/<role_id>', methods=['DELETE'])
+@login_required
 def delete_role(role_id):
     """Delete a role from the current business."""
     global _solver
@@ -908,6 +974,7 @@ def delete_role(role_id):
 # ==================== STATS API ====================
 
 @app.route('/api/stats')
+@login_required
 def get_stats():
     """Get comprehensive scheduling statistics."""
     business = get_current_business()
@@ -952,6 +1019,7 @@ def get_stats():
 
 
 @app.route('/api/coverage')
+@login_required
 def get_coverage_requirements():
     """Get coverage requirements for the current business."""
     business = get_current_business()
@@ -982,6 +1050,7 @@ def get_coverage_requirements():
 # ==================== COVERAGE CONFIG API ====================
 
 @app.route('/api/settings/peak-periods', methods=['GET'])
+@login_required
 def get_peak_periods():
     """Get peak periods for the current business."""
     business = get_current_business()
@@ -992,6 +1061,7 @@ def get_peak_periods():
 
 
 @app.route('/api/settings/peak-periods', methods=['PUT'])
+@login_required
 def update_peak_periods():
     """Update peak periods for the current business."""
     global _solver
@@ -1024,6 +1094,7 @@ def update_peak_periods():
 
 
 @app.route('/api/settings/role-coverage', methods=['GET'])
+@login_required
 def get_role_coverage():
     """Get role coverage configurations."""
     business = get_current_business()
@@ -1035,6 +1106,7 @@ def get_role_coverage():
 
 
 @app.route('/api/settings/role-coverage', methods=['PUT'])
+@login_required
 def update_role_coverage():
     """Update role coverage configurations."""
     global _solver
@@ -1069,6 +1141,7 @@ def update_role_coverage():
 
 
 @app.route('/api/settings/role-coverage/<role_id>', methods=['PUT'])
+@login_required
 def update_single_role_coverage(role_id):
     """Update coverage configuration for a single role."""
     global _solver
@@ -1114,6 +1187,7 @@ def update_single_role_coverage(role_id):
 # ==================== COVERAGE MODE & SHIFTS API ====================
 
 @app.route('/api/settings/coverage-mode', methods=['GET'])
+@login_required
 def get_coverage_mode():
     """Get the current coverage mode and setup status."""
     business = get_current_business()
@@ -1127,6 +1201,7 @@ def get_coverage_mode():
 
 
 @app.route('/api/settings/coverage-mode', methods=['PUT'])
+@login_required
 def set_coverage_mode():
     """Switch coverage mode between 'shifts' and 'detailed'."""
     global _solver
@@ -1164,6 +1239,7 @@ def set_coverage_mode():
 
 
 @app.route('/api/settings/shifts', methods=['GET'])
+@login_required
 def get_shift_templates():
     """Get all shift templates for the current business."""
     business = get_current_business()
@@ -1175,6 +1251,7 @@ def get_shift_templates():
 
 
 @app.route('/api/settings/shifts', methods=['POST'])
+@login_required
 def add_shift_template():
     """Add a new shift template."""
     global _solver
@@ -1221,6 +1298,7 @@ def add_shift_template():
 
 
 @app.route('/api/settings/shifts/<shift_id>', methods=['PUT'])
+@login_required
 def update_shift_template(shift_id):
     """Update an existing shift template."""
     global _solver
@@ -1276,6 +1354,7 @@ def update_shift_template(shift_id):
 
 
 @app.route('/api/settings/shifts/<shift_id>', methods=['DELETE'])
+@login_required
 def delete_shift_template(shift_id):
     """Delete a shift template."""
     global _solver
@@ -1307,8 +1386,6 @@ def delete_shift_template(shift_id):
 
 
 if __name__ == '__main__':
-    import os
-    
     # Production settings from environment variables
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     port = int(os.environ.get('PORT', 5000))

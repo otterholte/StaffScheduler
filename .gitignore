@@ -42,4 +42,8 @@ Thumbs.db
 .env
 .env.local
 
+# App data
+instance/
+*.db
+
 
