@@ -528,9 +528,10 @@ function init() {
     renderCoverageUI();
     
     // Add user's business to dropdown if logged in
-    if (state.currentUser) {
-        updateBusinessDropdownWithUserBusiness();
-    }
+        if (state.currentUser) {
+            // No longer needed - backend handles this
+            // updateBusinessDropdownWithUserBusiness();
+        }
     
     // Initialize to the correct tab from URL
     initializeFromUrl();
@@ -1232,7 +1233,8 @@ function setupAccountModal() {
                             window.location.href = '/app';
                         }, 1000);
                     } else {
-                        updateBusinessDropdownWithUserBusiness();
+                    // updateBusinessDropdownWithUserBusiness();
+                    location.reload(); // Refresh to show new business from backend
                     }
                 } else {
                     showToast(data.error || 'Invalid email or password', 'error');
@@ -1297,7 +1299,8 @@ function setupAccountModal() {
                             window.location.href = '/app';
                         }, 1000);
                     } else {
-                        updateBusinessDropdownWithUserBusiness();
+                    // updateBusinessDropdownWithUserBusiness();
+                    location.reload(); // Refresh to show new business from backend
                     }
                 } else {
                     const errorMsg = data.errors ? data.errors.join(' ') : (data.error || 'Registration failed');
@@ -1333,45 +1336,9 @@ function openAccountModal() {
     modal.classList.add('active');
 }
 
+// Function removed - user businesses are now handled by the backend
 function updateBusinessDropdownWithUserBusiness() {
-    if (!state.currentUser?.company_name) return;
-    
-    const dropdown = dom.businessDropdown;
-    if (!dropdown) return;
-    
-    // Check if user business already exists in dropdown
-    const existingUserBusiness = dropdown.querySelector('[data-business-id="user_business"]');
-    if (existingUserBusiness) return; // Already added
-    
-    // Find divider to insert before it
-    const divider = dropdown.querySelector('.dropdown-divider');
-    if (!divider) return;
-    
-    // Create user business option
-    const option = document.createElement('button');
-    option.className = 'business-option user-business';
-    option.dataset.businessId = 'user_business';
-    option.dataset.businessSlug = slugify(state.currentUser.company_name);
-    
-    option.innerHTML = `
-        <div class="option-icon text-icon" style="background: #10b981">
-            ${state.currentUser.company_name.charAt(0).toUpperCase()}
-        </div>
-        <div class="option-details">
-            <span class="option-name">${state.currentUser.company_name}</span>
-            <span class="option-meta">Your Business</span>
-        </div>
-    `;
-    
-    // Insert before divider
-    divider.parentNode.insertBefore(option, divider);
-    
-    // Add click handler (for now, just show a message since user businesses aren't fully implemented)
-    option.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showToast('Custom business scheduling coming soon!', 'info');
-        dom.globalBusinessSelector.classList.remove('open');
-    });
+    return;
 }
 
 // List of sample/built-in business IDs that cannot be deleted
