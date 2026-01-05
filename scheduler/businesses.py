@@ -831,10 +831,102 @@ _business_creators = {
     "warehouse": create_warehouse
 }
 
+# User-created businesses (stored by user_id)
+_user_businesses = {}  # type: Dict[int, str]  # user_id -> business_id
+
+
+def create_user_business(user_id: int, company_name: str, owner_name: str = None) -> BusinessScenario:
+    """Create a new business for a user based on their company name."""
+    import re
+    
+    # Generate a unique business ID
+    slug = re.sub(r'[^a-z0-9]+', '_', company_name.lower()).strip('_')
+    business_id = f"user_{user_id}_{slug}"
+    
+    # Default roles for a new business
+    roles = [
+        Role(id="staff", name="Staff", color="#3b82f6"),  # Blue
+        Role(id="manager", name="Manager", color="#8b5cf6")  # Purple
+    ]
+    
+    # Create the owner as the first employee/manager
+    employees = []
+    if owner_name:
+        owner = Employee(
+            id=f"owner_{user_id}",
+            name=owner_name,
+            classification=EmployeeClassification.FULL_TIME,
+            min_hours=0, max_hours=40,
+            roles=["manager", "staff"],
+            can_supervise=True, needs_supervision=False,
+            overtime_allowed=True, hourly_rate=25.0,
+            color="#8b5cf6"  # Purple
+        )
+        # Make owner available all days
+        for day in range(7):
+            owner.add_availability(day, 9, 17)
+        employees.append(owner)
+    
+    # Basic shift templates
+    shift_templates = [
+        ShiftTemplate(
+            id="morning",
+            name="Morning Shift",
+            start_hour=9,
+            end_hour=13,
+            roles=[
+                ShiftRoleRequirement("staff", 1),
+            ],
+            days=list(range(7)),
+            color="#f59e0b"  # Amber
+        ),
+        ShiftTemplate(
+            id="afternoon",
+            name="Afternoon Shift",
+            start_hour=13,
+            end_hour=17,
+            roles=[
+                ShiftRoleRequirement("staff", 1),
+            ],
+            days=list(range(7)),
+            color="#3b82f6"  # Blue
+        ),
+    ]
+    
+    scenario = BusinessScenario(
+        id=business_id,
+        name=company_name,
+        description=f"{company_name} - Your business",
+        start_hour=9, end_hour=17,
+        days_open=list(range(7)),
+        roles=roles,
+        employees=employees,
+        coverage_requirements=[],
+        peak_periods=[],
+        role_coverage_configs=[],
+        coverage_mode=CoverageMode.SHIFTS,
+        shift_templates=shift_templates,
+        has_completed_setup=False  # New businesses need setup
+    )
+    scenario.coverage_requirements = scenario.generate_coverage_requirements()
+    
+    # Store in cache and user mapping
+    _business_cache[business_id] = scenario
+    _user_businesses[user_id] = business_id
+    
+    return scenario
+
+
+def get_user_business(user_id: int) -> BusinessScenario:
+    """Get the business for a specific user."""
+    if user_id not in _user_businesses:
+        return None
+    return _business_cache.get(_user_businesses[user_id])
+
 
 def get_all_businesses() -> List[BusinessScenario]:
     """Get all available business scenarios (cached)."""
-    # Ensure all businesses are cached
+    # Ensure all built-in businesses are cached
     for business_id in _business_creators:
         if business_id not in _business_cache:
             _business_cache[business_id] = _business_creators[business_id]()
@@ -843,14 +935,16 @@ def get_all_businesses() -> List[BusinessScenario]:
 
 def get_business_by_id(business_id: str) -> BusinessScenario:
     """Get a specific business scenario by ID (cached)."""
-    if business_id not in _business_creators:
-        raise ValueError(f"Unknown business ID: {business_id}")
+    # Check cache first (includes user businesses)
+    if business_id in _business_cache:
+        return _business_cache[business_id]
     
-    # Return cached instance or create and cache new one
-    if business_id not in _business_cache:
+    # Check built-in creators
+    if business_id in _business_creators:
         _business_cache[business_id] = _business_creators[business_id]()
+        return _business_cache[business_id]
     
-    return _business_cache[business_id]
+    raise ValueError(f"Unknown business ID: {business_id}")
 
 
 DAYS_OF_WEEK = DAYS

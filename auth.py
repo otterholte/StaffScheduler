@@ -4,6 +4,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
 from models import db, User
+from scheduler import create_user_business, get_user_business
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -143,6 +144,19 @@ def register():
         db.session.add(user)
         db.session.commit()
         
+        # If user provided a company name, create their business
+        redirect_url = '/sunrise-coffee/schedule'
+        if company_name:
+            owner_name = f"{first_name} {last_name}".strip() if first_name or last_name else username
+            business = create_user_business(user.id, company_name, owner_name)
+            # Generate the slug for their business (same logic as app.py slugify)
+            import re
+            slug = company_name.lower().strip()
+            slug = re.sub(r'[^\w\s-]', '', slug)
+            slug = re.sub(r'[\s_]+', '-', slug)
+            slug = re.sub(r'-+', '-', slug)
+            redirect_url = f'/{slug}/schedule'
+        
         # Log the user in immediately
         login_user(user)
         user.last_login = datetime.utcnow()
@@ -153,11 +167,11 @@ def register():
                 'success': True,
                 'user': user.to_dict(),
                 'message': 'Account created successfully!',
-                'redirect': '/sunrise-coffee/schedule'
+                'redirect': redirect_url
             })
         
         flash('Account created successfully! Welcome to Staff Scheduler Pro.', 'success')
-        return redirect('/sunrise-coffee/schedule')
+        return redirect(redirect_url)
     
     return render_template('register.html')
 
@@ -167,8 +181,14 @@ def register():
 def logout():
     """Log out the current user."""
     logout_user()
+    # Get the referrer to determine where to redirect
+    referrer = request.referrer or ''
+    # If logging out from settings page, stay on settings
+    if '/settings' in referrer:
+        flash('You have been logged out.', 'info')
+        return redirect('/settings')
     flash('You have been logged out.', 'info')
-    return redirect(url_for('auth.login'))
+    return redirect('/settings')
 
 
 @auth_bp.route('/api/user')

@@ -20,6 +20,8 @@ from .solver import AdvancedScheduleSolver, ScheduleSolver, format_schedule
 from .businesses import (
     get_all_businesses,
     get_business_by_id,
+    create_user_business,
+    get_user_business,
     DAYS_OF_WEEK
 )
 from .sample_data import (
