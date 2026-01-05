@@ -192,43 +192,60 @@ body {
 }
 
 /* Auth page close button - fixed top-right corner of PAGE */
-.auth-close-btn {
+/* Using very specific selectors and !important to override any other styles */
+body > a.auth-close-btn,
+.auth-close-btn,
+a.auth-close-btn {
     position: fixed !important;
-    top: 24px !important;
-    right: 24px !important;
-    left: auto !important;
-    bottom: auto !important;
-    width: 44px;
-    height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 50%;
+    top: 20px !important;
+    right: 20px !important;
+    left: unset !important;
+    bottom: unset !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 48px !important;
+    height: 48px !important;
+    min-width: 48px !important;
+    min-height: 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50% !important;
     color: #ffffff !important;
-    text-decoration: none;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    z-index: 9999 !important;
+    text-decoration: none !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
+    z-index: 99999 !important;
+    transform: none !important;
 }
 
-.auth-close-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+body > a.auth-close-btn:hover,
+.auth-close-btn:hover,
+a.auth-close-btn:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
     color: #ffffff !important;
-    transform: scale(1.1);
-    border-color: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
-.auth-close-btn:active {
-    transform: scale(0.95);
+body > a.auth-close-btn:active,
+.auth-close-btn:active,
+a.auth-close-btn:active {
+    transform: scale(0.95) !important;
 }
 
-.auth-close-btn svg {
-    width: 24px;
-    height: 24px;
-    flex-shrink: 0;
+body > a.auth-close-btn svg,
+.auth-close-btn svg,
+a.auth-close-btn svg {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    flex-shrink: 0 !important;
     stroke: #ffffff !important;
+    color: #ffffff !important;
 }
 
 .auth-card-wide {
