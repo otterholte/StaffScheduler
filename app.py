@@ -77,11 +77,15 @@ TAB_TO_SLUG = {v: k for k, v in PAGE_SLUGS.items()}
 
 
 @app.route('/settings')
-@login_required
 def settings_page():
-    """Render the settings page with account management and theme toggle."""
+    """Render the settings page with account management and theme toggle.
+    
+    Accessible to all users - shows login button for unauthenticated users,
+    and account management for authenticated users.
+    """
     try:
-        return render_template('settings.html', user=current_user)
+        user = current_user if current_user.is_authenticated else None
+        return render_template('settings.html', user=user)
     except Exception as e:
         import traceback
         print("Error rendering settings.html:", e)
@@ -305,7 +309,6 @@ def demo_page(page_slug='schedule'):
 
 
 @app.route('/<location_slug>/<page_slug>')
-@login_required
 def app_page(location_slug, page_slug):
     """Render the main app with specified location and page."""
     global _current_business, _solver
@@ -367,6 +370,9 @@ def app_page(location_slug, page_slug):
     # Get the internal tab ID for the page
     initial_tab = PAGE_SLUGS.get(page_slug, 'schedule')
     
+    # Pass user if authenticated, None otherwise
+    user = current_user if current_user.is_authenticated else None
+    
     return render_template(
         'index.html',
         business=business.to_dict(),
@@ -383,13 +389,12 @@ def app_page(location_slug, page_slug):
         location_slug=location_slug,
         page_slugs=PAGE_SLUGS,
         tab_to_slug=TAB_TO_SLUG,
-        user=current_user,
+        user=user,
         is_demo=False
     )
 
 
 @app.route('/<location_slug>')
-@login_required
 def app_page_default(location_slug):
     """Redirect to schedule page for a location."""
     # Check if it's a valid business
