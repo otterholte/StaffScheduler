@@ -193,12 +193,16 @@ body {
 }
 
 .close-btn {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 32px;
-    height: 32px;
-    display: flex;
+    position: absolute !important;
+    top: 12px !important;
+    right: 12px !important;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px;
+    max-width: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    display: flex !important;
     align-items: center;
     justify-content: center;
     background: rgba(255, 255, 255, 0.05);
@@ -208,6 +212,8 @@ body {
     text-decoration: none;
     transition: all 0.2s ease;
     cursor: pointer;
+    z-index: 10;
+    overflow: hidden;
 }
 
 .close-btn:hover {
@@ -217,8 +223,13 @@ body {
 }
 
 .close-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px;
+    max-width: 16px;
+    min-height: 16px;
+    max-height: 16px;
+    flex-shrink: 0;
 }
 
 .auth-card-wide {

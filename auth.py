@@ -19,16 +19,21 @@ def login():
         # Handle both form and JSON submissions
         if request.is_json:
             data = request.get_json()
-            email = data.get('email', '').lower().strip()
+            login_id = data.get('email', '').strip()  # Can be email or username
             password = data.get('password', '')
             remember = data.get('remember', False)
         else:
-            email = request.form.get('email', '').lower().strip()
+            login_id = request.form.get('email', '').strip()  # Can be email or username
             password = request.form.get('password', '')
             remember = request.form.get('remember', False)
         
-        # Find user by email
-        user = User.query.filter_by(email=email).first()
+        # Find user by email or username
+        # First try email (case-insensitive)
+        user = User.query.filter_by(email=login_id.lower()).first()
+        
+        # If not found by email, try username (case-insensitive)
+        if not user:
+            user = User.query.filter(User.username.ilike(login_id)).first()
         
         if user and user.check_password(password):
             if not user.is_active:
@@ -54,8 +59,8 @@ def login():
             return redirect(next_page if next_page else url_for('index'))
         else:
             if request.is_json:
-                return jsonify({'success': False, 'error': 'Invalid email or password.'}), 401
-            flash('Invalid email or password.', 'error')
+                return jsonify({'success': False, 'error': 'Invalid username/email or password.'}), 401
+            flash('Invalid username/email or password.', 'error')
     
     return render_template('login.html')
 

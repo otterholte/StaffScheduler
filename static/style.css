@@ -7943,9 +7943,10 @@ body[data-theme="light"] .footer-bottom {
 
 .login-prompt p {
     color: var(--text-secondary);
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
     font-size: 0.95rem;
     line-height: 1.5;
+    padding-bottom: 0.5rem;
 }
 
 .login-prompt .btn-primary {
