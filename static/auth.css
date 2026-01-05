@@ -210,24 +210,25 @@ a.auth-close-btn {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    background: rgba(255, 255, 255, 0.1) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
     border-radius: 50% !important;
-    color: #ffffff !important;
+    color: rgba(255, 255, 255, 0.7) !important;
     text-decoration: none !important;
     transition: all 0.2s ease !important;
     cursor: pointer !important;
-    z-index: 99999 !important;
+    z-index: 999999 !important;
     transform: none !important;
+    pointer-events: auto !important;
 }
 
 body > a.auth-close-btn:hover,
 .auth-close-btn:hover,
 a.auth-close-btn:hover {
-    background: rgba(255, 255, 255, 0.2) !important;
-    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.15) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
     transform: scale(1.05) !important;
-    border-color: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
 }
 
 body > a.auth-close-btn:active,
@@ -244,8 +245,15 @@ a.auth-close-btn svg {
     min-width: 28px !important;
     min-height: 28px !important;
     flex-shrink: 0 !important;
-    stroke: #ffffff !important;
-    color: #ffffff !important;
+    stroke: rgba(255, 255, 255, 0.7) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+    pointer-events: none !important;
+}
+
+body > a.auth-close-btn:hover svg,
+.auth-close-btn:hover svg,
+a.auth-close-btn:hover svg {
+    stroke: rgba(255, 255, 255, 0.9) !important;
 }
 
 .auth-card-wide {
