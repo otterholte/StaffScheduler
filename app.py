@@ -76,6 +76,19 @@ PAGE_SLUGS = {
 TAB_TO_SLUG = {v: k for k, v in PAGE_SLUGS.items()}
 
 
+@app.route('/settings')
+@login_required
+def settings_page():
+    """Render the settings page with account management and theme toggle."""
+    try:
+        return render_template('settings.html', user=current_user)
+    except Exception as e:
+        import traceback
+        print("Error rendering settings.html:", e)
+        traceback.print_exc()
+        return f"Error rendering settings: {e}", 500
+
+
 def slugify(text):
     """Convert text to URL-friendly slug."""
     text = text.lower().strip()
@@ -210,13 +223,85 @@ def get_solver(policies=None):
 # ==================== PAGE ROUTES ====================
 
 @app.route('/')
-def index():
-    """Redirect to login if not authenticated, otherwise to dashboard."""
+def landing():
+    """Show the features/landing page."""
+    return render_template('features.html', user=current_user)
+
+
+@app.route('/app')
+def app_redirect():
+    """Redirect to the main app - authenticated users go to their dashboard, others to demo."""
     if current_user.is_authenticated:
         business = get_current_business()
         location_slug = get_business_slug(business.id)
         return redirect(f'/{location_slug}/schedule')
-    return redirect(url_for('auth.login'))
+    return redirect('/demo/schedule')
+
+
+@app.route('/demo')
+@app.route('/demo/<page_slug>')
+def demo_page(page_slug='schedule'):
+    """Demo mode - allows non-authenticated users to explore the app."""
+    # If user is authenticated, redirect to their actual dashboard
+    if current_user.is_authenticated:
+        business = get_current_business()
+        location_slug = get_business_slug(business.id)
+        return redirect(f'/{location_slug}/{page_slug}')
+    
+    # Validate page slug
+    if page_slug not in PAGE_SLUGS:
+        return redirect('/demo/schedule')
+    
+    # Use the coffee shop as the demo business
+    demo_business = businesses.get('coffee_shop')
+    if not demo_business:
+        demo_business = next(iter(businesses.values()))
+    
+    # Build business list for demo
+    businesses_data = []
+    business_meta = {
+        'coffee_shop': {'emoji': '☕', 'color': '#3b82f6'},
+        'retail_store': {'emoji': '👗', 'color': '#f59e0b'},
+        'restaurant': {'emoji': '🍽️', 'color': '#ef4444'},
+        'call_center': {'emoji': '💻', 'color': '#4b5563'},
+        'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
+    }
+    
+    for b in businesses.values():
+        meta = business_meta.get(b.id, {'emoji': '🏢', 'color': '#6366f1'})
+        businesses_data.append({
+            "id": b.id,
+            "name": b.name,
+            "slug": get_business_slug(b.id),
+            "description": b.description,
+            "total_employees": len(b.employees),
+            "total_roles": len(b.roles),
+            "emoji": meta['emoji'],
+            "color": meta['color']
+        })
+    
+    initial_tab = PAGE_SLUGS.get(page_slug, 'schedule')
+    demo_slug = get_business_slug(demo_business.id)
+    
+    return render_template(
+        'index.html',
+        business=demo_business.to_dict(),
+        businesses=businesses_data,
+        employees=[emp.to_dict() for emp in demo_business.employees],
+        roles=[r.to_dict() for r in demo_business.roles],
+        days=DAYS_OF_WEEK,
+        days_open=demo_business.days_open,
+        hours=list(demo_business.get_operating_hours()),
+        start_hour=demo_business.start_hour,
+        end_hour=demo_business.end_hour,
+        initial_tab=initial_tab,
+        initial_page_slug=page_slug,
+        location_slug=demo_slug,
+        page_slugs=PAGE_SLUGS,
+        tab_to_slug=TAB_TO_SLUG,
+        user=None,  # No user in demo mode
+        is_demo=True  # Flag for demo mode
+    )
 
 
 @app.route('/<location_slug>/<page_slug>')
@@ -298,7 +383,8 @@ def app_page(location_slug, page_slug):
         location_slug=location_slug,
         page_slugs=PAGE_SLUGS,
         tab_to_slug=TAB_TO_SLUG,
-        user=current_user
+        user=current_user,
+        is_demo=False
     )
 
 
@@ -316,37 +402,30 @@ def app_page_default(location_slug):
     return redirect(f'/{location_slug}/schedule')
 
 
-@app.route('/settings')
-@login_required
-def settings_page():
-    """Render the settings page with account management and theme toggle."""
-    return render_template('settings.html', user=current_user)
-
-
 # ==================== MARKETING PAGES ====================
 
 @app.route('/features')
 def features_page():
-    """Render the features page."""
-    return render_template('features.html')
+    """Redirect to landing page (features is now at /)."""
+    return redirect('/')
 
 
 @app.route('/pricing')
 def pricing_page():
     """Render the pricing page."""
-    return render_template('pricing.html')
+    return render_template('pricing.html', user=current_user)
 
 
 @app.route('/support')
 def support_page():
     """Render the support page."""
-    return render_template('support.html')
+    return render_template('support.html', user=current_user)
 
 
 @app.route('/contact')
 def contact_page():
     """Render the contact page."""
-    return render_template('contact.html')
+    return render_template('contact.html', user=current_user)
 
 
 # ==================== BUSINESS API ====================

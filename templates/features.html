@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Features - Staff Scheduler Pro</title>
+    <title>Staff Scheduler Pro - Intelligent Staff Scheduling</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='marketing.css') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,13 +23,17 @@
                 <span>Staff Scheduler</span>
             </a>
             <div class="nav-links">
-                <a href="/features" class="nav-link active">Features</a>
+                <a href="/" class="nav-link active">Features</a>
                 <a href="/pricing" class="nav-link">Pricing</a>
                 <a href="/support" class="nav-link">Support</a>
                 <a href="/contact" class="nav-link">Contact</a>
             </div>
             <div class="nav-actions">
-                <a href="/" class="btn-secondary">Open App</a>
+                {% if user and user.is_authenticated %}
+                <a href="/app" class="btn-secondary">Open App</a>
+                {% else %}
+                <a href="/app" class="btn-secondary">Try Demo</a>
+                {% endif %}
             </div>
         </div>
     </nav>

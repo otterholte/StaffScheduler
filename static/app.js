@@ -64,6 +64,8 @@ const state = {
     editingEmployee: null,
     editingAvailability: null,
     theme: localStorage.getItem('theme') || 'dark', // Default to dark mode
+    currentUser: INITIAL_DATA.user || null, // Current logged-in user
+    isDemo: INITIAL_DATA.isDemo || false, // Demo mode flag
     peakPeriods: INITIAL_DATA.business.peak_periods || [],
     roleCoverageConfigs: INITIAL_DATA.business.role_coverage_configs || [],
     // Coverage mode state
@@ -486,6 +488,7 @@ const dom = {
     shiftEditModal: document.getElementById('shiftEditModal'),
     timelineAddShiftModal: document.getElementById('timelineAddShiftModal'),
     businessModal: document.getElementById('businessModal'),
+    accountModal: document.getElementById('accountModal'),
     
     // Loading
     loadingOverlay: document.getElementById('loadingOverlay'),
@@ -513,6 +516,7 @@ function init() {
     setupSettingsTab();
     setupCoverageMode();
     setupModals();
+    setupAccountModal();
     setupKeyboardShortcuts();
     setupAdvancedTab();
     initTimelineAddShiftModal();
@@ -522,6 +526,11 @@ function init() {
     renderEmployeesGrid();
     renderRolesList();
     renderCoverageUI();
+    
+    // Add user's business to dropdown if logged in
+    if (state.currentUser) {
+        updateBusinessDropdownWithUserBusiness();
+    }
     
     // Initialize to the correct tab from URL
     initializeFromUrl();
@@ -1137,6 +1146,229 @@ function setupBusinessModal() {
     // Close on backdrop click
     modal.querySelector('.modal-backdrop')?.addEventListener('click', () => {
         modal.classList.remove('active');
+    });
+}
+
+// ==================== ACCOUNT/LOGIN MODAL ====================
+function setupAccountModal() {
+    const modal = dom.accountModal;
+    if (!modal) return;
+    
+    const settingsBtn = dom.settingsBtn;
+    const authTabs = modal.querySelectorAll('.auth-tab');
+    const loginForm = document.getElementById('accountLoginForm');
+    const signupForm = document.getElementById('accountSignupForm');
+    
+    // Demo banner sign-in link
+    const demoBannerSignIn = document.getElementById('demoBannerSignIn');
+    if (demoBannerSignIn) {
+        demoBannerSignIn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openAccountModal();
+        });
+    }
+    
+    // Settings button click - open modal if not logged in or in demo mode, navigate to settings page if logged in
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (state.currentUser && !state.isDemo) {
+                // User is logged in and not in demo mode - go to full settings page
+                window.location.href = '/settings';
+            } else {
+                // User is not logged in or in demo mode - show login modal
+                openAccountModal();
+            }
+        });
+    }
+    
+    // Auth tab switching
+    authTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            authTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            const tabName = tab.dataset.tab;
+            if (tabName === 'login') {
+                loginForm.classList.add('active');
+                signupForm.classList.remove('active');
+            } else {
+                loginForm.classList.remove('active');
+                signupForm.classList.add('active');
+            }
+        });
+    });
+    
+    // Login form submission
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('accountLoginEmail').value.trim();
+            const password = document.getElementById('accountLoginPassword').value;
+            
+            const btn = loginForm.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.classList.add('loading');
+            
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    state.currentUser = data.user;
+                    showToast(`Welcome back, ${data.user.username}!`, 'success');
+                    modal.classList.remove('active');
+                    loginForm.reset();
+                    
+                    // If in demo mode, redirect to the authenticated app
+                    if (state.isDemo) {
+                        setTimeout(() => {
+                            window.location.href = '/app';
+                        }, 1000);
+                    } else {
+                        updateBusinessDropdownWithUserBusiness();
+                    }
+                } else {
+                    showToast(data.error || 'Invalid email or password', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showToast('Connection error. Please try again.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            }
+        });
+    }
+    
+    // Signup form submission
+    if (signupForm) {
+        signupForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('accountSignupEmail').value.trim();
+            const username = document.getElementById('accountSignupUsername').value.trim();
+            const company = document.getElementById('accountSignupCompany').value.trim();
+            const password = document.getElementById('accountSignupPassword').value;
+            const confirmPassword = document.getElementById('accountSignupConfirm').value;
+            
+            if (password !== confirmPassword) {
+                showToast('Passwords do not match', 'error');
+                return;
+            }
+            
+            if (password.length < 8) {
+                showToast('Password must be at least 8 characters', 'error');
+                return;
+            }
+            
+            const btn = signupForm.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.classList.add('loading');
+            
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email,
+                        username,
+                        password,
+                        confirm_password: confirmPassword,
+                        company_name: company
+                    })
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    state.currentUser = data.user;
+                    showToast('Account created successfully!', 'success');
+                    modal.classList.remove('active');
+                    signupForm.reset();
+                    
+                    // If in demo mode, redirect to the authenticated app
+                    if (state.isDemo) {
+                        setTimeout(() => {
+                            window.location.href = '/app';
+                        }, 1000);
+                    } else {
+                        updateBusinessDropdownWithUserBusiness();
+                    }
+                } else {
+                    const errorMsg = data.errors ? data.errors.join(' ') : (data.error || 'Registration failed');
+                    showToast(errorMsg, 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showToast('Connection error. Please try again.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+            }
+        });
+    }
+    
+    // Close on backdrop click
+    modal.querySelector('.modal-backdrop')?.addEventListener('click', () => {
+        modal.classList.remove('active');
+    });
+    
+    // Close button
+    modal.querySelectorAll('[data-close]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+    });
+}
+
+function openAccountModal() {
+    const modal = dom.accountModal;
+    if (!modal) return;
+    
+    modal.classList.add('active');
+}
+
+function updateBusinessDropdownWithUserBusiness() {
+    if (!state.currentUser?.company_name) return;
+    
+    const dropdown = dom.businessDropdown;
+    if (!dropdown) return;
+    
+    // Check if user business already exists in dropdown
+    const existingUserBusiness = dropdown.querySelector('[data-business-id="user_business"]');
+    if (existingUserBusiness) return; // Already added
+    
+    // Find divider to insert before it
+    const divider = dropdown.querySelector('.dropdown-divider');
+    if (!divider) return;
+    
+    // Create user business option
+    const option = document.createElement('button');
+    option.className = 'business-option user-business';
+    option.dataset.businessId = 'user_business';
+    option.dataset.businessSlug = slugify(state.currentUser.company_name);
+    
+    option.innerHTML = `
+        <div class="option-icon text-icon" style="background: #10b981">
+            ${state.currentUser.company_name.charAt(0).toUpperCase()}
+        </div>
+        <div class="option-details">
+            <span class="option-name">${state.currentUser.company_name}</span>
+            <span class="option-meta">Your Business</span>
+        </div>
+    `;
+    
+    // Insert before divider
+    divider.parentNode.insertBefore(option, divider);
+    
+    // Add click handler (for now, just show a message since user businesses aren't fully implemented)
+    option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showToast('Custom business scheduling coming soon!', 'info');
+        dom.globalBusinessSelector.classList.remove('open');
     });
 }
 

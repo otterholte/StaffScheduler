@@ -212,3 +212,34 @@ def update_user():
         'user': current_user.to_dict(),
         'message': 'Profile updated successfully.'
     })
+
+
+
+
+@auth_bp.route('/api/user', methods=['DELETE'])
+@login_required
+def delete_user_account():
+    """Delete the current user's account."""
+    data = request.get_json() or {}
+    password = data.get('password', '')
+    
+    # Require password confirmation for account deletion
+    if not current_user.check_password(password):
+        return jsonify({'success': False, 'error': 'Incorrect password.'}), 400
+    
+    user_id = current_user.id
+    username = current_user.username
+    
+    # Log out the user first
+    logout_user()
+    
+    # Delete the user from the database
+    user = User.query.get(user_id)
+    if user:
+        db.session.delete(user)
+        db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Account "{username}" has been deleted.'
+    })

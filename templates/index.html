@@ -9,7 +9,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
-<body>
+<body{% if is_demo %} class="demo-mode"{% endif %}>
+    {% if is_demo %}
+    <!-- Demo Mode Banner -->
+    <div class="demo-banner">
+        <div class="demo-banner-content">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span>Demo Mode - <a href="#" id="demoBannerSignIn">Sign in</a> to save your data</span>
+        </div>
+    </div>
+    {% endif %}
+    
     <!-- Toast Notifications Container -->
     <div id="toastContainer" class="toast-container"></div>
 
@@ -108,12 +122,12 @@
                 </nav>
             </div>
             <div class="header-right">
-                <a href="/settings" id="settingsBtn" class="icon-btn" title="Settings / Account">
+                <button id="settingsBtn" class="icon-btn" title="Settings / Account">
                     <svg class="settings-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
-                </a>
+                </button>
             </div>
         </header>
 
@@ -1581,6 +1595,81 @@
         </div>
     </div>
 
+    <!-- Login Modal (for non-authenticated users) -->
+    <div id="accountModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2 id="accountModalTitle">Sign In</h2>
+                <button class="modal-close" data-close>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="auth-tabs">
+                    <button class="auth-tab active" data-tab="login">Login</button>
+                    <button class="auth-tab" data-tab="signup">Create Account</button>
+                </div>
+                
+                <!-- Login Form -->
+                <form id="accountLoginForm" class="auth-form active">
+                    <div class="form-group">
+                        <label for="accountLoginEmail">Email</label>
+                        <input type="email" id="accountLoginEmail" placeholder="Enter your email" autocomplete="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="accountLoginPassword">Password</label>
+                        <input type="password" id="accountLoginPassword" placeholder="Enter your password" autocomplete="current-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                            <polyline points="10 17 15 12 10 7"></polyline>
+                            <line x1="15" y1="12" x2="3" y2="12"></line>
+                        </svg>
+                        Login
+                    </button>
+                </form>
+                
+                <!-- Signup Form -->
+                <form id="accountSignupForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="accountSignupEmail">Email</label>
+                        <input type="email" id="accountSignupEmail" placeholder="Enter your email" autocomplete="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="accountSignupUsername">Username</label>
+                        <input type="text" id="accountSignupUsername" placeholder="Choose a username" autocomplete="username" required minlength="3">
+                    </div>
+                    <div class="form-group">
+                        <label for="accountSignupCompany">Business Name</label>
+                        <input type="text" id="accountSignupCompany" placeholder="Your business name" autocomplete="organization">
+                    </div>
+                    <div class="form-group">
+                        <label for="accountSignupPassword">Password</label>
+                        <input type="password" id="accountSignupPassword" placeholder="Choose a password (min 8 chars)" autocomplete="new-password" required minlength="8">
+                    </div>
+                    <div class="form-group">
+                        <label for="accountSignupConfirm">Confirm Password</label>
+                        <input type="password" id="accountSignupConfirm" placeholder="Confirm your password" autocomplete="new-password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="8.5" cy="7" r="4"></circle>
+                            <line x1="20" y1="8" x2="20" y2="14"></line>
+                            <line x1="23" y1="11" x2="17" y2="11"></line>
+                        </svg>
+                        Create Account
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Loading Overlay -->
     <div id="loadingOverlay" class="loading-overlay">
         <div class="loading-spinner"></div>
@@ -1603,7 +1692,9 @@
             initialPageSlug: {{ initial_page_slug | tojson | default('"schedule"') }},
             locationSlug: {{ location_slug | tojson | default('""') }},
             pageSlugs: {{ page_slugs | tojson | default('{}') }},
-            tabToSlug: {{ tab_to_slug | tojson | default('{}') }}
+            tabToSlug: {{ tab_to_slug | tojson | default('{}') }},
+            user: {% if user and user.is_authenticated %}{{ user.to_dict() | tojson }}{% else %}null{% endif %},
+            isDemo: {{ is_demo | default(false) | tojson }}
         };
     </script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>

@@ -1205,6 +1205,29 @@ body[data-theme="light"] .advanced-panel {
     box-shadow: 0 0 40px var(--accent-glow);
 }
 
+.btn-primary.loading,
+.btn.loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.btn-primary.loading::after,
+.btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: btnSpinner 0.8s linear infinite;
+}
+
+@keyframes btnSpinner {
+    to { transform: rotate(360deg); }
+}
+
 .btn-secondary {
     background: var(--bg-tertiary);
     color: var(--text-primary);
@@ -4928,6 +4951,60 @@ kbd {
     text-align: center;
 }
 
+/* ---------- Demo Mode Banner ---------- */
+.demo-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    color: white;
+    padding: 0.5rem 1rem;
+    z-index: 10000;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.demo-banner-content {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.demo-banner svg {
+    width: 16px;
+    height: 16px;
+}
+
+.demo-banner a {
+    color: white;
+    text-decoration: underline;
+    font-weight: 600;
+}
+
+.demo-banner a:hover {
+    text-decoration: none;
+}
+
+body.demo-mode {
+    padding-top: 36px;
+}
+
+body.demo-mode .app-header {
+    top: 36px;
+}
+
+body.demo-mode .sidebar {
+    top: calc(60px + 36px);
+    height: calc(100vh - 60px - 36px);
+}
+
+body.demo-mode .main-content {
+    margin-top: calc(60px + 36px);
+}
+
 /* ---------- Toast Notifications ---------- */
 .toast-container {
     position: fixed;
@@ -7778,6 +7855,38 @@ body[data-theme="light"] .footer-bottom {
     color: white;
 }
 
+/* User Info Section (Settings Page) */
+.user-info-section {
+    padding: 0.5rem 0;
+}
+
+.user-info-section .user-info {
+    margin-bottom: 1rem;
+}
+
+.user-info-section .user-email {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.user-company {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.user-company svg {
+    width: 18px;
+    height: 18px;
+    opacity: 0.7;
+}
+
 /* User Info (Logged In State) */
 .user-info {
     display: flex;
@@ -8150,4 +8259,189 @@ body[data-theme="light"] .theme-slider {
         width: 60px;
         height: 44px;
     }
+}
+
+/* ============================================
+   ACCOUNT MODAL STYLES
+   ============================================ */
+
+/* User info card in account modal */
+.user-info-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.user-info-card .user-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: white;
+    flex-shrink: 0;
+}
+
+.user-info-card .user-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.user-info-card .user-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.user-info-card .user-email {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Settings section in modal */
+.settings-section {
+    margin-bottom: 1.5rem;
+}
+
+.settings-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+}
+
+.settings-section-title svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Compact theme toggle for modal */
+.theme-toggle-container.compact {
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    gap: 1rem;
+}
+
+.theme-toggle-container.compact .theme-preview {
+    width: 50px;
+    height: 36px;
+}
+
+.theme-toggle-container.compact .theme-label {
+    font-size: 0.7rem;
+}
+
+/* Account actions in modal */
+#accountLoggedInState .account-actions {
+    margin-top: 1rem;
+}
+
+/* Auth tabs in modal */
+#accountModal .auth-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    padding: 4px;
+}
+
+#accountModal .auth-tab {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#accountModal .auth-tab:hover {
+    color: var(--text-primary);
+}
+
+#accountModal .auth-tab.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+/* Auth forms in modal */
+#accountModal .auth-form {
+    display: none;
+}
+
+#accountModal .auth-form.active {
+    display: block;
+}
+
+#accountModal .form-group {
+    margin-bottom: 1rem;
+}
+
+#accountModal .form-group label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+}
+
+#accountModal .form-group input {
+    width: 100%;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: 8px;
+    color: var(--text-primary);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+#accountModal .form-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+#accountModal .form-group input::placeholder {
+    color: var(--text-muted);
+}
+
+/* User business in dropdown */
+.business-option.user-business {
+    border-top: 1px solid var(--border-primary);
+    margin-top: 0.25rem;
+    padding-top: 0.75rem;
+}
+
+.business-option.user-business .option-icon {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+}
+
+.business-option.user-business .option-meta {
+    color: #10b981;
+    font-weight: 500;
 }
