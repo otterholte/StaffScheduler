@@ -527,10 +527,8 @@ function init() {
     renderRolesList();
     renderCoverageUI();
     
-    // Add user's business to dropdown if logged in
-    if (state.currentUser) {
-        updateBusinessDropdownWithUserBusiness();
-    }
+    // User's business is now handled by the backend and included in get_all_businesses()
+    // No need for updateBusinessDropdownWithUserBusiness() as it creates duplicates
     
     // Initialize to the correct tab from URL
     initializeFromUrl();
@@ -1226,14 +1224,15 @@ function setupAccountModal() {
                     modal.classList.remove('active');
                     loginForm.reset();
                     
-                    // If in demo mode, redirect to the authenticated app
-                    if (state.isDemo) {
-                        setTimeout(() => {
+                    // Redirect to refresh with updated user context
+                    setTimeout(() => {
+                        if (state.isDemo) {
                             window.location.href = '/app';
-                        }, 1000);
-                    } else {
-                        updateBusinessDropdownWithUserBusiness();
-                    }
+                        } else {
+                            // Reload to get updated business list from backend
+                            window.location.reload();
+                        }
+                    }, 1000);
                 } else {
                     showToast(data.error || 'Invalid email or password', 'error');
                 }
@@ -1291,14 +1290,18 @@ function setupAccountModal() {
                     modal.classList.remove('active');
                     signupForm.reset();
                     
-                    // If in demo mode, redirect to the authenticated app
-                    if (state.isDemo) {
-                        setTimeout(() => {
+                    // Redirect to the user's new business or reload
+                    setTimeout(() => {
+                        if (state.isDemo) {
                             window.location.href = '/app';
-                        }, 1000);
-                    } else {
-                        updateBusinessDropdownWithUserBusiness();
-                    }
+                        } else if (data.redirect) {
+                            // Redirect to user's new business page
+                            window.location.href = data.redirect;
+                        } else {
+                            // Reload to get updated business list from backend
+                            window.location.reload();
+                        }
+                    }, 1000);
                 } else {
                     const errorMsg = data.errors ? data.errors.join(' ') : (data.error || 'Registration failed');
                     showToast(errorMsg, 'error');

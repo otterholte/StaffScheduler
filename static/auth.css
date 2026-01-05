@@ -191,30 +191,33 @@ body {
     -webkit-backdrop-filter: blur(20px);
 }
 
-/* Auth page close button - fixed top-right corner */
+/* Auth page close button - fixed top-right corner of PAGE */
 .auth-close-btn {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    width: 40px;
-    height: 40px;
+    position: fixed !important;
+    top: 24px !important;
+    right: 24px !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
-    border: none;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 50%;
-    color: #ffffff;
+    color: #ffffff !important;
     text-decoration: none;
     transition: all 0.2s ease;
     cursor: pointer;
-    z-index: 1000;
+    z-index: 9999 !important;
 }
 
 .auth-close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.15);
+    color: #ffffff !important;
     transform: scale(1.1);
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .auth-close-btn:active {
@@ -225,7 +228,7 @@ body {
     width: 24px;
     height: 24px;
     flex-shrink: 0;
-    stroke: #ffffff;
+    stroke: #ffffff !important;
 }
 
 .auth-card-wide {
