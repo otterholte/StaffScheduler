@@ -1336,46 +1336,9 @@ function openAccountModal() {
     modal.classList.add('active');
 }
 
-function updateBusinessDropdownWithUserBusiness() {
-    if (!state.currentUser?.company_name) return;
-    
-    const dropdown = dom.businessDropdown;
-    if (!dropdown) return;
-    
-    // Check if user business already exists in dropdown
-    const existingUserBusiness = dropdown.querySelector('[data-business-id="user_business"]');
-    if (existingUserBusiness) return; // Already added
-    
-    // Find divider to insert before it
-    const divider = dropdown.querySelector('.dropdown-divider');
-    if (!divider) return;
-    
-    // Create user business option
-    const option = document.createElement('button');
-    option.className = 'business-option user-business';
-    option.dataset.businessId = 'user_business';
-    option.dataset.businessSlug = slugify(state.currentUser.company_name);
-    
-    option.innerHTML = `
-        <div class="option-icon text-icon" style="background: #10b981">
-            ${state.currentUser.company_name.charAt(0).toUpperCase()}
-        </div>
-        <div class="option-details">
-            <span class="option-name">${state.currentUser.company_name}</span>
-            <span class="option-meta">Your Business</span>
-        </div>
-    `;
-    
-    // Insert before divider
-    divider.parentNode.insertBefore(option, divider);
-    
-    // Add click handler (for now, just show a message since user businesses aren't fully implemented)
-    option.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showToast('Custom business scheduling coming soon!', 'info');
-        dom.globalBusinessSelector.classList.remove('open');
-    });
-}
+// updateBusinessDropdownWithUserBusiness function removed - user businesses are now
+// created by the backend and included in get_all_businesses() which is rendered
+// by the server-side template. No need for duplicate JavaScript injection.
 
 // List of sample/built-in business IDs that cannot be deleted
 const SAMPLE_BUSINESS_IDS = ['coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'];
