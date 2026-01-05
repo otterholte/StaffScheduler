@@ -1152,23 +1152,9 @@ function setupBusinessModal() {
 // ==================== ACCOUNT/LOGIN MODAL ====================
 function setupAccountModal() {
     const modal = dom.accountModal;
-    if (!modal) return;
-    
     const settingsBtn = dom.settingsBtn;
-    const authTabs = modal.querySelectorAll('.auth-tab');
-    const loginForm = document.getElementById('accountLoginForm');
-    const signupForm = document.getElementById('accountSignupForm');
     
-    // Demo banner sign-in link
-    const demoBannerSignIn = document.getElementById('demoBannerSignIn');
-    if (demoBannerSignIn) {
-        demoBannerSignIn.addEventListener('click', (e) => {
-            e.preventDefault();
-            openAccountModal();
-        });
-    }
-    
-    // Settings button click - open modal if not logged in or in demo mode, navigate to settings page if logged in
+    // Settings button click - ALWAYS set this up, even if modal doesn't exist
     if (settingsBtn) {
         settingsBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1181,6 +1167,22 @@ function setupAccountModal() {
             }
         });
     }
+    
+    // Demo banner sign-in link
+    const demoBannerSignIn = document.getElementById('demoBannerSignIn');
+    if (demoBannerSignIn) {
+        demoBannerSignIn.addEventListener('click', (e) => {
+            e.preventDefault();
+            openAccountModal();
+        });
+    }
+    
+    // Return early if modal doesn't exist (for authenticated pages)
+    if (!modal) return;
+    
+    const authTabs = modal.querySelectorAll('.auth-tab');
+    const loginForm = document.getElementById('accountLoginForm');
+    const signupForm = document.getElementById('accountSignupForm');
     
     // Auth tab switching
     authTabs.forEach(tab => {
