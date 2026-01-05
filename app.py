@@ -257,9 +257,17 @@ def demo_page(page_slug='schedule'):
         return redirect('/demo/schedule')
     
     # Use the coffee shop as the demo business
-    demo_business = businesses.get('coffee_shop')
+    all_businesses = get_all_businesses()
+    demo_business = None
+    for b in all_businesses:
+        if b.id == 'coffee_shop':
+            demo_business = b
+            break
     if not demo_business:
-        demo_business = next(iter(businesses.values()))
+        demo_business = all_businesses[0] if all_businesses else None
+    
+    if not demo_business:
+        return redirect('/features')
     
     # Build business list for demo
     businesses_data = []
@@ -271,7 +279,7 @@ def demo_page(page_slug='schedule'):
         'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
     }
     
-    for b in businesses.values():
+    for b in all_businesses:
         meta = business_meta.get(b.id, {'emoji': '🏢', 'color': '#6366f1'})
         businesses_data.append({
             "id": b.id,

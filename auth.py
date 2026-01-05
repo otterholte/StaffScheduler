@@ -13,7 +13,7 @@ def login():
     """Handle user login."""
     # If already logged in, redirect to app dashboard
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect('/sunrise-coffee/schedule')
     
     if request.method == 'POST':
         # Handle both form and JSON submissions
@@ -51,12 +51,12 @@ def login():
                 return jsonify({
                     'success': True, 
                     'user': user.to_dict(),
-                    'redirect': url_for('index')
+                    'redirect': '/sunrise-coffee/schedule'
                 })
             
             # Redirect to next page or home
             next_page = request.args.get('next')
-            return redirect(next_page if next_page else url_for('index'))
+            return redirect(next_page if next_page else '/sunrise-coffee/schedule')
         else:
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Invalid username/email or password.'}), 401
@@ -70,7 +70,7 @@ def register():
     """Handle user registration."""
     # If already logged in, redirect to app
     if current_user.is_authenticated:
-        return redirect(url_for('index'))
+        return redirect('/sunrise-coffee/schedule')
     
     if request.method == 'POST':
         # Handle both form and JSON submissions
@@ -153,11 +153,11 @@ def register():
                 'success': True,
                 'user': user.to_dict(),
                 'message': 'Account created successfully!',
-                'redirect': url_for('index')
+                'redirect': '/sunrise-coffee/schedule'
             })
         
         flash('Account created successfully! Welcome to Staff Scheduler Pro.', 'success')
-        return redirect(url_for('index'))
+        return redirect('/sunrise-coffee/schedule')
     
     return render_template('register.html')
 

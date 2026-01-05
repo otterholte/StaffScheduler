@@ -189,46 +189,44 @@ body {
     box-shadow: var(--shadow-card), var(--shadow-glow);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
-    position: relative;
 }
 
-.close-btn {
-    position: absolute !important;
-    top: 12px !important;
-    right: 12px !important;
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px;
-    max-width: 32px;
-    min-height: 32px;
-    max-height: 32px;
-    display: flex !important;
+/* Auth page close button - positioned outside card */
+.auth-close-btn {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    width: 44px;
+    height: 44px;
+    display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 50%;
     color: var(--text-secondary);
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition: all 0.25s ease;
     cursor: pointer;
-    z-index: 10;
-    overflow: hidden;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 }
 
-.close-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
+.auth-close-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
     color: var(--text-primary);
-    border-color: var(--border-focus);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: scale(1.05);
 }
 
-.close-btn svg {
-    width: 16px !important;
-    height: 16px !important;
-    min-width: 16px;
-    max-width: 16px;
-    min-height: 16px;
-    max-height: 16px;
+.auth-close-btn:active {
+    transform: scale(0.95);
+}
+
+.auth-close-btn svg {
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
 }
 
