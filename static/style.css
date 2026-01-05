@@ -8170,6 +8170,26 @@ body[data-theme="light"] .footer-bottom {
     color: var(--accent-primary);
 }
 
+/* Modal Overlay (Settings Page) */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-overlay[style*="display: flex"] {
+    display: flex !important;
+}
+
 /* Delete Modal */
 .delete-modal {
     max-width: 400px;
