@@ -7935,6 +7935,31 @@ body[data-theme="light"] .footer-bottom {
     gap: 0.75rem;
 }
 
+/* Login Prompt (Settings Page - Not Logged In) */
+.login-prompt {
+    text-align: center;
+    padding: 1.5rem 1rem;
+}
+
+.login-prompt p {
+    color: var(--text-secondary);
+    margin-bottom: 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.login-prompt .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.login-prompt .btn-primary svg {
+    width: 18px;
+    height: 18px;
+}
+
 /* Theme Toggle Container */
 .theme-toggle-container {
     display: flex;

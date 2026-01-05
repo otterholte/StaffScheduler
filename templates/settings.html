@@ -45,17 +45,18 @@
                     <h2>Account</h2>
                 </div>
                 
-                <!-- User Info -->
+                {% if user and user.is_authenticated %}
+                <!-- Logged In: User Info -->
                 <div class="user-info-section">
                     <div class="user-info">
-                        <div class="user-avatar" id="userAvatar">{{ (user.first_name or user.username)[0]|upper if user and user.is_authenticated else 'U' }}</div>
+                        <div class="user-avatar" id="userAvatar">{{ (user.first_name or user.username)[0]|upper }}</div>
                         <div class="user-details">
-                            <span class="user-name" id="userName">{{ user.first_name or user.username if user and user.is_authenticated else 'User' }}</span>
-                            <span class="user-email" id="userEmail">{{ user.email if user and user.is_authenticated else '' }}</span>
+                            <span class="user-name" id="userName">{{ user.first_name or user.username }}</span>
+                            <span class="user-email" id="userEmail">{{ user.email }}</span>
                         </div>
                     </div>
                     
-                    {% if user and user.company_name %}
+                    {% if user.company_name %}
                     <div class="user-company">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M3 21h18"></path>
@@ -91,6 +92,20 @@
                         </button>
                     </div>
                 </div>
+                {% else %}
+                <!-- Not Logged In: Show Login Button -->
+                <div class="login-prompt">
+                    <p>Sign in to save your schedules and access your account settings.</p>
+                    <a href="/auth/login" class="btn btn-primary btn-full">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+                            <polyline points="10 17 15 12 10 7"></polyline>
+                            <line x1="15" y1="12" x2="3" y2="12"></line>
+                        </svg>
+                        Login / Create Account
+                    </a>
+                </div>
+                {% endif %}
             </section>
 
             <!-- Appearance Section -->
