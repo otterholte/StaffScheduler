@@ -853,15 +853,22 @@ def _try_import_db_service():
             'get_all_persisted_businesses': get_all_persisted_businesses,
             'is_business_persisted': is_business_persisted
         }
-    except Exception:
+    except ImportError:
+        return None
+    except Exception as e:
+        print(f"Warning: Could not import db_service: {e}")
         return None
 
 
-def load_businesses_from_db():
-    """Load all persisted businesses from the database into cache."""
+def load_businesses_from_db(force_reload=False):
+    """Load all persisted businesses from the database into cache.
+    
+    Args:
+        force_reload: If True, reload from DB even if already loaded
+    """
     global _db_loaded, _business_cache, _user_businesses
     
-    if _db_loaded:
+    if _db_loaded and not force_reload:
         return
     
     db_funcs = _try_import_db_service()
@@ -869,13 +876,15 @@ def load_businesses_from_db():
         return
     
     try:
-        for db_business in db_funcs['get_all_persisted_businesses']():
+        db_businesses = db_funcs['get_all_persisted_businesses']()
+        for db_business in db_businesses:
             scenario = db_funcs['load_business_from_db'](db_business)
             _business_cache[scenario.id] = scenario
             _user_businesses[db_business.owner_id] = scenario.id
         _db_loaded = True
     except Exception as e:
-        # Database might not be initialized yet
+        # Database might not be initialized yet or we're outside app context
+        # Don't set _db_loaded so we try again next time
         print(f"Warning: Could not load businesses from database: {e}")
 
 

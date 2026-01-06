@@ -23,7 +23,7 @@ from scheduler import (
     get_user_business,
     DAYS_OF_WEEK
 )
-from scheduler.businesses import sync_business_to_db
+from scheduler.businesses import sync_business_to_db, load_businesses_from_db
 from db_service import save_schedule_to_db, get_schedule_from_db, publish_schedule_in_db, get_published_schedule_from_db
 from datetime import date, timedelta
 from scheduler.models import (
@@ -309,7 +309,8 @@ def demo_page(page_slug='schedule'):
     if not demo_business:
         return redirect('/features')
     
-    # Build business list for demo
+    # Build business list for demo - only show the 5 demo businesses
+    DEMO_BUSINESS_IDS = {'coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'}
     businesses_data = []
     business_meta = {
         'coffee_shop': {'emoji': '☕', 'color': '#3b82f6'},
@@ -320,6 +321,9 @@ def demo_page(page_slug='schedule'):
     }
     
     for b in all_businesses:
+        # Only include demo businesses for non-authenticated users
+        if b.id not in DEMO_BUSINESS_IDS:
+            continue
         meta = business_meta.get(b.id, {'emoji': '🏢', 'color': '#6366f1'})
         businesses_data.append({
             "id": b.id,
@@ -339,6 +343,7 @@ def demo_page(page_slug='schedule'):
         'index.html',
         business=demo_business.to_dict(),
         businesses=businesses_data,
+        user_businesses_count=0,  # No user businesses in demo mode
         employees=[emp.to_dict() for emp in demo_business.employees],
         roles=[r.to_dict() for r in demo_business.roles],
         days=DAYS_OF_WEEK,
@@ -365,6 +370,9 @@ def app_page(location_slug, page_slug):
     if current_user.is_authenticated:
         ensure_user_business_exists(current_user)
     
+    # Force reload businesses from database to ensure we have the latest
+    load_businesses_from_db(force_reload=True)
+    
     # Validate page slug
     if page_slug not in PAGE_SLUGS:
         # Try to redirect to schedule for this location
@@ -385,6 +393,9 @@ def app_page(location_slug, page_slug):
     
     businesses = get_all_businesses()
     
+    # Built-in demo business IDs
+    DEMO_BUSINESS_IDS = {'coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'}
+    
     # Default emoji/color mapping for built-in businesses
     business_meta = {
         'coffee_shop': {'emoji': '☕', 'color': '#3b82f6'},
@@ -394,9 +405,8 @@ def app_page(location_slug, page_slug):
         'warehouse': {'emoji': '📦', 'color': '#8b5cf6'}
     }
     
-    # Build business list with custom metadata
-    businesses_data = []
-    for b in businesses:
+    # Helper function to build business data
+    def build_business_data(b):
         meta = business_meta.get(b.id, {'emoji': '🏢', 'color': '#6366f1'})
         # Apply custom metadata if exists
         if b.id in _custom_businesses:
@@ -407,8 +417,7 @@ def app_page(location_slug, page_slug):
             name = _custom_businesses[b.id].get('name', b.name)
         else:
             name = b.name
-            
-        businesses_data.append({
+        return {
             "id": b.id,
             "name": name,
             "slug": get_business_slug(b.id),
@@ -417,7 +426,32 @@ def app_page(location_slug, page_slug):
             "total_roles": len(b.roles),
             "emoji": meta['emoji'],
             "color": meta['color']
-        })
+        }
+    
+    # Separate businesses into user businesses and demo businesses
+    user_businesses_data = []
+    demo_businesses_data = []
+    
+    # Get the current user's ID for checking ownership
+    user_id = current_user.id if current_user.is_authenticated else None
+    
+    for b in businesses:
+        if b.id in DEMO_BUSINESS_IDS:
+            # Demo business
+            demo_businesses_data.append(build_business_data(b))
+        else:
+            # User business - check if user owns it or is an employee
+            is_owner = b.id.startswith(f'user_{user_id}_') if user_id else False
+            is_employee = any(
+                emp.email and current_user.is_authenticated and emp.email.lower() == current_user.email.lower()
+                for emp in b.employees
+            ) if current_user.is_authenticated else False
+            
+            if is_owner or is_employee:
+                user_businesses_data.append(build_business_data(b))
+    
+    # Combine: user businesses first, then demo businesses
+    businesses_data = user_businesses_data + demo_businesses_data
     
     # Get the internal tab ID for the page
     initial_tab = PAGE_SLUGS.get(page_slug, 'schedule')
@@ -429,6 +463,7 @@ def app_page(location_slug, page_slug):
         'index.html',
         business=business.to_dict(),
         businesses=businesses_data,
+        user_businesses_count=len(user_businesses_data),
         employees=[emp.to_dict() for emp in business.employees],
         roles=[r.to_dict() for r in business.roles],
         days=DAYS_OF_WEEK,

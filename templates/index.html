@@ -53,8 +53,28 @@
                         </svg>
                     </button>
                     <div class="business-dropdown" id="businessDropdown">
-                        <div class="dropdown-header">Switch Location</div>
-                        {% for b in businesses %}
+                        {% if user_businesses_count > 0 %}
+                        <div class="dropdown-header">Your Locations</div>
+                        {% for b in businesses[:user_businesses_count] %}
+                        <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}" data-business-slug="{{ b.slug }}">
+                            <div class="option-icon {% if not b.emoji %}text-icon{% endif %}" style="background: {{ b.color }}">
+                                {% if b.emoji %}{{ b.emoji }}{% else %}{{ b.name[0]|upper }}{% endif %}
+                            </div>
+                            <div class="option-details">
+                                <span class="option-name">{{ b.name }}</span>
+                                <span class="option-meta">{{ b.total_employees }} staff · {{ b.total_roles }} roles</span>
+                            </div>
+                            {% if b.id == business.id %}
+                            <svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                            {% endif %}
+                        </button>
+                        {% endfor %}
+                        <div class="dropdown-divider"></div>
+                        {% endif %}
+                        <div class="dropdown-header dropdown-header-demo">Demo Locations</div>
+                        {% for b in businesses[user_businesses_count:] %}
                         <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}" data-business-slug="{{ b.slug }}">
                             <div class="option-icon {% if not b.emoji %}text-icon{% endif %}" style="background: {{ b.color }}">
                                 {% if b.emoji %}{{ b.emoji }}{% else %}{{ b.name[0]|upper }}{% endif %}

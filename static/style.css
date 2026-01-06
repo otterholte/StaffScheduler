@@ -339,6 +339,12 @@ body {
     padding: 0.5rem 0.75rem 0.375rem;
 }
 
+.dropdown-header-demo {
+    color: var(--text-muted);
+    opacity: 0.7;
+    font-size: 0.65rem;
+}
+
 .business-option {
     display: flex;
     align-items: center;
