@@ -1025,10 +1025,15 @@ def get_all_businesses() -> List[BusinessScenario]:
     return list(_business_cache.values())
 
 
-def get_business_by_id(business_id: str) -> BusinessScenario:
-    """Get a specific business scenario by ID (cached)."""
-    # Check cache first (includes user businesses)
-    if business_id in _business_cache:
+def get_business_by_id(business_id: str, force_reload: bool = False) -> BusinessScenario:
+    """Get a specific business scenario by ID (cached).
+    
+    Args:
+        business_id: The unique business identifier
+        force_reload: If True, bypass cache and reload from database
+    """
+    # Check cache first (unless force_reload)
+    if not force_reload and business_id in _business_cache:
         return _business_cache[business_id]
     
     # Try to load from database
@@ -1044,7 +1049,7 @@ def get_business_by_id(business_id: str) -> BusinessScenario:
         except Exception as e:
             print(f"Warning: Could not load business from database: {e}")
     
-    # Check built-in creators
+    # Check built-in creators (only if not forcing reload or not in cache)
     if business_id in _business_creators:
         _business_cache[business_id] = _business_creators[business_id]()
         return _business_cache[business_id]

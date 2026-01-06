@@ -134,24 +134,32 @@ def get_business_slug(business_id):
         return business_id
 
 
-def get_business_by_slug(slug):
-    """Find a business by its slug (checking custom names first)."""
+def get_business_by_slug(slug, force_reload: bool = False):
+    """Find a business by its slug (checking custom names first).
+    
+    Args:
+        slug: The URL slug for the business
+        force_reload: If True, bypass cache and reload from database (for employee portal)
+    """
     slug = slug.lower()
     
     # Check custom business names first
     for business_id, custom_data in _custom_businesses.items():
         custom_name = custom_data.get('name')
         if custom_name and slugify(custom_name) == slug:
-            return get_business_by_id(business_id)
+            return get_business_by_id(business_id, force_reload=force_reload)
     
     # Check all businesses by their default names
     for business in get_all_businesses():
         if slugify(business.name) == slug:
+            # For user businesses, force reload if requested
+            if force_reload and business.id.startswith('user_'):
+                return get_business_by_id(business.id, force_reload=True)
             return business
     
     # Finally, try matching directly by ID
     try:
-        return get_business_by_id(slug)
+        return get_business_by_id(slug, force_reload=force_reload)
     except ValueError:
         return None
 
@@ -529,7 +537,9 @@ def contact_page():
 @app.route('/employee/<business_slug>/<employee_id>/schedule')
 def employee_schedule(business_slug, employee_id):
     """Employee schedule view - read-only view of their shifts."""
-    business = get_business_by_slug(business_slug)
+    # Force reload from database to ensure we have latest employee data
+    # (important for multi-worker environments like Railway/Gunicorn)
+    business = get_business_by_slug(business_slug, force_reload=True)
     if not business:
         return redirect('/')
     
@@ -570,7 +580,8 @@ def employee_schedule(business_slug, employee_id):
 @app.route('/employee/<business_slug>/<employee_id>/availability')
 def employee_availability(business_slug, employee_id):
     """Employee availability editor - edit their own availability."""
-    business = get_business_by_slug(business_slug)
+    # Force reload from database to ensure we have latest employee data
+    business = get_business_by_slug(business_slug, force_reload=True)
     if not business:
         return redirect('/')
     
@@ -632,8 +643,8 @@ def get_employee_schedule(business_slug, employee_id):
     """Get the published schedule for an employee (no login required - public for employees)."""
     week_offset = request.args.get('weekOffset', 0, type=int)
     
-    # Get the business
-    business = get_business_by_slug(business_slug)
+    # Get the business - force reload to ensure fresh employee data
+    business = get_business_by_slug(business_slug, force_reload=True)
     if not business:
         return jsonify({
             'success': False,
