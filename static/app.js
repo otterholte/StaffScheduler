@@ -5576,6 +5576,10 @@ async function handleEmployeeSubmit(e) {
             if (data.invitation_sent) {
                 const methods = data.invitation_methods.join(' & ');
                 showToast(`${isNew ? 'Employee added' : 'Employee updated'} — invitation sent via ${methods}`, 'success');
+            } else if (data.invitation_errors && data.invitation_errors.length > 0) {
+                // Show warning if invitation was requested but failed
+                const errors = data.invitation_errors.join(', ');
+                showToast(`${isNew ? 'Employee added' : 'Employee updated'} — invitation failed: ${errors}`, 'warning');
             } else {
                 showToast(isNew ? 'Employee added' : 'Employee updated', 'success');
             }

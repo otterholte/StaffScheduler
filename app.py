@@ -1127,6 +1127,9 @@ def add_employee():
     invitation_methods = []
     invitation_errors = []
     
+    # Log invitation request details
+    print(f"[INVITE] send_invite={data.get('send_invite')}, invite_by_email={data.get('invite_by_email')}, employee_email={employee.email}", flush=True)
+    
     if data.get('send_invite'):
         try:
             business_slug = get_business_slug(business.id)
@@ -1136,8 +1139,11 @@ def add_employee():
             # Get custom business name if available
             business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
             
+            print(f"[INVITE] portal_url={portal_url}, business_name={business_name}", flush=True)
+            
             if data.get('invite_by_email') and employee.email:
                 email_service = get_email_service()
+                print(f"[INVITE] email_service.is_configured()={email_service.is_configured()}", flush=True)
                 if email_service.is_configured():
                     success, msg = email_service.send_portal_invitation(
                         to_email=employee.email,
@@ -1145,6 +1151,7 @@ def add_employee():
                         business_name=business_name,
                         portal_url=portal_url
                     )
+                    print(f"[INVITE] send_portal_invitation result: success={success}, msg={msg}", flush=True)
                     if success:
                         invitation_methods.append('email')
                         invitation_sent = True
@@ -1152,6 +1159,9 @@ def add_employee():
                         invitation_errors.append(f"Email: {msg}")
                 else:
                     invitation_errors.append("Email service not configured")
+                    print(f"[INVITE] Email service NOT configured - MAIL_USERNAME={email_service.username}, has_password={bool(email_service.password)}", flush=True)
+            elif data.get('invite_by_email') and not employee.email:
+                invitation_errors.append("No email address provided")
             
             if data.get('invite_by_sms') and employee.phone:
                 # SMS not implemented yet
@@ -1159,6 +1169,7 @@ def add_employee():
         except Exception as e:
             # Don't fail the whole request if email fails
             invitation_errors.append(f"Failed to send invitation: {str(e)}")
+            print(f"[INVITE] Exception: {str(e)}", flush=True)
     
     response_data = {
         'success': True,
@@ -1234,6 +1245,9 @@ def update_employee(emp_id):
     invitation_methods = []
     invitation_errors = []
     
+    # Log invitation request details
+    print(f"[INVITE-UPDATE] send_invite={data.get('send_invite')}, invite_by_email={data.get('invite_by_email')}, employee_email={employee.email}", flush=True)
+    
     if data.get('send_invite'):
         try:
             business_slug = get_business_slug(business.id)
@@ -1243,8 +1257,11 @@ def update_employee(emp_id):
             # Get custom business name if available
             business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
             
+            print(f"[INVITE-UPDATE] portal_url={portal_url}, business_name={business_name}", flush=True)
+            
             if data.get('invite_by_email') and employee.email:
                 email_service = get_email_service()
+                print(f"[INVITE-UPDATE] email_service.is_configured()={email_service.is_configured()}", flush=True)
                 if email_service.is_configured():
                     success, msg = email_service.send_portal_invitation(
                         to_email=employee.email,
@@ -1252,6 +1269,7 @@ def update_employee(emp_id):
                         business_name=business_name,
                         portal_url=portal_url
                     )
+                    print(f"[INVITE-UPDATE] send_portal_invitation result: success={success}, msg={msg}", flush=True)
                     if success:
                         invitation_methods.append('email')
                         invitation_sent = True
@@ -1259,6 +1277,9 @@ def update_employee(emp_id):
                         invitation_errors.append(f"Email: {msg}")
                 else:
                     invitation_errors.append("Email service not configured")
+                    print(f"[INVITE-UPDATE] Email service NOT configured - MAIL_USERNAME={email_service.username}, has_password={bool(email_service.password)}", flush=True)
+            elif data.get('invite_by_email') and not employee.email:
+                invitation_errors.append("No email address provided")
             
             if data.get('invite_by_sms') and employee.phone:
                 # SMS not implemented yet
@@ -1266,6 +1287,7 @@ def update_employee(emp_id):
         except Exception as e:
             # Don't fail the whole request if email fails
             invitation_errors.append(f"Failed to send invitation: {str(e)}")
+            print(f"[INVITE-UPDATE] Exception: {str(e)}", flush=True)
     
     response_data = {
         'success': True,
