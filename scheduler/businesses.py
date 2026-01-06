@@ -1057,17 +1057,39 @@ def get_business_by_id(business_id: str, force_reload: bool = False) -> Business
     raise ValueError(f"Unknown business ID: {business_id}")
 
 
-def sync_business_to_db(business_id: str, user_id: int):
-    """Sync a business from cache to database."""
-    if business_id not in _business_cache:
-        return
+def sync_business_to_db(business_id: str, user_id: int, business_obj=None):
+    """Sync a business from cache to database.
+    
+    Args:
+        business_id: The business ID to sync
+        user_id: The owner user ID
+        business_obj: Optional - the actual business object to save (bypasses cache lookup)
+    """
+    # Use provided business object or try to get from cache
+    business_to_save = business_obj
+    if business_to_save is None:
+        business_to_save = _business_cache.get(business_id)
+    
+    if business_to_save is None:
+        print(f"Warning: sync_business_to_db called but business {business_id} not found in cache and no business_obj provided", flush=True)
+        return False
     
     db_funcs = _try_import_db_service()
     if db_funcs:
         try:
-            db_funcs['save_business_to_db'](_business_cache[business_id], user_id)
+            db_funcs['save_business_to_db'](business_to_save, user_id)
+            # Also update cache to ensure consistency
+            _business_cache[business_id] = business_to_save
+            print(f"[DB] Successfully synced business {business_id} to database", flush=True)
+            return True
         except Exception as e:
-            print(f"Warning: Could not sync business to database: {e}")
+            print(f"Warning: Could not sync business to database: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
+            return False
+    else:
+        print(f"Warning: db_funcs not available for sync_business_to_db", flush=True)
+        return False
 
 
 DAYS_OF_WEEK = DAYS

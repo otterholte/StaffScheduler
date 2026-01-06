@@ -1164,7 +1164,7 @@ def add_employee():
     
     # Sync to database for persistence
     if current_user.is_authenticated:
-        sync_business_to_db(business.id, current_user.id)
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
     
     # Handle invitation sending
     invitation_sent = False
@@ -1282,7 +1282,7 @@ def update_employee(emp_id):
     
     # Sync to database for persistence
     if current_user.is_authenticated:
-        sync_business_to_db(business.id, current_user.id)
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
     
     # Handle invitation sending (for updates too)
     invitation_sent = False
@@ -1373,7 +1373,7 @@ def delete_employee(emp_id):
     
     # Sync to database for persistence
     if current_user.is_authenticated:
-        sync_business_to_db(business.id, current_user.id)
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
     
     return jsonify({
         'success': True,
@@ -1521,7 +1521,7 @@ def update_availability(emp_id):
     
     # Sync to database for persistence
     if current_user.is_authenticated:
-        sync_business_to_db(business.id, current_user.id)
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
     
     return jsonify({
         'success': True,
@@ -1575,7 +1575,7 @@ def update_availability_cell(emp_id):
     
     # Sync to database for persistence
     if current_user.is_authenticated:
-        sync_business_to_db(business.id, current_user.id)
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
     
     return jsonify({
         'success': True,
