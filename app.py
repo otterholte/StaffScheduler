@@ -950,33 +950,37 @@ def add_employee():
     invitation_errors = []
     
     if data.get('send_invite'):
-        business_slug = get_business_slug(business.id)
-        base_url = get_site_url()
-        portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
-        
-        # Get custom business name if available
-        business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
-        
-        if data.get('invite_by_email') and employee.email:
-            email_service = get_email_service()
-            if email_service.is_configured():
-                success, msg = email_service.send_portal_invitation(
-                    to_email=employee.email,
-                    employee_name=employee.name,
-                    business_name=business_name,
-                    portal_url=portal_url
-                )
-                if success:
-                    invitation_methods.append('email')
-                    invitation_sent = True
+        try:
+            business_slug = get_business_slug(business.id)
+            base_url = get_site_url()
+            portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+            
+            # Get custom business name if available
+            business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+            
+            if data.get('invite_by_email') and employee.email:
+                email_service = get_email_service()
+                if email_service.is_configured():
+                    success, msg = email_service.send_portal_invitation(
+                        to_email=employee.email,
+                        employee_name=employee.name,
+                        business_name=business_name,
+                        portal_url=portal_url
+                    )
+                    if success:
+                        invitation_methods.append('email')
+                        invitation_sent = True
+                    else:
+                        invitation_errors.append(f"Email: {msg}")
                 else:
-                    invitation_errors.append(f"Email: {msg}")
-            else:
-                invitation_errors.append("Email service not configured")
-        
-        if data.get('invite_by_sms') and employee.phone:
-            # SMS not implemented yet
-            invitation_errors.append("SMS not yet implemented")
+                    invitation_errors.append("Email service not configured")
+            
+            if data.get('invite_by_sms') and employee.phone:
+                # SMS not implemented yet
+                invitation_errors.append("SMS not yet implemented")
+        except Exception as e:
+            # Don't fail the whole request if email fails
+            invitation_errors.append(f"Failed to send invitation: {str(e)}")
     
     response_data = {
         'success': True,
@@ -1049,33 +1053,37 @@ def update_employee(emp_id):
     invitation_errors = []
     
     if data.get('send_invite'):
-        business_slug = get_business_slug(business.id)
-        base_url = get_site_url()
-        portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
-        
-        # Get custom business name if available
-        business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
-        
-        if data.get('invite_by_email') and employee.email:
-            email_service = get_email_service()
-            if email_service.is_configured():
-                success, msg = email_service.send_portal_invitation(
-                    to_email=employee.email,
-                    employee_name=employee.name,
-                    business_name=business_name,
-                    portal_url=portal_url
-                )
-                if success:
-                    invitation_methods.append('email')
-                    invitation_sent = True
+        try:
+            business_slug = get_business_slug(business.id)
+            base_url = get_site_url()
+            portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+            
+            # Get custom business name if available
+            business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+            
+            if data.get('invite_by_email') and employee.email:
+                email_service = get_email_service()
+                if email_service.is_configured():
+                    success, msg = email_service.send_portal_invitation(
+                        to_email=employee.email,
+                        employee_name=employee.name,
+                        business_name=business_name,
+                        portal_url=portal_url
+                    )
+                    if success:
+                        invitation_methods.append('email')
+                        invitation_sent = True
+                    else:
+                        invitation_errors.append(f"Email: {msg}")
                 else:
-                    invitation_errors.append(f"Email: {msg}")
-            else:
-                invitation_errors.append("Email service not configured")
-        
-        if data.get('invite_by_sms') and employee.phone:
-            # SMS not implemented yet
-            invitation_errors.append("SMS not yet implemented")
+                    invitation_errors.append("Email service not configured")
+            
+            if data.get('invite_by_sms') and employee.phone:
+                # SMS not implemented yet
+                invitation_errors.append("SMS not yet implemented")
+        except Exception as e:
+            # Don't fail the whole request if email fails
+            invitation_errors.append(f"Failed to send invitation: {str(e)}")
     
     response_data = {
         'success': True,

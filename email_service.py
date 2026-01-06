@@ -14,6 +14,7 @@ Configuration via environment variables:
 
 import os
 import smtplib
+import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, Tuple
@@ -62,8 +63,8 @@ class EmailService:
                 msg.attach(MIMEText(text_body, 'plain'))
             msg.attach(MIMEText(html_body, 'html'))
             
-            # Send email
-            with smtplib.SMTP(self.server, self.port) as server:
+            # Send email with timeout to prevent Railway from killing the request
+            with smtplib.SMTP(self.server, self.port, timeout=10) as server:
                 server.starttls()
                 server.login(self.username, self.password)
                 server.send_message(msg)
@@ -74,6 +75,10 @@ class EmailService:
             return False, "Email authentication failed. Check your MAIL_USERNAME and MAIL_PASSWORD."
         except smtplib.SMTPException as e:
             return False, f"SMTP error: {str(e)}"
+        except socket.timeout:
+            return False, "Email server connection timed out. Please try again."
+        except socket.error as e:
+            return False, f"Network error: {str(e)}"
         except Exception as e:
             return False, f"Failed to send email: {str(e)}"
     
