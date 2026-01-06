@@ -708,7 +708,6 @@ async function loadBusinessSettings(businessId) {
         
         if (data.success && data.settings && Object.keys(data.settings).length > 0) {
             applyBusinessSettings(data.settings);
-            console.log(`Loaded ${data.type} settings for business ${businessId}`);
         }
     } catch (error) {
         console.error('Failed to load business settings:', error);

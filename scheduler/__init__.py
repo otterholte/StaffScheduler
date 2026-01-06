@@ -50,6 +50,8 @@ __all__ = [
     # Business scenarios
     'get_all_businesses',
     'get_business_by_id',
+    'create_user_business',
+    'get_user_business',
     
     # Compatibility
     'get_sample_employees',

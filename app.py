@@ -19,6 +19,8 @@ from scheduler import (
     AdvancedScheduleSolver,
     get_all_businesses,
     get_business_by_id,
+    create_user_business,
+    get_user_business,
     DAYS_OF_WEEK
 )
 from scheduler.models import (
@@ -163,6 +165,28 @@ def save_custom_businesses():
 
 # Load custom businesses on startup
 load_custom_businesses()
+
+
+def ensure_user_business_exists(user):
+    """Ensure a user's business exists in the cache if they have a company_name.
+    
+    This handles the case where the server restarts and in-memory business cache is cleared.
+    """
+    if not user or not user.company_name:
+        return None
+    
+    # Check if user's business already exists
+    user_business = get_user_business(user.id)
+    if user_business:
+        return user_business
+    
+    # Recreate the user's business from their stored company_name
+    owner_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    if not owner_name:
+        owner_name = user.username
+    
+    business = create_user_business(user.id, user.company_name, owner_name)
+    return business
 
 
 def get_current_business():
@@ -321,6 +345,10 @@ def app_page(location_slug, page_slug):
     """Render the main app with specified location and page."""
     global _current_business, _solver
     
+    # Ensure user's business exists if they have one (in case server restarted)
+    if current_user.is_authenticated:
+        ensure_user_business_exists(current_user)
+    
     # Validate page slug
     if page_slug not in PAGE_SLUGS:
         # Try to redirect to schedule for this location
@@ -405,6 +433,10 @@ def app_page(location_slug, page_slug):
 @app.route('/<location_slug>')
 def app_page_default(location_slug):
     """Redirect to schedule page for a location."""
+    # Ensure user's business exists if they have one (in case server restarted)
+    if current_user.is_authenticated:
+        ensure_user_business_exists(current_user)
+    
     # Check if it's a valid business
     business = get_business_by_slug(location_slug)
     if not business:
@@ -447,6 +479,9 @@ def contact_page():
 @login_required
 def list_businesses():
     """List all available business scenarios."""
+    # Ensure user's business exists if they have one (in case server restarted)
+    ensure_user_business_exists(current_user)
+    
     businesses = get_all_businesses()
     
     # Default emoji/color mapping for built-in businesses
