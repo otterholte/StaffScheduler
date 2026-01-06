@@ -27,7 +27,7 @@ from scheduler.models import (
     CoverageMode, ShiftTemplate, ShiftRoleRequirement
 )
 from config import get_config
-from models import db, bcrypt, User, init_db
+from models import db, bcrypt, User, BusinessSettings, UserBusinessSettings, init_db
 from auth import auth_bp
 
 
@@ -1475,6 +1475,124 @@ def delete_shift_template(shift_id):
         'success': True,
         'message': f'Shift "{shift.name}" removed successfully'
     })
+
+
+# ==================== BUSINESS SETTINGS API ====================
+
+# List of demo/sample business IDs that use per-user settings
+DEMO_BUSINESS_IDS = ['coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse']
+
+
+def is_user_owned_business(business_id):
+    """Check if a business is user-created (vs demo)."""
+    return business_id.startswith('user_') or business_id not in DEMO_BUSINESS_IDS
+
+
+@app.route('/api/business/<business_id>/settings', methods=['GET'])
+def get_business_settings(business_id):
+    """
+    Get settings for a business.
+    - For user-created businesses: returns global settings (applies to all visitors)
+    - For demo businesses: returns user-specific settings if logged in, otherwise defaults
+    """
+    if is_user_owned_business(business_id):
+        # User-created business: get global settings
+        settings_record = BusinessSettings.query.filter_by(business_id=business_id).first()
+        if settings_record:
+            return jsonify({
+                'success': True,
+                'settings': settings_record.get_settings(),
+                'type': 'global'
+            })
+        return jsonify({
+            'success': True,
+            'settings': {},
+            'type': 'global'
+        })
+    else:
+        # Demo business: get user-specific settings
+        if current_user.is_authenticated:
+            settings_record = UserBusinessSettings.query.filter_by(
+                user_id=current_user.id,
+                business_id=business_id
+            ).first()
+            if settings_record:
+                return jsonify({
+                    'success': True,
+                    'settings': settings_record.get_settings(),
+                    'type': 'user'
+                })
+        # Not logged in or no settings: return empty (use defaults)
+        return jsonify({
+            'success': True,
+            'settings': {},
+            'type': 'default'
+        })
+
+
+@app.route('/api/business/<business_id>/settings', methods=['POST', 'PUT'])
+@login_required
+def save_business_settings(business_id):
+    """
+    Save settings for a business.
+    - For user-created businesses: only owner can save (applies globally)
+    - For demo businesses: any logged-in user can save (applies only to them)
+    """
+    data = request.json or {}
+    settings = data.get('settings', {})
+    
+    if is_user_owned_business(business_id):
+        # User-created business: only owner can save
+        settings_record = BusinessSettings.query.filter_by(business_id=business_id).first()
+        
+        if settings_record:
+            # Check ownership
+            if settings_record.owner_id != current_user.id:
+                return jsonify({
+                    'success': False,
+                    'error': 'You do not own this business'
+                }), 403
+            settings_record.set_settings(settings)
+        else:
+            # Create new settings record
+            settings_record = BusinessSettings(
+                business_id=business_id,
+                owner_id=current_user.id
+            )
+            settings_record.set_settings(settings)
+            db.session.add(settings_record)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Business settings saved globally',
+            'type': 'global'
+        })
+    else:
+        # Demo business: save for current user only
+        settings_record = UserBusinessSettings.query.filter_by(
+            user_id=current_user.id,
+            business_id=business_id
+        ).first()
+        
+        if settings_record:
+            settings_record.set_settings(settings)
+        else:
+            settings_record = UserBusinessSettings(
+                user_id=current_user.id,
+                business_id=business_id
+            )
+            settings_record.set_settings(settings)
+            db.session.add(settings_record)
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Settings saved for your account',
+            'type': 'user'
+        })
 
 
 if __name__ == '__main__':

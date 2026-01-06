@@ -1,9 +1,10 @@
-"""Database models for user authentication."""
+"""Database models for user authentication and business settings."""
 
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from flask_bcrypt import Bcrypt
+import json
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
@@ -54,6 +55,95 @@ class User(db.Model, UserMixin):
             'is_verified': self.is_verified,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
+        }
+
+
+class BusinessSettings(db.Model):
+    """
+    Global settings for user-created businesses.
+    These settings apply to ALL visitors of the business.
+    """
+    __tablename__ = 'business_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Store settings as JSON
+    settings_json = db.Column(db.Text, nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    owner = db.relationship('User', backref=db.backref('owned_businesses', lazy=True))
+    
+    def __repr__(self):
+        return f'<BusinessSettings {self.business_id}>'
+    
+    def get_settings(self):
+        """Get settings as a dictionary."""
+        if self.settings_json:
+            return json.loads(self.settings_json)
+        return {}
+    
+    def set_settings(self, settings_dict):
+        """Set settings from a dictionary."""
+        self.settings_json = json.dumps(settings_dict)
+    
+    def to_dict(self):
+        return {
+            'business_id': self.business_id,
+            'owner_id': self.owner_id,
+            'settings': self.get_settings(),
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+
+class UserBusinessSettings(db.Model):
+    """
+    Per-user settings for demo/sample businesses.
+    These settings only apply to the specific user.
+    """
+    __tablename__ = 'user_business_settings'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    business_id = db.Column(db.String(100), nullable=False, index=True)
+    
+    # Store settings as JSON
+    settings_json = db.Column(db.Text, nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Unique constraint: one settings record per user per business
+    __table_args__ = (db.UniqueConstraint('user_id', 'business_id', name='unique_user_business'),)
+    
+    # Relationship
+    user = db.relationship('User', backref=db.backref('business_settings', lazy=True))
+    
+    def __repr__(self):
+        return f'<UserBusinessSettings user={self.user_id} business={self.business_id}>'
+    
+    def get_settings(self):
+        """Get settings as a dictionary."""
+        if self.settings_json:
+            return json.loads(self.settings_json)
+        return {}
+    
+    def set_settings(self, settings_dict):
+        """Set settings from a dictionary."""
+        self.settings_json = json.dumps(settings_dict)
+    
+    def to_dict(self):
+        return {
+            'user_id': self.user_id,
+            'business_id': self.business_id,
+            'settings': self.get_settings(),
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
 

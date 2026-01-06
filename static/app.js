@@ -519,6 +519,7 @@ function init() {
     setupAccountModal();
     setupKeyboardShortcuts();
     setupAdvancedTab();
+    setupSettingsAutoSave();
     initTimelineAddShiftModal();
     initAvailabilityFilters();
     
@@ -592,6 +593,11 @@ function initializeFromUrl() {
     
     // Replace the current history entry with proper state
     updateUrl(false);
+    
+    // Load business settings from backend
+    if (state.business?.id) {
+        loadBusinessSettings(state.business.id);
+    }
     
     // Load schedule from localStorage if available
     const savedSchedule = loadScheduleFromStorage();
@@ -686,6 +692,162 @@ function getAllPolicies() {
         weekend_fairness: document.getElementById('weekendFairness')?.checked ?? true,
         avoid_overtime: document.getElementById('avoidOvertime')?.checked ?? true
     };
+}
+
+
+// ==================== BUSINESS SETTINGS PERSISTENCE ====================
+
+// Debounce timer for auto-saving settings
+let settingsSaveTimeout = null;
+
+async function loadBusinessSettings(businessId) {
+    // Load saved settings for a business from the backend
+    try {
+        const response = await fetch(`/api/business/${businessId}/settings`);
+        const data = await response.json();
+        
+        if (data.success && data.settings && Object.keys(data.settings).length > 0) {
+            applyBusinessSettings(data.settings);
+            console.log(`Loaded ${data.type} settings for business ${businessId}`);
+        }
+    } catch (error) {
+        console.error('Failed to load business settings:', error);
+    }
+}
+
+function applyBusinessSettings(settings) {
+    // Apply saved settings to the form elements
+    // Number inputs
+    if (settings.min_shift_length !== undefined) {
+        const el = document.getElementById('minShiftLength');
+        if (el) el.value = settings.min_shift_length;
+    }
+    if (settings.max_hours_per_day !== undefined) {
+        const el = document.getElementById('maxHoursPerDay');
+        if (el) el.value = settings.max_hours_per_day;
+    }
+    if (settings.max_splits !== undefined) {
+        const el = document.getElementById('maxSplits');
+        if (el) el.value = settings.max_splits;
+    }
+    if (settings.max_split_shifts_per_week !== undefined) {
+        const el = document.getElementById('maxSplitShiftsPerWeek');
+        if (el) el.value = settings.max_split_shifts_per_week;
+    }
+    if (settings.max_days_ft !== undefined) {
+        const el = document.getElementById('maxDaysFT');
+        if (el) el.value = settings.max_days_ft;
+    }
+    if (settings.max_days_pt !== undefined) {
+        const el = document.getElementById('maxDaysPT');
+        if (el) el.value = settings.max_days_pt;
+    }
+    
+    // Three-state toggles
+    if (settings.scheduling_strategy !== undefined) {
+        setThreeStateToggleValue('schedulingStrategyToggle', settings.scheduling_strategy);
+    }
+    if (settings.max_days_ft_mode !== undefined) {
+        setThreeStateToggleValue('maxDaysFTToggle', settings.max_days_ft_mode);
+    }
+    if (settings.max_days_pt_mode !== undefined) {
+        setThreeStateToggleValue('maxDaysPTToggle', settings.max_days_pt_mode);
+    }
+    
+    // Checkboxes
+    if (settings.supervision_required !== undefined) {
+        const el = document.getElementById('supervisionRequired');
+        if (el) el.checked = settings.supervision_required;
+    }
+    if (settings.weekend_fairness !== undefined) {
+        const el = document.getElementById('weekendFairness');
+        if (el) el.checked = settings.weekend_fairness;
+    }
+    if (settings.avoid_overtime !== undefined) {
+        const el = document.getElementById('avoidOvertime');
+        if (el) el.checked = settings.avoid_overtime;
+    }
+}
+
+function setThreeStateToggleValue(toggleId, value) {
+    // Set the value of a three-state toggle
+    const toggle = document.getElementById(toggleId);
+    if (!toggle) return;
+    
+    toggle.querySelectorAll('.toggle-option').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.value === value);
+    });
+}
+
+async function saveBusinessSettings() {
+    // Save current settings to the backend
+    if (!state.business?.id) return;
+    
+    // Only save if user is logged in
+    if (!state.currentUser) {
+        console.log('User not logged in, settings not saved to server');
+        return;
+    }
+    
+    const settings = getAllPolicies();
+    
+    try {
+        const response = await fetch(`/api/business/${state.business.id}/settings`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            console.log(`Settings saved (${data.type}): ${data.message}`);
+        } else {
+            console.error('Failed to save settings:', data.error);
+        }
+    } catch (error) {
+        console.error('Error saving settings:', error);
+    }
+}
+
+function debouncedSaveSettings() {
+    // Debounced save - waits 1 second after last change before saving
+    if (settingsSaveTimeout) {
+        clearTimeout(settingsSaveTimeout);
+    }
+    settingsSaveTimeout = setTimeout(() => {
+        saveBusinessSettings();
+    }, 1000);
+}
+
+function setupSettingsAutoSave() {
+    // Set up auto-save listeners for all settings inputs
+    // Number inputs
+    const numberInputs = [
+        'minShiftLength', 'maxHoursPerDay', 'maxSplits', 
+        'maxSplitShiftsPerWeek', 'maxDaysFT', 'maxDaysPT'
+    ];
+    numberInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', debouncedSaveSettings);
+            el.addEventListener('input', debouncedSaveSettings);
+        }
+    });
+    
+    // Checkboxes
+    const checkboxIds = ['supervisionRequired', 'weekendFairness', 'avoidOvertime'];
+    checkboxIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', debouncedSaveSettings);
+        }
+    });
+    
+    // Three-state toggles - add click listeners to options
+    document.querySelectorAll('.three-state-toggle .toggle-option').forEach(option => {
+        option.addEventListener('click', debouncedSaveSettings);
+    });
 }
 
 
@@ -1778,6 +1940,9 @@ async function switchBusiness(businessId, updateHistory = true) {
             renderEmployeesGrid();
             renderRolesList();
             renderCoverageUI();
+            
+            // Load business settings from backend
+            await loadBusinessSettings(businessId);
             
             // Load schedule from localStorage for this business/week
             const savedSchedule = loadScheduleFromStorage();
