@@ -143,6 +143,15 @@ def get_business_by_slug(slug, force_reload: bool = False):
     """
     slug = slug.lower()
     
+    # For employee portal requests, make sure we refresh from DB (handles multi-worker)
+    if force_reload:
+        try:
+            # Force reload cached businesses from the database
+            from scheduler.businesses import load_businesses_from_db
+            load_businesses_from_db(force_reload=True)
+        except Exception as e:
+            print(f"Warning: force_reload failed in get_business_by_slug: {e}")
+    
     # Check custom business names first
     for business_id, custom_data in _custom_businesses.items():
         custom_name = custom_data.get('name')
@@ -551,7 +560,12 @@ def employee_schedule(business_slug, employee_id):
             break
     
     if not employee:
-        return redirect('/')
+        # For debugging: surface a clearer error instead of silent redirect
+        return jsonify({
+            'success': False,
+            'message': f"Employee not found for {business_slug}",
+            'employee_id': employee_id
+        }), 404
     
     # Get schedule data (if any exists for this week)
     schedule_data = {}  # Will be populated by JS from localStorage or API
