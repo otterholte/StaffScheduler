@@ -166,6 +166,25 @@ def get_business_by_slug(slug, force_reload: bool = False):
                 return get_business_by_id(business.id, force_reload=True)
             return business
     
+    # If still not found and force_reload requested, query DB directly by slug
+    if force_reload:
+        try:
+            from db_service import get_all_persisted_businesses, load_business_from_db
+            db_businesses = get_all_persisted_businesses()
+            for db_business in db_businesses:
+                if slugify(db_business.name) == slug or db_business.business_id == slug:
+                    scenario = load_business_from_db(db_business)
+                    # Update cache for future requests
+                    try:
+                        from scheduler.businesses import _business_cache, _user_businesses
+                        _business_cache[scenario.id] = scenario
+                        _user_businesses[db_business.owner_id] = scenario.id
+                    except Exception:
+                        pass
+                    return scenario
+        except Exception as e:
+            print(f"Warning: DB slug lookup failed in get_business_by_slug: {e}")
+    
     # Finally, try matching directly by ID
     try:
         return get_business_by_id(slug, force_reload=force_reload)
