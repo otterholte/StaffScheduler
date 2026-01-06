@@ -31,6 +31,19 @@ from scheduler.models import (
 from config import get_config
 from models import db, bcrypt, User, BusinessSettings, UserBusinessSettings, init_db
 from auth import auth_bp
+from email_service import get_email_service
+
+
+def get_site_url():
+    """Get the base site URL for external links (emails, etc.).
+    
+    Uses SITE_URL from config/environment, falling back to request host.
+    """
+    site_url = app.config.get('SITE_URL')
+    if site_url and site_url != 'http://localhost:5000':
+        return site_url.rstrip('/')
+    # Fall back to request host for local development
+    return request.host_url.rstrip('/')
 
 
 def create_app():
@@ -934,15 +947,36 @@ def add_employee():
     # Handle invitation sending
     invitation_sent = False
     invitation_methods = []
+    invitation_errors = []
+    
     if data.get('send_invite'):
+        business_slug = get_business_slug(business.id)
+        base_url = get_site_url()
+        portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+        
+        # Get custom business name if available
+        business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+        
         if data.get('invite_by_email') and employee.email:
-            # Queue email invitation (would integrate with email service)
-            invitation_methods.append('email')
-            invitation_sent = True
+            email_service = get_email_service()
+            if email_service.is_configured():
+                success, msg = email_service.send_portal_invitation(
+                    to_email=employee.email,
+                    employee_name=employee.name,
+                    business_name=business_name,
+                    portal_url=portal_url
+                )
+                if success:
+                    invitation_methods.append('email')
+                    invitation_sent = True
+                else:
+                    invitation_errors.append(f"Email: {msg}")
+            else:
+                invitation_errors.append("Email service not configured")
+        
         if data.get('invite_by_sms') and employee.phone:
-            # Queue SMS invitation (would integrate with SMS service)
-            invitation_methods.append('sms')
-            invitation_sent = True
+            # SMS not implemented yet
+            invitation_errors.append("SMS not yet implemented")
     
     response_data = {
         'success': True,
@@ -954,6 +988,8 @@ def add_employee():
         response_data['invitation_sent'] = True
         response_data['invitation_methods'] = invitation_methods
         response_data['message'] = f"Employee added and invitation sent via {', '.join(invitation_methods)}"
+    elif invitation_errors:
+        response_data['invitation_errors'] = invitation_errors
     
     return jsonify(response_data)
 
@@ -1010,13 +1046,36 @@ def update_employee(emp_id):
     # Handle invitation sending (for updates too)
     invitation_sent = False
     invitation_methods = []
+    invitation_errors = []
+    
     if data.get('send_invite'):
+        business_slug = get_business_slug(business.id)
+        base_url = get_site_url()
+        portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+        
+        # Get custom business name if available
+        business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+        
         if data.get('invite_by_email') and employee.email:
-            invitation_methods.append('email')
-            invitation_sent = True
+            email_service = get_email_service()
+            if email_service.is_configured():
+                success, msg = email_service.send_portal_invitation(
+                    to_email=employee.email,
+                    employee_name=employee.name,
+                    business_name=business_name,
+                    portal_url=portal_url
+                )
+                if success:
+                    invitation_methods.append('email')
+                    invitation_sent = True
+                else:
+                    invitation_errors.append(f"Email: {msg}")
+            else:
+                invitation_errors.append("Email service not configured")
+        
         if data.get('invite_by_sms') and employee.phone:
-            invitation_methods.append('sms')
-            invitation_sent = True
+            # SMS not implemented yet
+            invitation_errors.append("SMS not yet implemented")
     
     response_data = {
         'success': True,
@@ -1028,6 +1087,8 @@ def update_employee(emp_id):
         response_data['invitation_sent'] = True
         response_data['invitation_methods'] = invitation_methods
         response_data['message'] = f"Employee updated and invitation sent via {', '.join(invitation_methods)}"
+    elif invitation_errors:
+        response_data['invitation_errors'] = invitation_errors
     
     return jsonify(response_data)
 
@@ -1083,29 +1144,7 @@ def send_employee_invitation(emp_id):
     invite_by_email = data.get('email', False)
     invite_by_sms = data.get('sms', False)
     
-    invitation_methods = []
-    
-    if invite_by_email:
-        if not employee.email:
-            return jsonify({
-                'success': False,
-                'message': 'Employee does not have an email address'
-            }), 400
-        # TODO: Integrate with email service (SendGrid, SES, etc.)
-        # For now, just simulate success
-        invitation_methods.append('email')
-    
-    if invite_by_sms:
-        if not employee.phone:
-            return jsonify({
-                'success': False,
-                'message': 'Employee does not have a phone number'
-            }), 400
-        # TODO: Integrate with SMS service (Twilio, etc.)
-        # For now, just simulate success
-        invitation_methods.append('sms')
-    
-    if not invitation_methods:
+    if not invite_by_email and not invite_by_sms:
         return jsonify({
             'success': False,
             'message': 'Please select at least one invitation method'
@@ -1113,13 +1152,72 @@ def send_employee_invitation(emp_id):
     
     # Generate invitation link
     business_slug = get_business_slug(business.id)
-    portal_url = f"/employee/{business_slug}/{employee.id}/schedule"
+    base_url = get_site_url()
+    portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+    
+    # Get custom business name if available
+    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+    
+    invitation_methods = []
+    invitation_errors = []
+    
+    if invite_by_email:
+        if not employee.email:
+            return jsonify({
+                'success': False,
+                'message': 'Employee does not have an email address'
+            }), 400
+        
+        email_service = get_email_service()
+        if not email_service.is_configured():
+            return jsonify({
+                'success': False,
+                'message': 'Email service not configured. Set MAIL_USERNAME and MAIL_PASSWORD environment variables.'
+            }), 500
+        
+        success, msg = email_service.send_portal_invitation(
+            to_email=employee.email,
+            employee_name=employee.name,
+            business_name=business_name,
+            portal_url=portal_url
+        )
+        
+        if success:
+            invitation_methods.append('email')
+        else:
+            invitation_errors.append(msg)
+    
+    if invite_by_sms:
+        if not employee.phone:
+            return jsonify({
+                'success': False,
+                'message': 'Employee does not have a phone number'
+            }), 400
+        # SMS not implemented yet
+        invitation_errors.append("SMS not yet implemented")
+    
+    if not invitation_methods and invitation_errors:
+        return jsonify({
+            'success': False,
+            'message': invitation_errors[0]
+        }), 500
     
     return jsonify({
         'success': True,
         'message': f"Invitation sent to {employee.name} via {', '.join(invitation_methods)}",
         'invitation_methods': invitation_methods,
         'portal_url': portal_url
+    })
+
+
+@app.route('/api/email/status', methods=['GET'])
+@login_required
+def email_status():
+    """Check if email service is configured."""
+    email_service = get_email_service()
+    return jsonify({
+        'configured': email_service.is_configured(),
+        'server': email_service.server if email_service.is_configured() else None
     })
 
 
