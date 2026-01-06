@@ -64,10 +64,18 @@ class EmailService:
             msg.attach(MIMEText(html_body, 'html'))
             
             # Send email with timeout to prevent Railway from killing the request
-            with smtplib.SMTP(self.server, self.port, timeout=10) as server:
-                server.starttls()
-                server.login(self.username, self.password)
-                server.send_message(msg)
+            # Try SSL (port 465) first, then fall back to TLS (port 587)
+            if self.port == 465:
+                # Use SMTP_SSL for port 465
+                with smtplib.SMTP_SSL(self.server, self.port, timeout=15) as server:
+                    server.login(self.username, self.password)
+                    server.send_message(msg)
+            else:
+                # Use SMTP with STARTTLS for port 587
+                with smtplib.SMTP(self.server, self.port, timeout=15) as server:
+                    server.starttls()
+                    server.login(self.username, self.password)
+                    server.send_message(msg)
             
             return True, "Email sent successfully"
             
