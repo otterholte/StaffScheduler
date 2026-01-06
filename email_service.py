@@ -1,12 +1,14 @@
 """
 Simple Email Service for Staff Scheduler
 
-Uses Python's built-in smtplib for sending emails.
-Works with Gmail SMTP (free, up to 500 emails/day with App Password).
+Supports two methods:
+1. Resend API (recommended for cloud platforms like Railway)
+2. SMTP (Gmail, etc.) - may be blocked on some cloud platforms
 
 Configuration via environment variables:
+- RESEND_API_KEY: API key from resend.com (recommended)
 - MAIL_SERVER: SMTP server (default: smtp.gmail.com)
-- MAIL_PORT: SMTP port (default: 587 for TLS)
+- MAIL_PORT: SMTP port (default: 587 for TLS, use 465 for SSL)
 - MAIL_USERNAME: Your email address
 - MAIL_PASSWORD: App password (NOT your regular password)
 - MAIL_FROM_NAME: Display name for sender (default: Staff Scheduler)
@@ -15,42 +17,86 @@ Configuration via environment variables:
 import os
 import smtplib
 import socket
+import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, Tuple
+from urllib.request import urlopen, Request
+from urllib.error import URLError, HTTPError
 
 
 class EmailService:
-    """Simple email service using SMTP."""
+    """Email service supporting Resend API and SMTP."""
     
     def __init__(self):
+        # Resend API (preferred for cloud platforms)
+        self.resend_api_key = os.environ.get('RESEND_API_KEY', '')
+        self.resend_from_email = os.environ.get('RESEND_FROM_EMAIL', 'onboarding@resend.dev')
+        
+        # SMTP settings (fallback)
         self.server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
         self.port = int(os.environ.get('MAIL_PORT', 587))
         self.username = os.environ.get('MAIL_USERNAME', '')
         self.password = os.environ.get('MAIL_PASSWORD', '')
         self.from_name = os.environ.get('MAIL_FROM_NAME', 'Staff Scheduler')
-        self.enabled = bool(self.username and self.password)
+        
+        # Check which method is available
+        self.use_resend = bool(self.resend_api_key)
+        self.use_smtp = bool(self.username and self.password)
+        self.enabled = self.use_resend or self.use_smtp
     
     def is_configured(self) -> bool:
         """Check if email is properly configured."""
         return self.enabled
     
-    def send_email(
+    def _send_via_resend(
         self,
         to_email: str,
         subject: str,
         html_body: str,
         text_body: Optional[str] = None
     ) -> Tuple[bool, str]:
-        """
-        Send an email.
-        
-        Returns:
-            Tuple of (success: bool, message: str)
-        """
-        if not self.enabled:
-            return False, "Email service not configured. Set MAIL_USERNAME and MAIL_PASSWORD environment variables."
-        
+        """Send email via Resend API."""
+        try:
+            data = {
+                "from": f"{self.from_name} <{self.resend_from_email}>",
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body
+            }
+            if text_body:
+                data["text"] = text_body
+            
+            req = Request(
+                "https://api.resend.com/emails",
+                data=json.dumps(data).encode('utf-8'),
+                headers={
+                    "Authorization": f"Bearer {self.resend_api_key}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
+            
+            with urlopen(req, timeout=15) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                return True, f"Email sent via Resend (id: {result.get('id', 'unknown')})"
+                
+        except HTTPError as e:
+            error_body = e.read().decode('utf-8') if e.fp else str(e)
+            return False, f"Resend API error ({e.code}): {error_body}"
+        except URLError as e:
+            return False, f"Resend network error: {str(e.reason)}"
+        except Exception as e:
+            return False, f"Resend error: {str(e)}"
+    
+    def _send_via_smtp(
+        self,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: Optional[str] = None
+    ) -> Tuple[bool, str]:
+        """Send email via SMTP."""
         try:
             # Create message
             msg = MIMEMultipart('alternative')
@@ -63,32 +109,59 @@ class EmailService:
                 msg.attach(MIMEText(text_body, 'plain'))
             msg.attach(MIMEText(html_body, 'html'))
             
-            # Send email with timeout to prevent Railway from killing the request
-            # Try SSL (port 465) first, then fall back to TLS (port 587)
+            # Send email with timeout
             if self.port == 465:
-                # Use SMTP_SSL for port 465
                 with smtplib.SMTP_SSL(self.server, self.port, timeout=15) as server:
                     server.login(self.username, self.password)
                     server.send_message(msg)
             else:
-                # Use SMTP with STARTTLS for port 587
                 with smtplib.SMTP(self.server, self.port, timeout=15) as server:
                     server.starttls()
                     server.login(self.username, self.password)
                     server.send_message(msg)
             
-            return True, "Email sent successfully"
+            return True, "Email sent via SMTP"
             
         except smtplib.SMTPAuthenticationError:
-            return False, "Email authentication failed. Check your MAIL_USERNAME and MAIL_PASSWORD."
+            return False, "SMTP authentication failed. Check your MAIL_USERNAME and MAIL_PASSWORD."
         except smtplib.SMTPException as e:
             return False, f"SMTP error: {str(e)}"
         except socket.timeout:
-            return False, "Email server connection timed out. Please try again."
+            return False, "SMTP connection timed out."
         except socket.error as e:
-            return False, f"Network error: {str(e)}"
+            return False, f"SMTP network error: {str(e)}"
         except Exception as e:
-            return False, f"Failed to send email: {str(e)}"
+            return False, f"SMTP error: {str(e)}"
+    
+    def send_email(
+        self,
+        to_email: str,
+        subject: str,
+        html_body: str,
+        text_body: Optional[str] = None
+    ) -> Tuple[bool, str]:
+        """
+        Send an email. Tries Resend API first, then falls back to SMTP.
+        
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        if not self.enabled:
+            return False, "Email service not configured. Set RESEND_API_KEY or MAIL_USERNAME/MAIL_PASSWORD."
+        
+        # Try Resend API first (works on cloud platforms like Railway)
+        if self.use_resend:
+            success, msg = self._send_via_resend(to_email, subject, html_body, text_body)
+            if success:
+                return success, msg
+            # Log Resend failure but continue to SMTP fallback
+            print(f"[EMAIL] Resend failed: {msg}", flush=True)
+        
+        # Fall back to SMTP
+        if self.use_smtp:
+            return self._send_via_smtp(to_email, subject, html_body, text_body)
+        
+        return False, "No email method available"
     
     def send_portal_invitation(
         self,
