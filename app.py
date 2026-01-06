@@ -23,6 +23,9 @@ from scheduler import (
     get_user_business,
     DAYS_OF_WEEK
 )
+from scheduler.businesses import sync_business_to_db
+from db_service import save_schedule_to_db, get_schedule_from_db, publish_schedule_in_db, get_published_schedule_from_db
+from datetime import date, timedelta
 from scheduler.models import (
     Employee, Role, TimeSlot, EmployeeClassification,
     PeakPeriod, RoleCoverageConfig, CoverageRequirement,
@@ -589,6 +592,53 @@ def employee_availability(business_slug, employee_id):
     )
 
 
+@app.route('/api/employee/<business_slug>/<employee_id>/schedule', methods=['GET'])
+def get_employee_schedule(business_slug, employee_id):
+    """Get the published schedule for an employee (no login required - public for employees)."""
+    week_offset = request.args.get('weekOffset', 0, type=int)
+    
+    # Get the business
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return jsonify({
+            'success': False,
+            'message': 'Business not found'
+        }), 404
+    
+    # Get the published schedule from database
+    week_start = get_week_start(week_offset)
+    
+    try:
+        schedule = get_published_schedule_from_db(business.id, week_start)
+        if schedule:
+            # Filter assignments for this employee
+            employee_shifts = [
+                a.to_dict() for a in schedule.assignments 
+                if a.employee_id == employee_id
+            ]
+            return jsonify({
+                'success': True,
+                'schedule': {
+                    'assignments': [a.to_dict() for a in schedule.assignments],
+                    'slot_assignments': schedule.to_dict().get('slot_assignments', {}),
+                    'employee_shifts': employee_shifts
+                },
+                'week_start': week_start.isoformat(),
+                'published': True
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No published schedule for this week',
+                'published': False
+            })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to load schedule: {str(e)}'
+        }), 500
+
+
 @app.route('/api/employee/<employee_id>/availability', methods=['PUT'])
 def employee_update_availability(employee_id):
     """Employee API to update their own availability (no login required for testing)."""
@@ -647,6 +697,15 @@ def employee_update_availability(employee_id):
                     end = h + 1
             ranges.append([start, end])
         avail_data[day] = ranges
+    
+    # Sync to database for persistence (get owner_id from DB)
+    try:
+        from db_service import get_db_business
+        db_business = get_db_business(business_id)
+        if db_business:
+            sync_business_to_db(business_id, db_business.owner_id)
+    except Exception as e:
+        print(f"Warning: Could not sync availability to database: {e}")
     
     return jsonify({
         'success': True,
@@ -818,6 +877,14 @@ def delete_business(business_id):
 
 # ==================== SCHEDULE API ====================
 
+def get_week_start(offset: int = 0) -> date:
+    """Get the Monday of the week with the given offset from current week."""
+    today = date.today()
+    days_since_monday = today.weekday()
+    monday = today - timedelta(days=days_since_monday)
+    return monday + timedelta(weeks=offset)
+
+
 @app.route('/api/generate', methods=['POST'])
 @login_required
 def generate_schedule():
@@ -825,6 +892,7 @@ def generate_schedule():
     # Get policies from request if provided
     data = request.json or {}
     policies = data.get('policies', None)
+    week_offset = data.get('weekOffset', 0)
     
     solver = get_solver(policies)
     business = get_current_business()
@@ -834,6 +902,14 @@ def generate_schedule():
     
     # Solve
     schedule = solver.solve(time_limit_seconds=60.0)
+    
+    # Save schedule to database if user is authenticated
+    if schedule.is_feasible and current_user.is_authenticated:
+        try:
+            week_start = get_week_start(week_offset)
+            save_schedule_to_db(business.id, schedule, week_start, status='draft')
+        except Exception as e:
+            print(f"Warning: Could not save schedule to database: {e}")
     
     return jsonify({
         'success': schedule.is_feasible,
@@ -890,6 +966,69 @@ def reset_solver():
     })
 
 
+@app.route('/api/schedule/publish', methods=['POST'])
+@login_required
+def publish_schedule():
+    """Publish the current schedule for a week."""
+    data = request.json or {}
+    week_offset = data.get('weekOffset', 0)
+    
+    business = get_current_business()
+    week_start = get_week_start(week_offset)
+    
+    try:
+        success = publish_schedule_in_db(business.id, week_start)
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Schedule published successfully!'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No schedule found to publish'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to publish schedule: {str(e)}'
+        }), 500
+
+
+@app.route('/api/schedule/load', methods=['GET'])
+@login_required
+def load_saved_schedule():
+    """Load a saved schedule for a specific week."""
+    week_offset = request.args.get('weekOffset', 0, type=int)
+    
+    business = get_current_business()
+    week_start = get_week_start(week_offset)
+    
+    try:
+        schedule = get_schedule_from_db(business.id, week_start)
+        if schedule:
+            return jsonify({
+                'success': True,
+                'schedule': schedule.to_dict(),
+                'business': {
+                    'id': business.id,
+                    'name': business.name,
+                    'roles': [r.to_dict() for r in business.roles]
+                },
+                'employees': [emp.to_dict() for emp in business.employees]
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No saved schedule for this week'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Failed to load schedule: {str(e)}'
+        }), 500
+
+
 # ==================== EMPLOYEE API ====================
 
 @app.route('/api/employees', methods=['GET'])
@@ -943,6 +1082,10 @@ def add_employee():
     
     business.employees.append(employee)
     _solver = None  # Reset solver
+    
+    # Sync to database for persistence
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id)
     
     # Handle invitation sending
     invitation_sent = False
@@ -1047,6 +1190,10 @@ def update_employee(emp_id):
     
     _solver = None  # Reset solver
     
+    # Sync to database for persistence
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id)
+    
     # Handle invitation sending (for updates too)
     invitation_sent = False
     invitation_methods = []
@@ -1122,6 +1269,10 @@ def delete_employee(emp_id):
         }), 404
     
     _solver = None  # Reset solver
+    
+    # Sync to database for persistence
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id)
     
     return jsonify({
         'success': True,
@@ -1267,6 +1418,10 @@ def update_availability(emp_id):
     
     _solver = None  # Reset solver
     
+    # Sync to database for persistence
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id)
+    
     return jsonify({
         'success': True,
         'employee': employee.to_dict(),
@@ -1316,6 +1471,10 @@ def update_availability_cell(emp_id):
         employee.time_off.add(slot)
     
     _solver = None  # Reset solver
+    
+    # Sync to database for persistence
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id)
     
     return jsonify({
         'success': True,

@@ -834,6 +834,50 @@ _business_creators = {
 # User-created businesses (stored by user_id)
 _user_businesses = {}  # type: Dict[int, str]  # user_id -> business_id
 
+# Flag to track if we've loaded from database
+_db_loaded = False
+
+
+def _try_import_db_service():
+    """Try to import db_service module. Returns None if not in app context."""
+    try:
+        from db_service import (
+            get_db_business, get_user_db_business, save_business_to_db,
+            load_business_from_db, get_all_persisted_businesses, is_business_persisted
+        )
+        return {
+            'get_db_business': get_db_business,
+            'get_user_db_business': get_user_db_business,
+            'save_business_to_db': save_business_to_db,
+            'load_business_from_db': load_business_from_db,
+            'get_all_persisted_businesses': get_all_persisted_businesses,
+            'is_business_persisted': is_business_persisted
+        }
+    except Exception:
+        return None
+
+
+def load_businesses_from_db():
+    """Load all persisted businesses from the database into cache."""
+    global _db_loaded, _business_cache, _user_businesses
+    
+    if _db_loaded:
+        return
+    
+    db_funcs = _try_import_db_service()
+    if not db_funcs:
+        return
+    
+    try:
+        for db_business in db_funcs['get_all_persisted_businesses']():
+            scenario = db_funcs['load_business_from_db'](db_business)
+            _business_cache[scenario.id] = scenario
+            _user_businesses[db_business.owner_id] = scenario.id
+        _db_loaded = True
+    except Exception as e:
+        # Database might not be initialized yet
+        print(f"Warning: Could not load businesses from database: {e}")
+
 
 def create_user_business(user_id: int, company_name: str, owner_name: str = None) -> BusinessScenario:
     """Create a new business for a user based on their company name."""
@@ -842,6 +886,20 @@ def create_user_business(user_id: int, company_name: str, owner_name: str = None
     # Generate a unique business ID
     slug = re.sub(r'[^a-z0-9]+', '_', company_name.lower()).strip('_')
     business_id = f"user_{user_id}_{slug}"
+    
+    # Check if we already have this business in the database
+    db_funcs = _try_import_db_service()
+    if db_funcs:
+        try:
+            # Check if user already has a business
+            db_business = db_funcs['get_user_db_business'](user_id)
+            if db_business:
+                scenario = db_funcs['load_business_from_db'](db_business)
+                _business_cache[scenario.id] = scenario
+                _user_businesses[user_id] = scenario.id
+                return scenario
+        except Exception:
+            pass
     
     # Default roles for a new business
     roles = [
@@ -914,18 +972,43 @@ def create_user_business(user_id: int, company_name: str, owner_name: str = None
     _business_cache[business_id] = scenario
     _user_businesses[user_id] = business_id
     
+    # Persist to database
+    if db_funcs:
+        try:
+            db_funcs['save_business_to_db'](scenario, user_id)
+        except Exception as e:
+            print(f"Warning: Could not save business to database: {e}")
+    
     return scenario
 
 
 def get_user_business(user_id: int) -> BusinessScenario:
     """Get the business for a specific user."""
-    if user_id not in _user_businesses:
-        return None
-    return _business_cache.get(_user_businesses[user_id])
+    # First check the in-memory cache
+    if user_id in _user_businesses:
+        return _business_cache.get(_user_businesses[user_id])
+    
+    # Try to load from database
+    db_funcs = _try_import_db_service()
+    if db_funcs:
+        try:
+            db_business = db_funcs['get_user_db_business'](user_id)
+            if db_business:
+                scenario = db_funcs['load_business_from_db'](db_business)
+                _business_cache[scenario.id] = scenario
+                _user_businesses[user_id] = scenario.id
+                return scenario
+        except Exception as e:
+            print(f"Warning: Could not load business from database: {e}")
+    
+    return None
 
 
 def get_all_businesses() -> List[BusinessScenario]:
     """Get all available business scenarios (cached)."""
+    # Load from database first
+    load_businesses_from_db()
+    
     # Ensure all built-in businesses are cached
     for business_id in _business_creators:
         if business_id not in _business_cache:
@@ -939,12 +1022,38 @@ def get_business_by_id(business_id: str) -> BusinessScenario:
     if business_id in _business_cache:
         return _business_cache[business_id]
     
+    # Try to load from database
+    db_funcs = _try_import_db_service()
+    if db_funcs:
+        try:
+            db_business = db_funcs['get_db_business'](business_id)
+            if db_business:
+                scenario = db_funcs['load_business_from_db'](db_business)
+                _business_cache[scenario.id] = scenario
+                _user_businesses[db_business.owner_id] = scenario.id
+                return scenario
+        except Exception as e:
+            print(f"Warning: Could not load business from database: {e}")
+    
     # Check built-in creators
     if business_id in _business_creators:
         _business_cache[business_id] = _business_creators[business_id]()
         return _business_cache[business_id]
     
     raise ValueError(f"Unknown business ID: {business_id}")
+
+
+def sync_business_to_db(business_id: str, user_id: int):
+    """Sync a business from cache to database."""
+    if business_id not in _business_cache:
+        return
+    
+    db_funcs = _try_import_db_service()
+    if db_funcs:
+        try:
+            db_funcs['save_business_to_db'](_business_cache[business_id], user_id)
+        except Exception as e:
+            print(f"Warning: Could not sync business to database: {e}")
 
 
 DAYS_OF_WEEK = DAYS
