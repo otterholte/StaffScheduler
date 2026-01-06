@@ -5406,6 +5406,8 @@ function openEmployeeForm(empId = null) {
         document.getElementById('empId').value = emp.id;
         document.getElementById('empName').value = emp.name;
         document.getElementById('empColor').value = emp.color;
+        document.getElementById('empEmail').value = emp.email || '';
+        document.getElementById('empPhone').value = emp.phone || '';
         document.getElementById('empClassification').value = emp.classification;
         document.getElementById('empHourlyRate').value = emp.hourly_rate;
         document.getElementById('empMinHours').value = emp.min_hours;
@@ -5427,6 +5429,8 @@ function openEmployeeForm(empId = null) {
         title.textContent = 'Add Employee';
         state.editingEmployee = null;
         document.getElementById('empId').value = '';
+        document.getElementById('empEmail').value = '';
+        document.getElementById('empPhone').value = '';
         // Get a color not already used by existing employees
         const usedColors = state.employees.map(e => e.color);
         document.getElementById('empColor').value = getNextDistinctColor(usedColors);
@@ -5439,7 +5443,69 @@ function openEmployeeForm(empId = null) {
         });
     });
     
+    // Setup invite toggle
+    setupInviteToggle();
+    
     openModal('employeeModal');
+}
+
+function setupInviteToggle() {
+    const sendInviteCheckbox = document.getElementById('empSendInvite');
+    const inviteOptions = document.getElementById('inviteOptions');
+    const inviteByEmail = document.getElementById('inviteByEmail');
+    const inviteBySMS = document.getElementById('inviteBySMS');
+    const inviteNote = document.getElementById('inviteNote');
+    const emailInput = document.getElementById('empEmail');
+    const phoneInput = document.getElementById('empPhone');
+    
+    if (!sendInviteCheckbox) return;
+    
+    // Reset invite state
+    sendInviteCheckbox.checked = false;
+    inviteOptions.style.display = 'none';
+    inviteByEmail.checked = true;
+    inviteBySMS.checked = false;
+    
+    function updateInviteNote() {
+        const email = emailInput.value.trim();
+        const phone = phoneInput.value.trim();
+        const wantEmail = inviteByEmail.checked;
+        const wantSMS = inviteBySMS.checked;
+        
+        const warnings = [];
+        if (wantEmail && !email) {
+            warnings.push('email address');
+        }
+        if (wantSMS && !phone) {
+            warnings.push('phone number');
+        }
+        
+        if (warnings.length > 0) {
+            inviteNote.textContent = `⚠️ Please add ${warnings.join(' and ')} above to send invitation.`;
+            inviteNote.className = 'invite-note warning';
+        } else if (wantEmail || wantSMS) {
+            const methods = [];
+            if (wantEmail && email) methods.push('email');
+            if (wantSMS && phone) methods.push('text message');
+            inviteNote.textContent = `Invitation will be sent via ${methods.join(' and ')}.`;
+            inviteNote.className = 'invite-note';
+        } else {
+            inviteNote.textContent = 'Select at least one method to send invitation.';
+            inviteNote.className = 'invite-note warning';
+        }
+    }
+    
+    sendInviteCheckbox.addEventListener('change', () => {
+        inviteOptions.style.display = sendInviteCheckbox.checked ? 'block' : 'none';
+        if (sendInviteCheckbox.checked) {
+            updateInviteNote();
+        }
+    });
+    
+    inviteByEmail.addEventListener('change', updateInviteNote);
+    inviteBySMS.addEventListener('change', updateInviteNote);
+    emailInput.addEventListener('input', updateInviteNote);
+    phoneInput.addEventListener('input', updateInviteNote);
 }
 
 async function handleEmployeeSubmit(e) {
@@ -5453,9 +5519,15 @@ async function handleEmployeeSubmit(e) {
         roles.push(cb.value);
     });
     
+    const sendInvite = document.getElementById('empSendInvite').checked;
+    const inviteByEmail = document.getElementById('inviteByEmail').checked;
+    const inviteBySMS = document.getElementById('inviteBySMS').checked;
+    
     const employeeData = {
         name: document.getElementById('empName').value,
         color: document.getElementById('empColor').value,
+        email: document.getElementById('empEmail').value.trim() || null,
+        phone: document.getElementById('empPhone').value.trim() || null,
         classification: document.getElementById('empClassification').value,
         hourly_rate: parseFloat(document.getElementById('empHourlyRate').value),
         min_hours: parseInt(document.getElementById('empMinHours').value),
@@ -5463,7 +5535,10 @@ async function handleEmployeeSubmit(e) {
         roles: roles,
         can_supervise: document.getElementById('empCanSupervise').checked,
         needs_supervision: document.getElementById('empNeedsSupervision').checked,
-        overtime_allowed: document.getElementById('empOvertimeAllowed').checked
+        overtime_allowed: document.getElementById('empOvertimeAllowed').checked,
+        send_invite: sendInvite,
+        invite_by_email: sendInvite && inviteByEmail,
+        invite_by_sms: sendInvite && inviteBySMS
     };
     
     try {
@@ -5496,7 +5571,14 @@ async function handleEmployeeSubmit(e) {
             renderEmployeesGrid();
             renderEmployeeHoursList();
             closeAllModals();
-            showToast(isNew ? 'Employee added' : 'Employee updated', 'success');
+            
+            // Show appropriate toast based on whether invitation was sent
+            if (data.invitation_sent) {
+                const methods = data.invitation_methods.join(' & ');
+                showToast(`${isNew ? 'Employee added' : 'Employee updated'} — invitation sent via ${methods}`, 'success');
+            } else {
+                showToast(isNew ? 'Employee added' : 'Employee updated', 'success');
+            }
         } else {
             showToast(data.message || 'Failed to save employee', 'error');
         }

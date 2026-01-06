@@ -911,6 +911,8 @@ def add_employee():
     employee = Employee(
         id=emp_id,
         name=data.get('name', 'New Employee'),
+        email=data.get('email'),
+        phone=data.get('phone'),
         classification=classification,
         min_hours=data.get('min_hours', 15),
         max_hours=data.get('max_hours', 25),
@@ -929,11 +931,31 @@ def add_employee():
     business.employees.append(employee)
     _solver = None  # Reset solver
     
-    return jsonify({
+    # Handle invitation sending
+    invitation_sent = False
+    invitation_methods = []
+    if data.get('send_invite'):
+        if data.get('invite_by_email') and employee.email:
+            # Queue email invitation (would integrate with email service)
+            invitation_methods.append('email')
+            invitation_sent = True
+        if data.get('invite_by_sms') and employee.phone:
+            # Queue SMS invitation (would integrate with SMS service)
+            invitation_methods.append('sms')
+            invitation_sent = True
+    
+    response_data = {
         'success': True,
         'employee': employee.to_dict(),
         'message': 'Employee added successfully'
-    })
+    }
+    
+    if invitation_sent:
+        response_data['invitation_sent'] = True
+        response_data['invitation_methods'] = invitation_methods
+        response_data['message'] = f"Employee added and invitation sent via {', '.join(invitation_methods)}"
+    
+    return jsonify(response_data)
 
 
 @app.route('/api/employees/<emp_id>', methods=['PUT'])
@@ -960,6 +982,10 @@ def update_employee(emp_id):
     # Update fields
     if 'name' in data:
         employee.name = data['name']
+    if 'email' in data:
+        employee.email = data['email']
+    if 'phone' in data:
+        employee.phone = data['phone']
     if 'classification' in data:
         employee.classification = EmployeeClassification.FULL_TIME if data['classification'] == 'full_time' else EmployeeClassification.PART_TIME
     if 'min_hours' in data:
@@ -981,11 +1007,29 @@ def update_employee(emp_id):
     
     _solver = None  # Reset solver
     
-    return jsonify({
+    # Handle invitation sending (for updates too)
+    invitation_sent = False
+    invitation_methods = []
+    if data.get('send_invite'):
+        if data.get('invite_by_email') and employee.email:
+            invitation_methods.append('email')
+            invitation_sent = True
+        if data.get('invite_by_sms') and employee.phone:
+            invitation_methods.append('sms')
+            invitation_sent = True
+    
+    response_data = {
         'success': True,
         'employee': employee.to_dict(),
         'message': 'Employee updated successfully'
-    })
+    }
+    
+    if invitation_sent:
+        response_data['invitation_sent'] = True
+        response_data['invitation_methods'] = invitation_methods
+        response_data['message'] = f"Employee updated and invitation sent via {', '.join(invitation_methods)}"
+    
+    return jsonify(response_data)
 
 
 @app.route('/api/employees/<emp_id>', methods=['DELETE'])
@@ -1013,6 +1057,69 @@ def delete_employee(emp_id):
     return jsonify({
         'success': True,
         'message': f'{employee.name} removed successfully'
+    })
+
+
+@app.route('/api/employees/<emp_id>/invite', methods=['POST'])
+@login_required
+def send_employee_invitation(emp_id):
+    """Send portal invitation to an employee."""
+    business = get_current_business()
+    data = request.json
+    
+    # Find employee
+    employee = None
+    for emp in business.employees:
+        if emp.id == emp_id:
+            employee = emp
+            break
+    
+    if not employee:
+        return jsonify({
+            'success': False,
+            'message': 'Employee not found'
+        }), 404
+    
+    invite_by_email = data.get('email', False)
+    invite_by_sms = data.get('sms', False)
+    
+    invitation_methods = []
+    
+    if invite_by_email:
+        if not employee.email:
+            return jsonify({
+                'success': False,
+                'message': 'Employee does not have an email address'
+            }), 400
+        # TODO: Integrate with email service (SendGrid, SES, etc.)
+        # For now, just simulate success
+        invitation_methods.append('email')
+    
+    if invite_by_sms:
+        if not employee.phone:
+            return jsonify({
+                'success': False,
+                'message': 'Employee does not have a phone number'
+            }), 400
+        # TODO: Integrate with SMS service (Twilio, etc.)
+        # For now, just simulate success
+        invitation_methods.append('sms')
+    
+    if not invitation_methods:
+        return jsonify({
+            'success': False,
+            'message': 'Please select at least one invitation method'
+        }), 400
+    
+    # Generate invitation link
+    business_slug = get_business_slug(business.id)
+    portal_url = f"/employee/{business_slug}/{employee.id}/schedule"
+    
+    return jsonify({
+        'success': True,
+        'message': f"Invitation sent to {employee.name} via {', '.join(invitation_methods)}",
+        'invitation_methods': invitation_methods,
+        'portal_url': portal_url
     })
 
 

@@ -216,6 +216,10 @@ class Employee:
     id: str
     name: str
     
+    # Contact info (for portal invitations)
+    email: str = None
+    phone: str = None
+    
     # Classification
     classification: EmployeeClassification = EmployeeClassification.PART_TIME
     
@@ -297,6 +301,8 @@ class Employee:
         return {
             "id": self.id,
             "name": self.name,
+            "email": self.email,
+            "phone": self.phone,
             "classification": self.classification.value,
             "min_hours": self.min_hours,
             "max_hours": self.max_hours,

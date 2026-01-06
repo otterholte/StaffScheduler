@@ -4006,6 +4006,84 @@ select.full-width {
     color: var(--text-secondary);
 }
 
+/* ---------- Invite Section ---------- */
+.invite-section .section-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+}
+
+.invite-options {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.invite-method-group {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.invite-method-option {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.invite-method-option:hover {
+    border-color: var(--accent-primary);
+    color: var(--text-primary);
+}
+
+.invite-method-option input {
+    display: none;
+}
+
+.invite-method-option input:checked + svg {
+    color: var(--accent-primary);
+}
+
+.invite-method-option input:checked ~ span {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.invite-method-option:has(input:checked) {
+    border-color: var(--accent-primary);
+    background: rgba(70, 125, 246, 0.1);
+}
+
+.invite-method-option svg {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: color 0.2s ease;
+}
+
+.invite-note {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-light);
+}
+
+.invite-note.warning {
+    color: var(--warning);
+}
+
 /* ---------- Roles List ---------- */
 .roles-list {
     display: flex;
