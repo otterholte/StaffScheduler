@@ -14,3 +14,5 @@ with app.app_context():
     except Exception as e:
         print(f'Error: {type(e).__name__}: {e}')
 
+
+

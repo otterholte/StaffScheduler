@@ -473,6 +473,175 @@ def contact_page():
     return render_template('contact.html', user=current_user)
 
 
+# ==================== EMPLOYEE PORTAL ====================
+
+@app.route('/employee/<business_slug>/<employee_id>/schedule')
+def employee_schedule(business_slug, employee_id):
+    """Employee schedule view - read-only view of their shifts."""
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return redirect('/')
+    
+    # Find the employee
+    employee = None
+    for emp in business.employees:
+        if emp.id == employee_id:
+            employee = emp
+            break
+    
+    if not employee:
+        return redirect('/')
+    
+    # Get schedule data (if any exists for this week)
+    schedule_data = {}  # Will be populated by JS from localStorage or API
+    
+    # Get all employees data for "Everyone" view
+    all_employees_data = [emp.to_dict() for emp in business.employees]
+    
+    return render_template('employee_schedule.html',
+        business=business,
+        business_data=business.to_dict(),
+        business_slug=business_slug,
+        employee=employee,
+        employee_data=employee.to_dict(),
+        all_employees_data=all_employees_data,
+        roles=business.roles,
+        roles_data=[r.to_dict() for r in business.roles],
+        days=DAYS_OF_WEEK,
+        days_open=business.days_open,
+        hours=list(business.get_operating_hours()),
+        start_hour=business.start_hour,
+        end_hour=business.end_hour,
+        schedule_data=schedule_data
+    )
+
+
+@app.route('/employee/<business_slug>/<employee_id>/availability')
+def employee_availability(business_slug, employee_id):
+    """Employee availability editor - edit their own availability."""
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return redirect('/')
+    
+    # Find the employee
+    employee = None
+    for emp in business.employees:
+        if emp.id == employee_id:
+            employee = emp
+            break
+    
+    if not employee:
+        return redirect('/')
+    
+    # Get availability data - convert TimeSlot set to dict of day -> [[start, end], ...]
+    availability_data = {}
+    if hasattr(employee, 'availability') and employee.availability:
+        # Group by day
+        from collections import defaultdict
+        day_hours = defaultdict(list)
+        for slot in employee.availability:
+            day_hours[slot.day].append(slot.hour)
+        
+        # Convert to ranges
+        for day, hours in day_hours.items():
+            hours = sorted(hours)
+            ranges = []
+            if hours:
+                start = hours[0]
+                end = hours[0] + 1
+                for h in hours[1:]:
+                    if h == end:
+                        end = h + 1
+                    else:
+                        ranges.append([start, end])
+                        start = h
+                        end = h + 1
+                ranges.append([start, end])
+            availability_data[day] = ranges
+    
+    return render_template('employee_availability.html',
+        business=business,
+        business_data=business.to_dict(),
+        business_slug=business_slug,
+        employee=employee,
+        employee_data=employee.to_dict(),
+        roles=business.roles,
+        roles_data=[r.to_dict() for r in business.roles],
+        days=DAYS_OF_WEEK,
+        days_open=business.days_open,
+        hours=list(business.get_operating_hours()),
+        start_hour=business.start_hour,
+        end_hour=business.end_hour,
+        availability_data=availability_data
+    )
+
+
+@app.route('/api/employee/<employee_id>/availability', methods=['PUT'])
+def employee_update_availability(employee_id):
+    """Employee API to update their own availability (no login required for testing)."""
+    global _solver
+    data = request.json
+    business_id = data.get('business_id')
+    new_availability = data.get('availability', {})
+    
+    # Find the business
+    try:
+        business = get_business_by_id(business_id)
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Business not found'}), 404
+    
+    # Find the employee
+    employee = None
+    for emp in business.employees:
+        if emp.id == employee_id:
+            employee = emp
+            break
+    
+    if not employee:
+        return jsonify({'success': False, 'error': 'Employee not found'}), 404
+    
+    # Clear existing availability (it's a set, not a dict)
+    employee.availability.clear()
+    
+    # Add new availability
+    for day_str, slots in new_availability.items():
+        day = int(day_str)
+        for start, end in slots:
+            employee.add_availability(day, start, end)
+    
+    # Reset solver since availability changed
+    _solver = None
+    
+    # Return serializable availability data
+    avail_data = {}
+    from collections import defaultdict
+    day_hours = defaultdict(list)
+    for slot in employee.availability:
+        day_hours[slot.day].append(slot.hour)
+    
+    for day, hours in day_hours.items():
+        hours = sorted(hours)
+        ranges = []
+        if hours:
+            start = hours[0]
+            end = hours[0] + 1
+            for h in hours[1:]:
+                if h == end:
+                    end = h + 1
+                else:
+                    ranges.append([start, end])
+                    start = h
+                    end = h + 1
+            ranges.append([start, end])
+        avail_data[day] = ranges
+    
+    return jsonify({
+        'success': True,
+        'message': 'Availability updated',
+        'availability': avail_data
+    })
+
+
 # ==================== BUSINESS API ====================
 
 @app.route('/api/businesses', methods=['GET'])

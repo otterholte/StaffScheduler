@@ -1,0 +1,879 @@
+/**
+ * Employee Portal Styles
+ * Styles for the employee-facing schedule and availability pages
+ */
+
+/* ==================== EMPLOYEE VIEW BASE ==================== */
+body.employee-view {
+    --employee-accent: #10b981;
+    --employee-accent-hover: #059669;
+}
+
+/* ==================== EMPLOYEE HEADER ==================== */
+.employee-header {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
+}
+
+.employee-header .header-left {
+    gap: 1.5rem;
+}
+
+.employee-business-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.employee-business-badge .business-name {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.employee-nav {
+    gap: 0.5rem;
+}
+
+.employee-nav .nav-tab {
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.employee-nav .nav-tab:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.employee-nav .nav-tab.active {
+    background: var(--employee-accent);
+    color: white;
+}
+
+.employee-nav .nav-tab .tab-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.employee-user-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.375rem 0.75rem 0.375rem 0.375rem;
+    background: var(--bg-tertiary);
+    border-radius: 24px;
+    border: 1px solid var(--border-color);
+}
+
+.employee-user-badge .user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: white;
+}
+
+.employee-user-badge .user-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+/* ==================== EMPLOYEE SCHEDULE LAYOUT ==================== */
+.employee-schedule-layout {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.employee-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.employee-toolbar .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.employee-toolbar .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Filter Toggle (Mine / Everyone) */
+.filter-toggle {
+    display: flex;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid var(--border-color);
+}
+
+.filter-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.875rem;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filter-toggle-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.filter-toggle-btn:hover:not(.active) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.filter-toggle-btn.active {
+    background: var(--employee-accent);
+    color: white;
+    box-shadow: 0 1px 3px rgba(16, 185, 129, 0.2);
+}
+
+/* Filter Toggle - Icon Only Variant (matches manager color mode toggle) */
+.filter-toggle.filter-toggle-icons {
+    padding: 2px;
+    gap: 2px;
+}
+
+.filter-toggle.filter-toggle-icons .filter-toggle-btn {
+    padding: 0.45rem;
+    width: 32px;
+    height: 32px;
+    justify-content: center;
+}
+
+.filter-toggle.filter-toggle-icons .filter-toggle-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* ==================== MY HOURS SUMMARY ==================== */
+.employee-hours-summary {
+    margin-top: 1.5rem;
+}
+
+.hours-summary-content {
+    display: flex;
+    gap: 3rem;
+    padding: 1rem 0;
+}
+
+.hours-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.hours-stat .hours-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--employee-accent);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.hours-stat .hours-value.secondary {
+    color: var(--text-secondary);
+    font-size: 1.5rem;
+}
+
+.hours-stat .hours-label {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ==================== UPCOMING SHIFTS ==================== */
+.upcoming-shifts-card {
+    margin-top: 1.5rem;
+}
+
+.upcoming-shifts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+}
+
+.upcoming-shift-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.upcoming-shift-item:hover {
+    border-color: var(--employee-accent);
+    background: var(--bg-tertiary);
+}
+
+.shift-date-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem;
+    background: var(--employee-accent);
+    border-radius: 8px;
+    min-width: 60px;
+}
+
+.shift-date-badge .day-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.8);
+    text-transform: uppercase;
+}
+
+.shift-date-badge .day-num {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: white;
+}
+
+.shift-details {
+    flex: 1;
+}
+
+.shift-time {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.shift-role {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.shift-role-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.shift-duration {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.no-shifts-message {
+    text-align: center;
+    color: var(--text-tertiary);
+    padding: 2rem;
+    font-size: 0.9rem;
+}
+
+/* ==================== EMPLOYEE AVAILABILITY LAYOUT ==================== */
+.employee-availability-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* Employee Info Card */
+.employee-info-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+}
+
+.employee-profile {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.employee-avatar-large {
+    width: 64px;
+    height: 64px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: white;
+}
+
+.employee-details h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 0.5rem 0;
+}
+
+.employee-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.employee-hours-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+.availability-stats {
+    display: flex;
+    gap: 2rem;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.stat-item .stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--employee-accent);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.stat-item .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Availability Editor Card */
+.availability-editor-card {
+    padding: 1.5rem;
+}
+
+.availability-instructions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+}
+
+.availability-instructions svg {
+    color: var(--employee-accent);
+    flex-shrink: 0;
+}
+
+/* Employee Presets */
+.employee-presets {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.employee-presets .presets-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 0.5rem;
+}
+
+.employee-presets .preset-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.employee-presets .preset-btn:hover {
+    background: var(--employee-accent);
+    border-color: var(--employee-accent);
+    color: white;
+}
+
+.employee-presets .preset-btn.preset-danger:hover {
+    background: var(--danger-color);
+    border-color: var(--danger-color);
+}
+
+/* Employee Availability Table */
+.employee-availability-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 3px;
+}
+
+.employee-availability-table th {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+.employee-availability-table th.time-header {
+    width: 60px;
+}
+
+.employee-availability-table td {
+    padding: 0;
+    text-align: center;
+}
+
+.employee-availability-table .time-cell {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', monospace;
+    padding-right: 0.5rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.employee-availability-table .avail-cell {
+    width: calc((100% - 60px) / 7);
+    height: 28px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.employee-availability-table .avail-cell:hover {
+    border-color: var(--employee-accent);
+}
+
+.employee-availability-table .avail-cell.available {
+    background: var(--employee-accent);
+}
+
+.employee-availability-table .avail-cell.selecting {
+    background: rgba(16, 185, 129, 0.5);
+}
+
+/* Legend */
+.availability-legend-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.legend-items {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.legend-dot.available {
+    background: var(--employee-accent);
+}
+
+.legend-dot.unavailable {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+}
+
+.save-status {
+    font-size: 0.8rem;
+    color: var(--text-tertiary);
+}
+
+.save-status.saving {
+    color: var(--warning-color);
+}
+
+.save-status.saved {
+    color: var(--employee-accent);
+}
+
+.save-status.error {
+    color: var(--danger-color);
+}
+
+/* ==================== EMPLOYEE TIMELINE ==================== */
+.employee-timeline {
+    min-height: 400px;
+}
+
+.employee-timeline .timeline-row {
+    position: relative;
+}
+
+.employee-timeline .shift-block {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    color: white;
+    overflow: hidden;
+    cursor: default;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.employee-timeline .shift-block .shift-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.employee-timeline .shift-block .shift-time-small {
+    font-size: 0.6rem;
+    opacity: 0.9;
+    white-space: nowrap;
+}
+
+/* Highlight current employee's shifts */
+.employee-timeline .shift-block.my-shift {
+    border: 2px solid var(--employee-accent);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+    z-index: 20 !important;
+}
+
+/* Dim other employees' shifts in the full view */
+.employee-timeline .shift-block.other-shift {
+    opacity: 0.5;
+}
+
+.employee-timeline .shift-block.other-shift:hover {
+    opacity: 0.8;
+}
+
+/* ==================== EMPLOYEE GRID VIEW ==================== */
+.employee-view .schedule-view-grid {
+    position: relative;
+}
+
+.employee-view .schedule-grid-wrapper {
+    position: relative;
+    overflow-x: auto;
+}
+
+.employee-view .schedule-grid {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 8px 3px;
+}
+
+.employee-view .schedule-grid th {
+    padding: 0.75rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: center;
+}
+
+.employee-view .schedule-grid .time-col {
+    width: 60px;
+    text-align: right;
+}
+
+.employee-view .schedule-grid .time-cell {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', monospace;
+    padding-right: 0.5rem;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.employee-view .schedule-grid .slot {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    height: 32px;
+    min-width: 80px;
+}
+
+.employee-view .schedule-events {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+
+.employee-view .schedule-shift-block {
+    position: absolute;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+    overflow: hidden;
+    pointer-events: auto;
+    cursor: default;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.employee-view .schedule-shift-block .shift-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Highlight my shifts in grid view */
+.employee-view .schedule-shift-block.my-shift {
+    border: 2px solid var(--employee-accent);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+    z-index: 20 !important;
+}
+
+/* Dim other shifts in grid view */
+.employee-view .schedule-shift-block.other-shift {
+    opacity: 0.5;
+}
+
+.employee-view .schedule-shift-block.other-shift:hover {
+    opacity: 0.8;
+}
+
+/* Employee Shift List (Table View) */
+.employee-shift-list {
+    padding: 1rem;
+}
+
+.shift-list-day {
+    margin-bottom: 1.5rem;
+}
+
+.shift-list-day-header {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0.75rem;
+}
+
+.shift-list-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+/* Highlight my shifts in list view */
+.shift-list-item.my-shift {
+    border-left: 3px solid var(--employee-accent);
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, var(--bg-secondary) 50%);
+}
+
+/* Dim other shifts in list view */
+.shift-list-item.other-shift {
+    opacity: 0.7;
+}
+
+.shift-list-item.other-shift:hover {
+    opacity: 1;
+}
+
+.shift-list-employee {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 120px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.shift-list-employee .employee-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.shift-list-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    min-width: 110px;
+}
+
+.shift-list-role {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.shift-list-role-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.shift-list-role-name {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.shift-list-duration {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--text-tertiary);
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.no-shifts-day {
+    color: var(--text-tertiary);
+    font-size: 0.85rem;
+    font-style: italic;
+    padding: 0.5rem 0;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+    .employee-header .header-left {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    .employee-business-badge {
+        display: none;
+    }
+    
+    .employee-user-badge .user-name {
+        display: none;
+    }
+    
+    .employee-nav .tab-text {
+        display: none;
+    }
+    
+    .employee-info-card {
+        flex-direction: column;
+        gap: 1.5rem;
+        text-align: center;
+    }
+    
+    .employee-profile {
+        flex-direction: column;
+    }
+    
+    .availability-stats {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .hours-summary-content {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    .employee-presets {
+        justify-content: center;
+    }
+    
+    .employee-presets .presets-label {
+        width: 100%;
+        text-align: center;
+        margin-bottom: 0.25rem;
+    }
+}
+

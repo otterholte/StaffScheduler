@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Availability - Staff Scheduler Pro</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='employee.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body class="employee-view">
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Main App Container -->
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header employee-header">
+            <div class="header-left">
+                <div class="logo">
+                    <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="16" y1="2" x2="16" y2="6"></line>
+                        <line x1="8" y1="2" x2="8" y2="6"></line>
+                        <line x1="3" y1="10" x2="21" y2="10"></line>
+                    </svg>
+                    <span class="logo-text">Staff Scheduler</span>
+                </div>
+                <div class="employee-business-badge">
+                    <span class="business-name">{{ business.name }}</span>
+                </div>
+            </div>
+            <div class="header-center">
+                <nav class="main-nav employee-nav">
+                    <a href="{{ url_for('employee_schedule', business_slug=business_slug, employee_id=employee.id) }}" class="nav-tab" data-tab="schedule">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        <span class="tab-text">My Schedule</span>
+                    </a>
+                    <a href="{{ url_for('employee_availability', business_slug=business_slug, employee_id=employee.id) }}" class="nav-tab active" data-tab="availability">
+                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
+                        </svg>
+                        <span class="tab-text">My Availability</span>
+                    </a>
+                </nav>
+            </div>
+            <div class="header-right">
+                <div class="employee-user-badge">
+                    <div class="user-avatar" style="background: {{ employee.color }}">
+                        {{ employee.name[0]|upper }}
+                    </div>
+                    <span class="user-name">{{ employee.name }}</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="app-main">
+            <!-- Availability Editor -->
+            <section id="tab-availability" class="tab-content active">
+                <div class="tab-header">
+                    <div class="tab-header-left">
+                        <h1>My Availability</h1>
+                        <p class="tab-subtitle">Set the times you're available to work</p>
+                    </div>
+                    <div class="tab-header-right">
+                        <button id="saveAvailabilityBtn" class="btn btn-primary">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                <polyline points="7 3 7 8 15 8"></polyline>
+                            </svg>
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="employee-availability-layout">
+                    <!-- Employee Info Card -->
+                    <div class="employee-info-card panel-card">
+                        <div class="employee-profile">
+                            <div class="employee-avatar-large" style="background: {{ employee.color }}">
+                                {{ employee.name[0]|upper }}
+                            </div>
+                            <div class="employee-details">
+                                <h2>{{ employee.name }}</h2>
+                                <div class="employee-badges">
+                                    {% if employee.classification == 'full_time' %}
+                                    <span class="badge badge-ft">Full-Time</span>
+                                    {% else %}
+                                    <span class="badge badge-pt">Part-Time</span>
+                                    {% endif %}
+                                    {% for role_id in employee.roles %}
+                                    {% for role in roles if role.id == role_id %}
+                                    <span class="badge" style="background: {{ role.color }}20; color: {{ role.color }}; border: 1px solid {{ role.color }}40">{{ role.name }}</span>
+                                    {% endfor %}
+                                    {% endfor %}
+                                </div>
+                                <p class="employee-hours-info">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                    {{ employee.min_hours }}-{{ employee.max_hours }} hours/week
+                                </p>
+                            </div>
+                        </div>
+                        <div class="availability-stats">
+                            <div class="stat-item">
+                                <span class="stat-value" id="totalAvailableHours">—</span>
+                                <span class="stat-label">Hours Available</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="daysAvailable">—</span>
+                                <span class="stat-label">Days Available</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Availability Grid -->
+                    <div class="availability-editor-card panel-card">
+                        <div class="availability-instructions">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                            <span>Click and drag on the grid to mark when you're available to work. Green cells = available.</span>
+                        </div>
+                        
+                        <!-- Quick Presets -->
+                        <div class="availability-presets employee-presets">
+                            <span class="presets-label">Quick Set:</span>
+                            <button class="preset-btn" data-preset="all-9-5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                All Days 9-5
+                            </button>
+                            <button class="preset-btn" data-preset="weekdays-9-5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                Weekdays 9-5
+                            </button>
+                            <button class="preset-btn" data-preset="weekends-9-5">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                Weekends Only
+                            </button>
+                            <button class="preset-btn" data-preset="mornings">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <circle cx="12" cy="12" r="5"></circle>
+                                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                                </svg>
+                                Mornings
+                            </button>
+                            <button class="preset-btn" data-preset="evenings">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                                </svg>
+                                Evenings
+                            </button>
+                            <button class="preset-btn preset-danger" data-preset="clear">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                                </svg>
+                                Clear All
+                            </button>
+                        </div>
+
+                        <!-- Availability Grid -->
+                        <div class="availability-grid-container">
+                            <table class="availability-table employee-availability-table" id="availabilityTable">
+                                <thead>
+                                    <tr>
+                                        <th class="time-header"></th>
+                                        <th>Sun</th>
+                                        <th>Mon</th>
+                                        <th>Tue</th>
+                                        <th>Wed</th>
+                                        <th>Thu</th>
+                                        <th>Fri</th>
+                                        <th>Sat</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="availabilityTableBody">
+                                    <!-- Generated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Legend -->
+                        <div class="availability-legend-bar">
+                            <div class="legend-items">
+                                <span class="legend-item"><span class="legend-dot available"></span> Available</span>
+                                <span class="legend-item"><span class="legend-dot unavailable"></span> Not Available</span>
+                            </div>
+                            <span class="save-status" id="saveStatus"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Pass data to JavaScript -->
+    <script>
+        const EMPLOYEE_DATA = {
+            business: {{ business_data|tojson|safe }},
+            employee: {{ employee_data|tojson|safe }},
+            roles: {{ roles_data|tojson|safe }},
+            days: {{ days|tojson|safe }},
+            daysOpen: {{ days_open|tojson|safe }},
+            hours: {{ hours|tojson|safe }},
+            startHour: {{ start_hour|tojson|safe }},
+            endHour: {{ end_hour|tojson|safe }},
+            businessSlug: {{ business_slug|tojson|safe }},
+            availability: {{ availability_data|tojson|safe }}
+        };
+    </script>
+    <script src="{{ url_for('static', filename='employee.js') }}"></script>
+</body>
+</html>
+
+
+
