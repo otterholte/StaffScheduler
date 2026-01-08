@@ -968,16 +968,43 @@ def get_week_start(offset: int = 0) -> date:
 @login_required
 def generate_schedule():
     """Generate a new optimal schedule."""
+    global _current_business, _solver
+    
     # Get policies from request if provided
     data = request.json or {}
     policies = data.get('policies', None)
     week_offset = data.get('weekOffset', 0)
+    business_id = data.get('businessId', None)
     
-    solver = get_solver(policies)
-    business = get_current_business()
+    # If businessId is provided, use that business (fixes multi-worker issue)
+    if business_id:
+        try:
+            business = get_business_by_id(business_id)
+            # Update global state to match
+            if _current_business is None or _current_business.id != business_id:
+                _current_business = business
+                _solver = None
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'message': f'Business not found: {business_id}'
+            }), 404
+    else:
+        business = get_current_business()
     
-    # Reset solver to get fresh solution
-    solver.reset()
+    # Create solver for this specific business
+    solver = AdvancedScheduleSolver(
+        business=business,
+        min_shift_hours=_current_policies['min_shift_length'],
+        max_hours_per_day=_current_policies['max_hours_per_day'],
+        max_splits_per_day=_current_policies['max_splits'],
+        max_split_shifts_per_week=_current_policies['max_split_shifts_per_week'],
+        scheduling_strategy=_current_policies['scheduling_strategy'],
+        max_days_ft=_current_policies['max_days_ft'],
+        max_days_ft_mode=_current_policies['max_days_ft_mode'],
+        max_days_pt=_current_policies['max_days_pt'],
+        max_days_pt_mode=_current_policies['max_days_pt_mode']
+    )
     
     # Solve
     schedule = solver.solve(time_limit_seconds=60.0)
@@ -1007,12 +1034,29 @@ def generate_schedule():
 @login_required
 def find_alternative():
     """Find an alternative schedule different from previous ones."""
+    global _current_business, _solver
+    
     # Get policies from request if provided
     data = request.json or {}
     policies = data.get('policies', None)
+    business_id = data.get('businessId', None)
+    
+    # If businessId is provided, use that business (fixes multi-worker issue)
+    if business_id:
+        try:
+            business = get_business_by_id(business_id)
+            if _current_business is None or _current_business.id != business_id:
+                _current_business = business
+                _solver = None
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'message': f'Business not found: {business_id}'
+            }), 404
+    else:
+        business = get_current_business()
     
     solver = get_solver(policies)
-    business = get_current_business()
     
     # Find alternative
     schedule = solver.solve(find_alternative=True, time_limit_seconds=60.0)
@@ -1049,10 +1093,25 @@ def reset_solver():
 @login_required
 def publish_schedule():
     """Publish the current schedule for a week."""
+    global _current_business
+    
     data = request.json or {}
     week_offset = data.get('weekOffset', 0)
+    business_id = data.get('businessId', None)
     
-    business = get_current_business()
+    # If businessId is provided, use that business (fixes multi-worker issue)
+    if business_id:
+        try:
+            business = get_business_by_id(business_id)
+            _current_business = business
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'message': f'Business not found: {business_id}'
+            }), 404
+    else:
+        business = get_current_business()
+    
     week_start = get_week_start(week_offset)
     
     try:
@@ -1078,9 +1137,24 @@ def publish_schedule():
 @login_required
 def load_saved_schedule():
     """Load a saved schedule for a specific week."""
-    week_offset = request.args.get('weekOffset', 0, type=int)
+    global _current_business
     
-    business = get_current_business()
+    week_offset = request.args.get('weekOffset', 0, type=int)
+    business_id = request.args.get('businessId', None)
+    
+    # If businessId is provided, use that business (fixes multi-worker issue)
+    if business_id:
+        try:
+            business = get_business_by_id(business_id)
+            _current_business = business
+        except ValueError:
+            return jsonify({
+                'success': False,
+                'message': f'Business not found: {business_id}'
+            }), 404
+    else:
+        business = get_current_business()
+    
     week_start = get_week_start(week_offset)
     
     try:

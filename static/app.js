@@ -121,6 +121,79 @@ function clearScheduleFromStorage() {
     }
 }
 
+async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
+    /**
+     * Load schedule for the current business/week.
+     * Tries database first (for cross-device sync), falls back to localStorage.
+     */
+    let scheduleLoaded = false;
+    
+    try {
+        // Try loading from database first
+        const response = await fetch(`/api/schedule/load?businessId=${state.business.id}&weekOffset=${state.weekOffset}`);
+        const data = await response.json();
+        
+        if (data.success && data.schedule) {
+            state.currentSchedule = data.schedule;
+            // Update employees if returned from server (ensures consistency)
+            if (data.employees) {
+                state.employees = data.employees;
+                buildLookups();
+            }
+            // Mark week as having a schedule
+            if (data.schedule.slot_assignments && Object.keys(data.schedule.slot_assignments).length > 0) {
+                markWeekAsGenerated(state.weekOffset, 0);
+                updateScheduleStatus('Schedule loaded from server', 'success');
+                if (dom.alternativeBtn) dom.alternativeBtn.disabled = false;
+                if (dom.exportBtn) dom.exportBtn.disabled = false;
+                scheduleLoaded = true;
+            }
+            // Also save to localStorage for offline access
+            saveScheduleToStorage();
+        }
+    } catch (error) {
+        console.warn('Could not load schedule from database:', error);
+    }
+    
+    // Fall back to localStorage if not loaded from database
+    if (!scheduleLoaded) {
+        const savedSchedule = loadScheduleFromStorage();
+        if (savedSchedule) {
+            state.currentSchedule = savedSchedule;
+            if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
+                markWeekAsGenerated(state.weekOffset, 0);
+                updateScheduleStatus('Schedule loaded', 'success');
+                if (dom.alternativeBtn) dom.alternativeBtn.disabled = false;
+                if (dom.exportBtn) dom.exportBtn.disabled = false;
+                scheduleLoaded = true;
+            } else {
+                updateScheduleStatus('Ready to generate', '');
+                if (dom.alternativeBtn) dom.alternativeBtn.disabled = true;
+                if (dom.exportBtn) dom.exportBtn.disabled = true;
+            }
+        } else {
+            state.currentSchedule = null;
+            updateScheduleStatus('Ready to generate', '');
+            if (dom.alternativeBtn) dom.alternativeBtn.disabled = true;
+            if (dom.exportBtn) dom.exportBtn.disabled = true;
+        }
+    }
+    
+    // Re-render the schedule view if requested
+    if (renderAfterLoad && state.currentTab === 'schedule') {
+        if (state.scheduleViewMode === 'timeline') {
+            renderTimelineView(state.currentSchedule || {});
+        } else if (state.scheduleViewMode === 'table') {
+            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+        } else {
+            rebuildScheduleGrid();
+            if (state.currentSchedule) {
+                renderSchedule(state.currentSchedule);
+            }
+        }
+    }
+}
+
 // ==================== TIMELINE DRAG STATE ====================
 const timelineDragState = {
     isDragging: false,
@@ -189,29 +262,14 @@ function formatShortDate(date) {
 /**
  * Navigate to a different week and re-render the current view
  */
-function navigateWeek(direction) {
+async function navigateWeek(direction) {
     state.weekOffset += direction;
     
-    // Load schedule from localStorage for this week
-    const savedSchedule = loadScheduleFromStorage();
-    if (savedSchedule) {
-        state.currentSchedule = savedSchedule;
-        // Mark week as having a schedule if there are slot assignments
-        if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
-            const weekKey = getWeekKey(state.weekOffset);
-            if (!state.publishedWeeks[weekKey]) {
-                state.publishedWeeks[weekKey] = { hasSchedule: true, published: false, editCount: 0 };
-            } else {
-                state.publishedWeeks[weekKey].hasSchedule = true;
-            }
-        }
-    } else {
-        // No saved schedule for this week - start fresh
-        state.currentSchedule = null;
-    }
-    
-    // Update the week navigation bar
+    // Update the week navigation bar first (for immediate visual feedback)
     updateWeekNavigationBar();
+    
+    // Load schedule from database first, then localStorage as fallback
+    await loadScheduleForCurrentBusiness();
     
     // Re-render based on current view mode
     if (state.scheduleViewMode === 'timeline') {
@@ -599,15 +657,20 @@ function initializeFromUrl() {
         loadBusinessSettings(state.business.id);
     }
     
-    // Load schedule from localStorage if available
-    const savedSchedule = loadScheduleFromStorage();
-    if (savedSchedule) {
-        state.currentSchedule = savedSchedule;
-        // Mark week as having a schedule if there are slot assignments
-        if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
-            markWeekAsGenerated(state.weekOffset, 0);
+    // Load schedule from database first, then localStorage as fallback
+    // This runs async but we proceed with rendering (schedule will update when loaded)
+    loadScheduleForCurrentBusiness().then(() => {
+        // Re-render schedule view after loading
+        if (state.currentTab === 'schedule' && state.currentSchedule) {
+            if (state.scheduleViewMode === 'timeline') {
+                renderTimelineView(state.currentSchedule);
+            } else if (state.scheduleViewMode === 'table') {
+                renderSimpleTableView(state.currentSchedule);
+            } else {
+                renderSchedule(state.currentSchedule);
+            }
         }
-    }
+    });
     
     // Render tab-specific content
     // Use setTimeout to ensure DOM is fully ready and CSS is applied
@@ -1943,27 +2006,8 @@ async function switchBusiness(businessId, updateHistory = true) {
             // Load business settings from backend
             await loadBusinessSettings(businessId);
             
-            // Load schedule from localStorage for this business/week
-            const savedSchedule = loadScheduleFromStorage();
-            if (savedSchedule) {
-                state.currentSchedule = savedSchedule;
-                // Mark week as having a schedule if there are slot assignments
-                if (savedSchedule.slot_assignments && Object.keys(savedSchedule.slot_assignments).length > 0) {
-                    markWeekAsGenerated(state.weekOffset, 0);
-                    updateScheduleStatus('Schedule loaded', 'success');
-                    dom.alternativeBtn.disabled = false;
-                    dom.exportBtn.disabled = false;
-                } else {
-                    updateScheduleStatus('Ready to generate', '');
-                    dom.alternativeBtn.disabled = true;
-                    dom.exportBtn.disabled = true;
-                }
-            } else {
-                state.currentSchedule = null;
-                updateScheduleStatus('Ready to generate', '');
-                dom.alternativeBtn.disabled = true;
-                dom.exportBtn.disabled = true;
-            }
+            // Try to load schedule from database first, then fall back to localStorage
+            await loadScheduleForCurrentBusiness();
             
             // Update global business selector display
             if (dom.currentBusinessName) {
@@ -2156,7 +2200,7 @@ async function generateSchedule() {
         const response = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies }),
+            body: JSON.stringify({ policies, businessId: state.business.id, weekOffset: state.weekOffset }),
             signal: controller.signal
         });
         
@@ -2227,7 +2271,7 @@ async function findAlternative() {
         const response = await fetch('/api/alternative', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies }),
+            body: JSON.stringify({ policies, businessId: state.business.id }),
             signal: controller.signal
         });
         
@@ -2313,7 +2357,7 @@ function resetWeekPublishState(offset = 0) {
     updateWeekNavigationBar();
 }
 
-function publishSchedule() {
+async function publishSchedule() {
     if (!state.currentSchedule || !state.currentSchedule.slot_assignments) {
         showToast('No schedule to publish', 'warning');
         return;
@@ -2322,18 +2366,58 @@ function publishSchedule() {
     // Get the week range for the confirmation message
     const weekRange = getWeekRangeString(state.weekOffset);
     
-    // Mark the week as published
-    markWeekAsPublished(state.weekOffset);
-    
-    // Show success toast with week info
-    showToast(`Schedule published for ${weekRange}`, 'success');
-    
-    // Visual feedback - briefly highlight the publish button
+    // Show loading state
     if (dom.publishBtn) {
-        dom.publishBtn.classList.add('published');
-        setTimeout(() => {
-            dom.publishBtn.classList.remove('published');
-        }, 1500);
+        dom.publishBtn.disabled = true;
+        dom.publishBtn.textContent = 'Publishing...';
+    }
+    
+    try {
+        // Actually call the backend API to publish
+        const response = await fetch('/api/schedule/publish', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                businessId: state.business.id, 
+                weekOffset: state.weekOffset 
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Mark the week as published locally
+            markWeekAsPublished(state.weekOffset);
+            
+            // Show success toast with week info
+            showToast(`Schedule published for ${weekRange}`, 'success');
+            
+            // Visual feedback - briefly highlight the publish button
+            if (dom.publishBtn) {
+                dom.publishBtn.classList.add('published');
+                setTimeout(() => {
+                    dom.publishBtn.classList.remove('published');
+                }, 1500);
+            }
+        } else {
+            showToast(data.message || 'Failed to publish schedule', 'error');
+        }
+    } catch (error) {
+        console.error('Publish error:', error);
+        showToast('Failed to publish schedule. Please try again.', 'error');
+    } finally {
+        // Restore button state
+        if (dom.publishBtn) {
+            dom.publishBtn.disabled = false;
+            dom.publishBtn.innerHTML = `
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                    <polyline points="16 6 12 2 8 6"></polyline>
+                    <line x1="12" y1="2" x2="12" y2="15"></line>
+                </svg>
+                Publish
+            `;
+        }
     }
 }
 
