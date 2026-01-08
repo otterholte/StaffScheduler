@@ -984,7 +984,8 @@ def generate_schedule():
             if _current_business is None or _current_business.id != business_id:
                 _current_business = business
                 _solver = None
-        except ValueError:
+        except ValueError as e:
+            print(f"[GENERATE] Business not found: {business_id}, error: {e}", flush=True)
             return jsonify({
                 'success': False,
                 'message': f'Business not found: {business_id}'
@@ -992,30 +993,60 @@ def generate_schedule():
     else:
         business = get_current_business()
     
-    # Create solver for this specific business
-    solver = AdvancedScheduleSolver(
-        business=business,
-        min_shift_hours=_current_policies['min_shift_length'],
-        max_hours_per_day=_current_policies['max_hours_per_day'],
-        max_splits_per_day=_current_policies['max_splits'],
-        max_split_shifts_per_week=_current_policies['max_split_shifts_per_week'],
-        scheduling_strategy=_current_policies['scheduling_strategy'],
-        max_days_ft=_current_policies['max_days_ft'],
-        max_days_ft_mode=_current_policies['max_days_ft_mode'],
-        max_days_pt=_current_policies['max_days_pt'],
-        max_days_pt_mode=_current_policies['max_days_pt_mode']
-    )
+    print(f"[GENERATE] Starting schedule generation for business: {business.id} ({business.name})", flush=True)
+    print(f"[GENERATE] Employees: {len(business.employees)}, Roles: {len(business.roles)}", flush=True)
     
-    # Solve
-    schedule = solver.solve(time_limit_seconds=60.0)
+    try:
+        # Apply policies if provided
+        if policies:
+            _current_policies['min_shift_length'] = policies.get('min_shift_length', _current_policies['min_shift_length'])
+            _current_policies['max_hours_per_day'] = policies.get('max_hours_per_day', _current_policies['max_hours_per_day'])
+            _current_policies['max_splits'] = policies.get('max_splits', _current_policies['max_splits'])
+            _current_policies['max_split_shifts_per_week'] = policies.get('max_split_shifts_per_week', _current_policies['max_split_shifts_per_week'])
+            _current_policies['scheduling_strategy'] = policies.get('scheduling_strategy', _current_policies['scheduling_strategy'])
+            _current_policies['max_days_ft'] = policies.get('max_days_ft', _current_policies['max_days_ft'])
+            _current_policies['max_days_ft_mode'] = policies.get('max_days_ft_mode', _current_policies['max_days_ft_mode'])
+            _current_policies['max_days_pt'] = policies.get('max_days_pt', _current_policies['max_days_pt'])
+            _current_policies['max_days_pt_mode'] = policies.get('max_days_pt_mode', _current_policies['max_days_pt_mode'])
+        
+        # Create solver for this specific business
+        solver = AdvancedScheduleSolver(
+            business=business,
+            min_shift_hours=_current_policies['min_shift_length'],
+            max_hours_per_day=_current_policies['max_hours_per_day'],
+            max_splits_per_day=_current_policies['max_splits'],
+            max_split_shifts_per_week=_current_policies['max_split_shifts_per_week'],
+            scheduling_strategy=_current_policies['scheduling_strategy'],
+            max_days_ft=_current_policies['max_days_ft'],
+            max_days_ft_mode=_current_policies['max_days_ft_mode'],
+            max_days_pt=_current_policies['max_days_pt'],
+            max_days_pt_mode=_current_policies['max_days_pt_mode']
+        )
+        
+        print(f"[GENERATE] Solver created, starting solve...", flush=True)
+        
+        # Solve
+        schedule = solver.solve(time_limit_seconds=60.0)
+        
+        print(f"[GENERATE] Solve completed. Feasible: {schedule.is_feasible}", flush=True)
+        
+    except Exception as e:
+        import traceback
+        print(f"[GENERATE] ERROR during schedule generation: {e}", flush=True)
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': f'Error generating schedule: {str(e)}'
+        }), 500
     
     # Save schedule to database if user is authenticated
     if schedule.is_feasible and current_user.is_authenticated:
         try:
             week_start = get_week_start(week_offset)
             save_schedule_to_db(business.id, schedule, week_start, status='draft')
+            print(f"[GENERATE] Schedule saved to database", flush=True)
         except Exception as e:
-            print(f"Warning: Could not save schedule to database: {e}")
+            print(f"Warning: Could not save schedule to database: {e}", flush=True)
     
     return jsonify({
         'success': schedule.is_feasible,
