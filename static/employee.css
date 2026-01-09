@@ -38,6 +38,154 @@ body.employee-view {
     gap: 0.5rem;
 }
 
+/* ==================== NOTIFICATION BELL ==================== */
+.notification-bell {
+    position: relative;
+    background: transparent;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    margin-right: 0.75rem;
+}
+
+.notification-bell svg {
+    width: 22px;
+    height: 22px;
+    color: var(--text-secondary);
+    transition: color 0.2s ease;
+}
+
+.notification-bell:hover {
+    background: var(--bg-tertiary);
+}
+
+.notification-bell:hover svg {
+    color: var(--text-primary);
+}
+
+.notification-bell.has-notifications svg {
+    color: #f59e0b;
+    animation: bellRing 0.5s ease-in-out;
+}
+
+.notification-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes bellRing {
+    0%, 100% { transform: rotate(0); }
+    20% { transform: rotate(15deg); }
+    40% { transform: rotate(-15deg); }
+    60% { transform: rotate(10deg); }
+    80% { transform: rotate(-10deg); }
+}
+
+/* Notification Dropdown */
+.notification-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    width: 320px;
+    max-height: 400px;
+    overflow-y: auto;
+    background: #1a1a2e;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    display: none;
+}
+
+.notification-dropdown.visible {
+    display: block;
+    animation: dropdownFadeIn 0.2s ease;
+}
+
+@keyframes dropdownFadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.notification-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.notification-header h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.notification-list {
+    padding: 0.5rem;
+}
+
+.notification-item {
+    padding: 0.75rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    border-left: 3px solid #f59e0b;
+    margin-bottom: 0.5rem;
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.notification-item:hover {
+    background: rgba(245, 158, 11, 0.15);
+}
+
+.notification-item:last-child {
+    margin-bottom: 0;
+}
+
+.notification-item-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.notification-item-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.notification-empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.notification-empty svg {
+    width: 40px;
+    height: 40px;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+}
+
 .employee-nav .nav-tab {
     text-decoration: none;
     display: flex;
@@ -1323,6 +1471,117 @@ body.employee-view {
     font-size: 0.85rem;
     color: var(--text-muted);
     margin: 0 0 1rem 0;
+}
+
+/* Counter-offer section */
+.counter-offer-section {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.counter-offer-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.counter-offer-toggle svg {
+    width: 18px;
+    height: 18px;
+    color: #8b5cf6;
+}
+
+.counter-offer-toggle .toggle-arrow {
+    margin-left: auto;
+    font-size: 1.2rem;
+    transition: transform 0.2s ease;
+}
+
+.counter-offer-toggle:hover {
+    background: var(--bg-secondary);
+    border-color: #8b5cf6;
+    color: var(--text-primary);
+}
+
+.counter-offer-toggle.active {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: #8b5cf6;
+    color: #8b5cf6;
+}
+
+.counter-offer-toggle.active .toggle-arrow {
+    transform: rotate(90deg);
+}
+
+.counter-offer-shifts {
+    margin-top: 1rem;
+    animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.counter-offer-hint {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0 0 0.75rem 0;
+}
+
+/* Selected shift for counter-offer */
+.my-shifts-list .shift-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-tertiary);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-bottom: 0.5rem;
+}
+
+.my-shifts-list .shift-option:hover {
+    background: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+.my-shifts-list .shift-option.selected {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: #8b5cf6;
+}
+
+.my-shifts-list .shift-option input[type="radio"] {
+    accent-color: #8b5cf6;
+}
+
+.shift-option-details {
+    flex: 1;
+}
+
+.shift-option-date {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.shift-option-time {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 0.15rem;
 }
 
 .my-shifts-list {

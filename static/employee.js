@@ -1573,6 +1573,8 @@ async function saveAvailability() {
 function initSwapFeature() {
     // Setup modal events
     setupSwapModals();
+    // Setup notification bell
+    initNotificationBell();
     // Load existing swap requests
     loadSwapRequests();
 }
@@ -1608,6 +1610,12 @@ function setupSwapModals() {
         acceptSwapBtn.addEventListener('click', acceptSwapRequest);
     }
     
+    // Counter-offer toggle
+    const counterOfferToggle = document.getElementById('counterOfferToggle');
+    if (counterOfferToggle) {
+        counterOfferToggle.addEventListener('click', toggleCounterOffer);
+    }
+    
     // Close modals when clicking overlay
     document.querySelectorAll('.modal-overlay').forEach(overlay => {
         overlay.addEventListener('click', (e) => {
@@ -1616,6 +1624,124 @@ function setupSwapModals() {
             }
         });
     });
+}
+
+// Counter-offer functionality
+function toggleCounterOffer() {
+    const toggle = document.getElementById('counterOfferToggle');
+    const shiftsContainer = document.getElementById('counterOfferShifts');
+    const acceptBtn = document.getElementById('acceptSwapBtn');
+    const request = employeeState.currentSwapRequest;
+    
+    if (!toggle || !shiftsContainer) return;
+    
+    // Don't allow collapse if swap is required
+    if (request?.my_eligibility_type === 'swap_only') {
+        return;
+    }
+    
+    const isExpanded = toggle.classList.contains('active');
+    
+    if (isExpanded) {
+        // Collapse - clear selection and revert to pickup mode
+        toggle.classList.remove('active');
+        shiftsContainer.style.display = 'none';
+        employeeState.selectedSwapShift = null;
+        if (acceptBtn) {
+            acceptBtn.textContent = 'Accept Pickup';
+            acceptBtn.disabled = false;
+        }
+    } else {
+        // Expand and load shifts
+        toggle.classList.add('active');
+        shiftsContainer.style.display = 'block';
+        loadMyShiftsForCounterOffer();
+    }
+}
+
+function loadMyShiftsForCounterOffer() {
+    const list = document.getElementById('myShiftsForSwap');
+    if (!list) return;
+    
+    // Get current user's shifts from the schedule
+    const myShifts = getMyUpcomingShifts();
+    
+    if (myShifts.length === 0) {
+        list.innerHTML = '<div class="notification-empty">You have no upcoming shifts to offer</div>';
+        return;
+    }
+    
+    const dates = getWeekDates(employeeState.weekOffset);
+    
+    list.innerHTML = myShifts.map((shift, idx) => {
+        const dayName = employeeState.days[shift.dayIdx];
+        const shiftDate = dates[shift.dayIdx];
+        const dateStr = shiftDate ? shiftDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+        const timeStr = `${formatTime(shift.start)} - ${formatTime(shift.end)}`;
+        const role = roleMap[shift.role]?.name || 'Staff';
+        
+        return `
+            <label class="shift-option" data-shift-idx="${idx}">
+                <input type="radio" name="counterOfferShift" value="${idx}" onchange="selectCounterOfferShift(${idx})">
+                <div class="shift-option-details">
+                    <div class="shift-option-date">${dayName}, ${dateStr}</div>
+                    <div class="shift-option-time">${timeStr} • ${role}</div>
+                </div>
+            </label>
+        `;
+    }).join('');
+    
+    // Store shifts for later reference
+    employeeState.myShiftsForCounterOffer = myShifts;
+}
+
+function selectCounterOfferShift(idx) {
+    const shifts = employeeState.myShiftsForCounterOffer;
+    if (!shifts || !shifts[idx]) return;
+    
+    employeeState.selectedSwapShift = shifts[idx];
+    
+    // Update visual selection
+    document.querySelectorAll('.shift-option').forEach((opt, i) => {
+        opt.classList.toggle('selected', i === idx);
+    });
+    
+    // Update accept button
+    const acceptBtn = document.getElementById('acceptSwapBtn');
+    if (acceptBtn) {
+        acceptBtn.disabled = false;
+        acceptBtn.textContent = 'Accept & Swap';
+    }
+}
+
+function getMyUpcomingShifts() {
+    const schedule = employeeState.schedule;
+    const myId = employeeState.employee.id;
+    const shifts = [];
+    
+    if (!schedule || !schedule.slot_assignments) return shifts;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dates = getWeekDates(employeeState.weekOffset);
+    
+    // Get continuous shifts for each day
+    employeeState.daysOpen.forEach(dayIdx => {
+        const date = dates[dayIdx];
+        if (date < today) return; // Only future shifts
+        
+        const dayShifts = getMyContinuousShiftsForDay(schedule, dayIdx);
+        dayShifts.forEach(shift => {
+            shifts.push({
+                dayIdx,
+                start: shift.start,
+                end: shift.end,
+                role: shift.role
+            });
+        });
+    });
+    
+    return shifts;
 }
 
 async function loadSwapRequests() {
@@ -1629,10 +1755,97 @@ async function loadSwapRequests() {
                 outgoing: data.outgoing || []
             };
             renderSwapRequests();
+            updateNotificationBell();
         }
     } catch (error) {
         console.error('Failed to load swap requests:', error);
     }
+}
+
+// ==================== NOTIFICATION BELL ====================
+function updateNotificationBell() {
+    const bell = document.getElementById('swapNotificationBell');
+    const badge = document.getElementById('swapNotificationBadge');
+    
+    if (!bell || !badge) return;
+    
+    const pendingCount = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').length;
+    
+    if (pendingCount > 0) {
+        bell.style.display = 'flex';
+        bell.classList.add('has-notifications');
+        badge.textContent = pendingCount;
+        updateNotificationDropdown();
+    } else {
+        bell.style.display = 'none';
+        bell.classList.remove('has-notifications');
+    }
+}
+
+function updateNotificationDropdown() {
+    const list = document.getElementById('notificationList');
+    if (!list) return;
+    
+    const pending = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending');
+    
+    if (pending.length === 0) {
+        list.innerHTML = `
+            <div class="notification-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 12h8M12 8v8"></path>
+                </svg>
+                <div>No pending requests</div>
+            </div>
+        `;
+        return;
+    }
+    
+    list.innerHTML = pending.map(req => {
+        const requesterName = req.requester_name || 'Someone';
+        const dayName = employeeState.days[req.shift_day] || `Day ${req.shift_day}`;
+        const timeStr = `${formatTime(req.shift_start)} - ${formatTime(req.shift_end)}`;
+        
+        return `
+            <div class="notification-item" onclick="showSwapResponseModal('${req.id}'); hideNotificationDropdown();">
+                <div class="notification-item-title">${requesterName} wants to swap</div>
+                <div class="notification-item-subtitle">${dayName}, ${timeStr}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function toggleNotificationDropdown() {
+    const dropdown = document.getElementById('notificationDropdown');
+    if (dropdown) {
+        dropdown.classList.toggle('visible');
+    }
+}
+
+function hideNotificationDropdown() {
+    const dropdown = document.getElementById('notificationDropdown');
+    if (dropdown) {
+        dropdown.classList.remove('visible');
+    }
+}
+
+function initNotificationBell() {
+    const bell = document.getElementById('swapNotificationBell');
+    if (bell) {
+        bell.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleNotificationDropdown();
+        });
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('notificationDropdown');
+        const bell = document.getElementById('swapNotificationBell');
+        if (dropdown && !dropdown.contains(e.target) && !bell?.contains(e.target)) {
+            hideNotificationDropdown();
+        }
+    });
 }
 
 function renderSwapRequests() {
@@ -2257,22 +2470,25 @@ function showSwapResponseModal(requestId) {
     
     employeeState.currentSwapRequest = request;
     employeeState.selectedSwapShift = null;
+    employeeState.myShiftsForCounterOffer = [];
     
     const modal = document.getElementById('swapResponseModal');
     const details = document.getElementById('swapRequestDetails');
-    const swapOfferSection = document.getElementById('swapOfferSection');
-    const myShiftsList = document.getElementById('myShiftsForSwap');
+    const counterOfferSection = document.getElementById('counterOfferSection');
+    const counterOfferToggle = document.getElementById('counterOfferToggle');
+    const counterOfferShifts = document.getElementById('counterOfferShifts');
     const acceptBtn = document.getElementById('acceptSwapBtn');
     
     if (!modal) return;
     
     // Show request details
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const requestType = request.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
     
     if (details) {
         details.innerHTML = `
             <div class="swap-shift-details">
-                <p style="margin: 0 0 0.5rem 0;"><strong>${request.requester_name}</strong> wants to swap:</p>
+                <p style="margin: 0 0 0.5rem 0;"><strong>${request.requester_name}</strong> wants to ${requestType}:</p>
                 <div class="shift-day">${dayNames[request.original_day]}</div>
                 <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
                 ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
@@ -2280,31 +2496,52 @@ function showSwapResponseModal(requestId) {
         `;
     }
     
-    // Show swap offer section if needed
+    // Reset counter-offer section
+    if (counterOfferToggle) counterOfferToggle.classList.remove('active');
+    if (counterOfferShifts) counterOfferShifts.style.display = 'none';
+    
+    // Handle based on eligibility type
     if (request.my_eligibility_type === 'swap_only') {
-        if (swapOfferSection) swapOfferSection.style.display = 'block';
-        if (acceptBtn) acceptBtn.disabled = true;
-        
-        // Get my shifts for this week
-        const myShifts = getMyShiftsForWeek();
-        
-        if (myShiftsList) {
-            if (myShifts.length === 0) {
-                myShiftsList.innerHTML = '<p>You have no shifts to offer in exchange.</p>';
-            } else {
-                myShiftsList.innerHTML = myShifts.map((shift, idx) => `
-                    <label class="my-shift-option" data-shift-idx="${idx}">
-                        <input type="radio" name="swapShift" onchange="selectSwapShift(${idx})">
-                        <div style="flex: 1;">
-                            <strong>${dayNames[shift.dayIdx]}</strong> ${formatTime(shift.start)} - ${formatTime(shift.end)}
-                        </div>
-                    </label>
-                `).join('');
-            }
+        // Must offer a swap - expand counter-offer automatically
+        if (counterOfferSection) counterOfferSection.style.display = 'block';
+        if (counterOfferToggle) {
+            counterOfferToggle.classList.add('active');
+            counterOfferToggle.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="17 1 21 5 17 9"></polyline>
+                    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                    <polyline points="7 23 3 19 7 15"></polyline>
+                    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                </svg>
+                You must offer a shift in exchange
+                <span class="toggle-arrow" style="transform: rotate(90deg);">›</span>
+            `;
+        }
+        if (counterOfferShifts) counterOfferShifts.style.display = 'block';
+        loadMyShiftsForCounterOffer();
+        if (acceptBtn) {
+            acceptBtn.disabled = true;
+            acceptBtn.textContent = 'Select a Shift';
         }
     } else {
-        if (swapOfferSection) swapOfferSection.style.display = 'none';
-        if (acceptBtn) acceptBtn.disabled = false;
+        // Can pickup without swap - show counter-offer as optional
+        if (counterOfferSection) counterOfferSection.style.display = 'block';
+        if (counterOfferToggle) {
+            counterOfferToggle.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="17 1 21 5 17 9"></polyline>
+                    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                    <polyline points="7 23 3 19 7 15"></polyline>
+                    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                </svg>
+                Counter with my own shift
+                <span class="toggle-arrow">›</span>
+            `;
+        }
+        if (acceptBtn) {
+            acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Accept Pickup';
+        }
     }
     
     modal.style.display = 'flex';
@@ -2350,6 +2587,13 @@ function hideSwapResponseModal() {
     if (modal) modal.style.display = 'none';
     employeeState.currentSwapRequest = null;
     employeeState.selectedSwapShift = null;
+    employeeState.myShiftsForCounterOffer = [];
+    
+    // Reset counter-offer UI
+    const toggle = document.getElementById('counterOfferToggle');
+    const shiftsContainer = document.getElementById('counterOfferShifts');
+    if (toggle) toggle.classList.remove('active');
+    if (shiftsContainer) shiftsContainer.style.display = 'none';
 }
 
 async function acceptSwapRequest() {
