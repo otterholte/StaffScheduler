@@ -850,6 +850,48 @@ def employee_update_availability(employee_id):
     })
 
 
+# ==================== DATABASE MIGRATION ====================
+
+@app.route('/api/admin/migrate-swap-columns')
+def migrate_swap_columns():
+    """One-time migration to add missing columns to shift_swap_requests table."""
+    try:
+        from sqlalchemy import text
+        
+        # Check if columns exist first
+        result = db.session.execute(text("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = 'shift_swap_requests' AND column_name = 'counter_offer_for_id'
+        """))
+        exists = result.fetchone() is not None
+        
+        if exists:
+            return jsonify({
+                'success': True,
+                'message': 'Columns already exist, no migration needed'
+            })
+        
+        # Add the missing columns
+        db.session.execute(text("""
+            ALTER TABLE shift_swap_requests 
+            ADD COLUMN IF NOT EXISTS counter_offer_for_id INTEGER REFERENCES shift_swap_requests(id),
+            ADD COLUMN IF NOT EXISTS is_counter_offer BOOLEAN DEFAULT FALSE
+        """))
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Successfully added counter_offer_for_id and is_counter_offer columns'
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+
 # ==================== DEBUG ENDPOINT ====================
 
 @app.route('/api/debug/<business_slug>/<int:employee_id>')
