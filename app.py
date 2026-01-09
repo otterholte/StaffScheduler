@@ -850,6 +850,84 @@ def employee_update_availability(employee_id):
     })
 
 
+# ==================== DEBUG ENDPOINT ====================
+
+@app.route('/api/debug/<business_slug>/<int:employee_id>')
+def debug_employee_info(business_slug, employee_id):
+    """Debug endpoint to diagnose employee/business lookup issues."""
+    import traceback
+    result = {
+        'business_slug': business_slug,
+        'employee_db_id': employee_id,
+        'steps': []
+    }
+    
+    try:
+        # Step 1: Look up business
+        business = get_business_by_slug(business_slug, force_reload=True)
+        if business:
+            result['steps'].append(f"✓ Business found: {business.name} (id={business.id})")
+            result['business_name'] = business.name
+            result['business_id'] = business.id
+            result['employee_count'] = len(business.employees)
+            result['employee_model_ids'] = [e.id for e in business.employees]
+        else:
+            result['steps'].append(f"✗ Business NOT found for slug: {business_slug}")
+            return jsonify(result), 404
+        
+        # Step 2: Look up DB business
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        if db_business:
+            result['steps'].append(f"✓ DB Business found: db_id={db_business.id}")
+            result['db_business_id'] = db_business.id
+        else:
+            result['steps'].append(f"✗ DB Business NOT found for business.id={business.id}")
+        
+        # Step 3: Look up DBEmployee
+        db_employee = DBEmployee.query.get(employee_id)
+        if db_employee:
+            result['steps'].append(f"✓ DBEmployee found: name={db_employee.name}, employee_id={db_employee.employee_id}, business_db_id={db_employee.business_db_id}")
+            result['db_employee_name'] = db_employee.name
+            result['db_employee_model_id'] = db_employee.employee_id
+            result['db_employee_business_db_id'] = db_employee.business_db_id
+        else:
+            result['steps'].append(f"✗ DBEmployee NOT found for id={employee_id}")
+            # List all employees in DB for this business
+            if db_business:
+                all_db_emps = DBEmployee.query.filter_by(business_db_id=db_business.id).all()
+                result['all_db_employees'] = [(e.id, e.name, e.employee_id) for e in all_db_emps]
+            return jsonify(result), 404
+        
+        # Step 4: Check if employee matches business
+        if db_business and db_employee.business_db_id != db_business.id:
+            result['steps'].append(f"✗ MISMATCH: Employee belongs to business_db_id={db_employee.business_db_id}, not {db_business.id}")
+        else:
+            result['steps'].append(f"✓ Employee belongs to correct business")
+        
+        # Step 5: Find matching Employee model
+        employee_model = None
+        for emp in business.employees:
+            if emp.id == db_employee.employee_id:
+                employee_model = emp
+                break
+        
+        if employee_model:
+            result['steps'].append(f"✓ Employee model found: {employee_model.name}")
+            result['employee_model_name'] = employee_model.name
+        else:
+            result['steps'].append(f"✗ Employee model NOT found for employee_id={db_employee.employee_id}")
+            result['steps'].append(f"  Available model IDs: {[e.id for e in business.employees]}")
+        
+        result['success'] = True
+        return jsonify(result)
+        
+    except Exception as e:
+        result['error'] = str(e)
+        result['traceback'] = traceback.format_exc()
+        return jsonify(result), 500
+
+
 # ==================== SHIFT SWAP API ====================
 
 def lookup_db_employee_by_any_id(employee_id_str):
