@@ -171,6 +171,16 @@ body.employee-view {
     background: rgba(245, 158, 11, 0.15);
 }
 
+/* Counter offer styling - purple accent */
+.notification-item.counter-offer {
+    border-left-color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.1);
+}
+
+.notification-item.counter-offer:hover {
+    background: rgba(139, 92, 246, 0.18);
+}
+
 .notification-item:last-child {
     margin-bottom: 0;
 }
@@ -1087,6 +1097,22 @@ body.employee-view {
     color: #d97706;
 }
 
+.swap-eligibility-badge.counter-offer {
+    background: rgba(139, 92, 246, 0.2);
+    color: #a78bfa;
+    font-weight: 600;
+}
+
+/* Counter offer request item styling */
+.swap-request-item.counter-offer {
+    border-left-color: #8b5cf6;
+    background: linear-gradient(90deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
+}
+
+.swap-request-item.counter-offer .swap-request-icon {
+    color: #8b5cf6;
+}
+
 /* Swap button on shifts */
 .shift-swap-btn {
     display: inline-flex;
@@ -1209,6 +1235,23 @@ body.employee-view {
     padding: 1rem;
     margin-bottom: 1.5rem;
     border-left: 4px solid #f59e0b;
+}
+
+.swap-shift-details.counter-offer-details {
+    border-left-color: #8b5cf6;
+}
+
+.counter-offer-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 12px;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .swap-shift-details .shift-day {

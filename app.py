@@ -1197,10 +1197,10 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         return jsonify({'success': False, 'message': 'Business not found'}), 404
     
     data = request.json
-    response_type = data.get('response')  # 'accept' or 'decline'
+    response_type = data.get('response')  # 'accept', 'decline', or 'counter_offer'
     swap_shift = data.get('swap_shift')  # Optional: shift to offer in return
     
-    if response_type not in ['accept', 'decline']:
+    if response_type not in ['accept', 'decline', 'counter_offer']:
         return jsonify({'success': False, 'message': 'Invalid response type'}), 400
     
     # Find the swap request
@@ -1219,6 +1219,58 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     
     if not recipient:
         return jsonify({'success': False, 'message': 'You are not a recipient of this swap request'}), 403
+    
+    # Handle counter offer - creates a new swap request back to the original requester
+    if response_type == 'counter_offer':
+        if not swap_shift:
+            return jsonify({'success': False, 'message': 'Counter offer requires a shift to offer'}), 400
+        
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        
+        # Mark original request as having a counter offer
+        recipient.response = 'counter_offered'
+        recipient.responded_at = datetime.utcnow()
+        
+        # Get counter-offerer info
+        counter_offerer = DBEmployee.query.get(employee_id)
+        counter_offerer_name = counter_offerer.name if counter_offerer else 'A coworker'
+        
+        # Create a new counter offer request
+        day_names = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+        counter_request = ShiftSwapRequest(
+            business_db_id=db_business.id,
+            requester_employee_id=employee_id,  # The counter-offerer
+            original_day=swap_shift.get('day'),
+            original_start_hour=swap_shift.get('start_hour'),
+            original_end_hour=swap_shift.get('end_hour'),
+            original_role_id=swap_shift.get('role_id'),
+            week_start_date=swap_request.week_start_date,
+            note=f"Counter offer for your {day_names[swap_request.original_day]} {swap_request.original_start_hour}:00-{swap_request.original_end_hour}:00 shift",
+            status='pending',
+            # Mark as counter offer and link to original request
+            is_counter_offer=True,
+            counter_offer_for_id=swap_request.id
+        )
+        db.session.add(counter_request)
+        db.session.flush()
+        
+        # Add original requester as recipient
+        counter_recipient = SwapRequestRecipient(
+            swap_request_id=counter_request.id,
+            employee_id=swap_request.requester_employee_id,
+            eligibility_type='swap_only'  # They must accept the swap
+        )
+        db.session.add(counter_recipient)
+        db.session.commit()
+        
+        # TODO: Send notification email about counter offer
+        
+        return jsonify({
+            'success': True,
+            'message': 'Counter offer sent successfully',
+            'counter_offer_id': counter_request.request_id
+        })
     
     if response_type == 'decline':
         recipient.response = 'declined'

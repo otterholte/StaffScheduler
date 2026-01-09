@@ -537,6 +537,10 @@ class ShiftSwapRequest(db.Model):
     swap_end_hour = db.Column(db.Integer, nullable=True)
     swap_role_id = db.Column(db.String(50), nullable=True)
     
+    # Counter offer tracking - if this is a counter offer, links to original request
+    counter_offer_for_id = db.Column(db.Integer, db.ForeignKey('shift_swap_requests.id'), nullable=True)
+    is_counter_offer = db.Column(db.Boolean, default=False)
+    
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=True)
@@ -565,6 +569,8 @@ class ShiftSwapRequest(db.Model):
             'swap_start_hour': self.swap_start_hour,
             'swap_end_hour': self.swap_end_hour,
             'swap_role_id': self.swap_role_id,
+            'is_counter_offer': self.is_counter_offer or False,
+            'counter_offer_for_id': self.counter_offer_for_id,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'expires_at': self.expires_at.isoformat() if self.expires_at else None,
             'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,

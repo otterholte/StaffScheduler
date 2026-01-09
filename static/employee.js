@@ -1709,11 +1709,11 @@ function selectCounterOfferShift(idx) {
         opt.classList.toggle('selected', i === idx);
     });
     
-    // Update accept button
+    // Update accept button - this is now a counter offer
     const acceptBtn = document.getElementById('acceptSwapBtn');
     if (acceptBtn) {
         acceptBtn.disabled = false;
-        acceptBtn.textContent = 'Accept & Swap';
+        acceptBtn.textContent = 'Send Counter Offer';
     }
 }
 
@@ -1817,9 +1817,16 @@ function updateNotificationDropdown() {
         const dayName = dayNames[req.original_day] || `Day ${req.original_day}`;
         const timeStr = `${formatTime(req.original_start_hour)} - ${formatTime(req.original_end_hour)}`;
         
+        // Check if this is a counter offer
+        const isCounterOffer = req.is_counter_offer;
+        const title = isCounterOffer 
+            ? `⇄ Counter offer from ${requesterName}`
+            : `${requesterName} wants to swap`;
+        const itemClass = isCounterOffer ? 'notification-item counter-offer' : 'notification-item';
+        
         return `
-            <div class="notification-item" onclick="showSwapResponseModal('${req.id}'); hideNotificationDropdown();">
-                <div class="notification-item-title">${requesterName} wants to swap</div>
+            <div class="${itemClass}" onclick="showSwapResponseModal('${req.id}'); hideNotificationDropdown();">
+                <div class="notification-item-title">${title}</div>
                 <div class="notification-item-subtitle">${dayName}, ${timeStr}</div>
             </div>
         `;
@@ -1885,12 +1892,23 @@ function renderIncomingSwapRequests() {
     
     list.innerHTML = incoming.map(req => {
         const shiftTime = `${dayNames[req.original_day]} ${formatTime(req.original_start_hour)}-${formatTime(req.original_end_hour)}`;
-        const eligibilityBadge = req.my_eligibility_type === 'pickup' 
-            ? '<span class="swap-eligibility-badge pickup">Can Pick Up</span>'
-            : '<span class="swap-eligibility-badge swap-only">Swap Required</span>';
+        const isCounterOffer = req.is_counter_offer;
+        
+        // Different badge for counter offers vs regular requests
+        let statusBadge;
+        if (isCounterOffer) {
+            statusBadge = '<span class="swap-eligibility-badge counter-offer">⇄ Counter Offer</span>';
+        } else if (req.my_eligibility_type === 'pickup') {
+            statusBadge = '<span class="swap-eligibility-badge pickup">Can Pick Up</span>';
+        } else {
+            statusBadge = '<span class="swap-eligibility-badge swap-only">Swap Required</span>';
+        }
+        
+        const itemClass = isCounterOffer ? 'swap-request-item incoming counter-offer' : 'swap-request-item incoming';
+        const actionText = isCounterOffer ? 'offers' : 'wants to swap';
         
         return `
-            <div class="swap-request-item incoming" data-request-id="${req.id}">
+            <div class="${itemClass}" data-request-id="${req.id}">
                 <div class="swap-request-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="17 1 21 5 17 9"></polyline>
@@ -1902,15 +1920,15 @@ function renderIncomingSwapRequests() {
                 <div class="swap-request-info">
                     <div class="swap-request-header">
                         <span class="swap-request-from">${req.requester_name}</span>
-                        ${eligibilityBadge}
+                        ${statusBadge}
                     </div>
                     <div class="swap-request-shift">
-                        Wants to swap: <strong>${shiftTime}</strong>
+                        ${isCounterOffer ? 'Offering' : 'Wants to swap'}: <strong>${shiftTime}</strong>
                     </div>
                     ${req.note ? `<div class="swap-request-note">"${req.note}"</div>` : ''}
                     <div class="swap-request-actions">
                         <button class="btn btn-success btn-sm" onclick="showSwapResponseModal('${req.id}')">
-                            Respond
+                            ${isCounterOffer ? 'View Offer' : 'Respond'}
                         </button>
                     </div>
                 </div>
@@ -2486,6 +2504,7 @@ function showSwapResponseModal(requestId) {
     employeeState.myShiftsForCounterOffer = [];
     
     const modal = document.getElementById('swapResponseModal');
+    const modalHeader = modal?.querySelector('.modal-header h2');
     const details = document.getElementById('swapRequestDetails');
     const counterOfferSection = document.getElementById('counterOfferSection');
     const counterOfferToggle = document.getElementById('counterOfferToggle');
@@ -2494,27 +2513,54 @@ function showSwapResponseModal(requestId) {
     
     if (!modal) return;
     
-    // Show request details
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const requestType = request.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
+    const isCounterOffer = request.is_counter_offer;
     
+    // Update modal title for counter offers
+    if (modalHeader) {
+        modalHeader.textContent = isCounterOffer ? 'Counter Offer Received' : 'Respond to Swap Request';
+    }
+    
+    // Show request details - different text for counter offers
     if (details) {
-        details.innerHTML = `
-            <div class="swap-shift-details">
-                <p style="margin: 0 0 0.5rem 0;"><strong>${request.requester_name}</strong> wants to ${requestType}:</p>
-                <div class="shift-day">${dayNames[request.original_day]}</div>
-                <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
-                ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
-            </div>
-        `;
+        if (isCounterOffer) {
+            details.innerHTML = `
+                <div class="swap-shift-details counter-offer-details">
+                    <div class="counter-offer-badge">⇄ Counter Offer</div>
+                    <p style="margin: 0.5rem 0;"><strong>${request.requester_name}</strong> responded to your swap request with a counter offer:</p>
+                    <p style="margin: 0.25rem 0; color: var(--text-secondary);">They're offering their shift:</p>
+                    <div class="shift-day">${dayNames[request.original_day]}</div>
+                    <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
+                    ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
+                </div>
+            `;
+        } else {
+            const requestType = request.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
+            details.innerHTML = `
+                <div class="swap-shift-details">
+                    <p style="margin: 0 0 0.5rem 0;"><strong>${request.requester_name}</strong> wants to ${requestType}:</p>
+                    <div class="shift-day">${dayNames[request.original_day]}</div>
+                    <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
+                    ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
+                </div>
+            `;
+        }
     }
     
     // Reset counter-offer section
     if (counterOfferToggle) counterOfferToggle.classList.remove('active');
     if (counterOfferShifts) counterOfferShifts.style.display = 'none';
     
+    // For counter offers received, hide the counter-offer section (they just accept or decline)
+    if (isCounterOffer) {
+        if (counterOfferSection) counterOfferSection.style.display = 'none';
+        if (acceptBtn) {
+            acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Accept Swap';
+        }
+    }
     // Handle based on eligibility type
-    if (request.my_eligibility_type === 'swap_only') {
+    else if (request.my_eligibility_type === 'swap_only') {
         // Must offer a swap - expand counter-offer automatically
         if (counterOfferSection) counterOfferSection.style.display = 'block';
         if (counterOfferToggle) {
@@ -2620,14 +2666,17 @@ async function acceptSwapRequest() {
     }
     
     const acceptBtn = document.getElementById('acceptSwapBtn');
+    const isCounterOffer = !!employeeState.selectedSwapShift;
+    
     if (acceptBtn) {
         acceptBtn.disabled = true;
-        acceptBtn.textContent = 'Accepting...';
+        acceptBtn.textContent = isCounterOffer ? 'Sending...' : 'Accepting...';
     }
     
     try {
         const body = {
-            response: 'accept'
+            // If they selected a shift, it's a counter offer, not a direct accept
+            response: isCounterOffer ? 'counter_offer' : 'accept'
         };
         
         if (employeeState.selectedSwapShift) {
@@ -2652,12 +2701,17 @@ async function acceptSwapRequest() {
         const data = await response.json();
         
         if (data.success) {
-            showToast('Swap accepted! The schedule has been updated.', 'success');
+            const message = isCounterOffer 
+                ? 'Counter offer sent! Waiting for their response.' 
+                : 'Swap accepted! The schedule has been updated.';
+            showToast(message, 'success');
             hideSwapResponseModal();
             loadSwapRequests();
-            await loadScheduleData(); // Reload schedule to show updated shifts
+            if (!isCounterOffer) {
+                await loadScheduleData(); // Only reload schedule if accepted (not counter offer)
+            }
         } else {
-            showToast(data.message || 'Failed to accept swap', 'error');
+            showToast(data.message || 'Failed to process request', 'error');
         }
     } catch (error) {
         console.error('Failed to accept swap:', error);
