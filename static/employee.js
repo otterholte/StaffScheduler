@@ -1779,12 +1779,14 @@ function updateNotificationBell() {
         // Has notifications - amber bell, show badge with count
         bell.classList.add('has-notifications');
         badge.textContent = pendingCount;
-        updateNotificationDropdown();
     } else {
         // No notifications - default color, hide badge
         bell.classList.remove('has-notifications');
         badge.textContent = ''; // Empty hides via CSS :not(:empty)
     }
+    
+    // Always update dropdown content (shows empty message if no requests)
+    updateNotificationDropdown();
 }
 
 function updateNotificationDropdown() {
