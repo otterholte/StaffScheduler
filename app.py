@@ -1442,7 +1442,7 @@ def create_swap_request(business_slug, employee_id):
         return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
-@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<int:request_id>/respond', methods=['POST'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<request_id>/respond', methods=['POST'])
 def respond_to_swap_request(business_slug, employee_id, request_id):
     """Respond to a swap request (accept/decline)."""
     business = get_business_by_slug(business_slug, force_reload=True)
@@ -1788,7 +1788,7 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     })
 
 
-@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<int:request_id>/cancel', methods=['POST'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<request_id>/cancel', methods=['POST'])
 def cancel_swap_request(business_slug, employee_id, request_id):
     """Cancel a swap request (only by the requester)."""
     business = get_business_by_slug(business_slug, force_reload=True)
