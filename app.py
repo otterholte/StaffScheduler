@@ -1202,6 +1202,40 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         recipient.responded_at = datetime.utcnow()
         db.session.commit()
         
+        # Send decline notification to requester
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        shift_details = f"{day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)}"
+        
+        # Get requester and decliner info
+        requester = None
+        decliner = None
+        for emp in business.employees:
+            if emp.id == swap_request.requester_employee_id:
+                requester = emp
+            if emp.id == employee_id:
+                decliner = emp
+        
+        if requester and requester.email:
+            try:
+                email_service = get_email_service()
+                if email_service.is_configured():
+                    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+                    base_url = get_site_url()
+                    portal_url = f"{base_url}/employee/{business_slug}/{requester.id}/schedule"
+                    
+                    email_service.send_swap_response_notification(
+                        to_email=requester.email,
+                        requester_name=requester.name,
+                        responder_name=decliner.name if decliner else 'A coworker',
+                        business_name=business_name,
+                        shift_details=shift_details,
+                        response='declined',
+                        swap_shift_details=None,
+                        portal_url=portal_url
+                    )
+            except Exception as e:
+                print(f"Warning: Could not send decline notification: {e}")
+        
         return jsonify({
             'success': True,
             'message': 'Swap request declined'
@@ -1273,11 +1307,16 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                                 if a.get('employee_id') != swap_request.requester_employee_id:
                                     new_assignments.append(a)
                         
-                        # Add accepter in the same format
+                        # Add accepter in the same format, with swap marker
                         if current_assignments and isinstance(current_assignments[0], (list, tuple)):
                             new_assignments.append([employee_id, role_id])
                         else:
-                            accepter_info = {'employee_id': employee_id, 'role_id': role_id}
+                            accepter_info = {
+                                'employee_id': employee_id, 
+                                'role_id': role_id,
+                                'via_swap': True,
+                                'swapped_from': swap_request.requester_employee_id
+                            }
                             for emp in business.employees:
                                 if emp.id == employee_id:
                                     accepter_info['employee_name'] = emp.name
@@ -1349,12 +1388,14 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         if emp.id == employee_id:
             accepter = emp
     
+    email_service = get_email_service()
+    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+    base_url = get_site_url()
+    
+    # Send notification to requester
     if requester and requester.email:
         try:
-            email_service = get_email_service()
             if email_service.is_configured():
-                business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
-                base_url = get_site_url()
                 portal_url = f"{base_url}/employee/{business_slug}/{requester.id}/schedule"
                 
                 email_service.send_swap_response_notification(
@@ -1369,6 +1410,30 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                 )
         except Exception as e:
             print(f"Warning: Could not send acceptance notification: {e}")
+    
+    # Send notification to manager (business owner)
+    try:
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        if db_business and db_business.owner and db_business.owner.email:
+            if email_service.is_configured():
+                schedule_url = f"{base_url}/{business_slug}/schedule"
+                manager_name = f"{db_business.owner.first_name or ''} {db_business.owner.last_name or ''}".strip()
+                if not manager_name:
+                    manager_name = db_business.owner.username
+                
+                email_service.send_swap_completed_manager_notification(
+                    to_email=db_business.owner.email,
+                    manager_name=manager_name,
+                    requester_name=requester.name if requester else 'Unknown',
+                    accepter_name=accepter.name if accepter else 'Unknown',
+                    business_name=business_name,
+                    shift_details=shift_details,
+                    swap_shift_details=swap_shift_details,
+                    schedule_url=schedule_url
+                )
+    except Exception as e:
+        print(f"Warning: Could not send manager notification: {e}")
     
     return jsonify({
         'success': True,

@@ -319,9 +319,14 @@ function renderTimelineView() {
                 if (!showEveryone && empId !== myId) return;
                 
                 if (!dayAssignments[empId]) {
-                    dayAssignments[empId] = { hours: [], roleId: assignment.role_id };
+                    dayAssignments[empId] = { hours: [], roleId: assignment.role_id, viaSwap: false, swappedFrom: null };
                 }
                 dayAssignments[empId].hours.push(hour);
+                // Track if any hour in shift was obtained via swap
+                if (assignment.via_swap) {
+                    dayAssignments[empId].viaSwap = true;
+                    dayAssignments[empId].swappedFrom = assignment.swapped_from;
+                }
             });
         });
         
@@ -348,7 +353,9 @@ function renderTimelineView() {
                         emp,
                         roleId: data.roleId,
                         startHour: segStart,
-                        endHour: prevHour + 1
+                        endHour: prevHour + 1,
+                        viaSwap: data.viaSwap,
+                        swappedFrom: data.swappedFrom
                     });
                     
                     if (i < hours.length) {
@@ -418,10 +425,21 @@ function renderTimelineView() {
                 
                 // Tooltip
                 const roleName = role?.name || 'Staff';
-                block.title = `${shift.emp.name}\nRole: ${roleName}\n${formatTime(shift.startHour)} - ${formatTime(shift.endHour)}`;
+                let tooltipText = `${shift.emp.name}\nRole: ${roleName}\n${formatTime(shift.startHour)} - ${formatTime(shift.endHour)}`;
+                
+                // Add swap indicator if obtained via swap
+                let swapIndicator = '';
+                if (shift.viaSwap) {
+                    block.classList.add('via-swap');
+                    const swappedFromName = shift.swappedFrom ? (employeeMap[shift.swappedFrom]?.name || 'another employee') : 'another employee';
+                    tooltipText += `\n\n🔄 Obtained via shift swap from ${swappedFromName}`;
+                    swapIndicator = '<span class="swap-indicator" title="Obtained via shift swap">🔄</span>';
+                }
+                
+                block.title = tooltipText;
                 
                 // Content
-                block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>`;
+                block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>${swapIndicator}`;
                 
                 rowContainer.appendChild(block);
             });
@@ -447,7 +465,7 @@ function getAllShiftsForDay(schedule, dayIdx) {
     if (!schedule || !schedule.slot_assignments) return shifts;
     
     // Group assignments by employee for this day
-    const empShifts = {}; // { empId: { roleId, hours: Set } }
+    const empShifts = {}; // { empId: { roleId, hours: Set, viaSwap: bool } }
     
     Object.entries(schedule.slot_assignments).forEach(([slotKey, assignments]) => {
         const parts = slotKey.split(',');
@@ -465,10 +483,17 @@ function getAllShiftsForDay(schedule, dayIdx) {
                         empShifts[key] = {
                             employeeId: empId,
                             role: roleId,
-                            hours: new Set()
+                            hours: new Set(),
+                            viaSwap: false,
+                            swappedFrom: null
                         };
                     }
                     empShifts[key].hours.add(hour);
+                    // Track if any hour in the shift was obtained via swap
+                    if (assignment.via_swap) {
+                        empShifts[key].viaSwap = true;
+                        empShifts[key].swappedFrom = assignment.swapped_from;
+                    }
                 });
             }
         }
@@ -489,7 +514,9 @@ function getAllShiftsForDay(schedule, dayIdx) {
                     employeeId: empShift.employeeId,
                     role: empShift.role,
                     start: shiftStart,
-                    end: prevHour + 1
+                    end: prevHour + 1,
+                    viaSwap: empShift.viaSwap,
+                    swappedFrom: empShift.swappedFrom
                 });
                 if (i < hours.length) {
                     shiftStart = hours[i];
@@ -528,12 +555,19 @@ function getMyShiftsForDay(schedule, dayIdx) {
                         
                         if (existingShift) {
                             existingShift.end = hour + 1;
+                            // Track swap status
+                            if (assignment.via_swap) {
+                                existingShift.viaSwap = true;
+                                existingShift.swappedFrom = assignment.swapped_from;
+                            }
                         } else {
                             shifts.push({
                                 employeeId: myId,
                                 start: hour,
                                 end: hour + 1,
-                                role: assignment.role_id
+                                role: assignment.role_id,
+                                viaSwap: assignment.via_swap || false,
+                                swappedFrom: assignment.swapped_from || null
                             });
                         }
                     }
@@ -551,9 +585,10 @@ function getMyContinuousShiftsForDay(schedule, dayIdx) {
     const myId = employeeState.employee.id;
     const slotAssignments = schedule?.slot_assignments || {};
     
-    // Collect all hours and roles this employee works on this day
+    // Collect all hours, roles, and swap info this employee works on this day
     const hoursWorked = [];
     const hourRoles = {}; // Track roles for each hour
+    const hourSwapInfo = {}; // Track swap info for each hour
     
     employeeState.hours.forEach(hour => {
         const key = `${dayIdx},${hour}`;
@@ -568,6 +603,13 @@ function getMyContinuousShiftsForDay(schedule, dayIdx) {
                 if (!hourRoles[hour]) {
                     hourRoles[hour] = assignment.role_id;
                 }
+                // Track swap info
+                if (assignment.via_swap) {
+                    hourSwapInfo[hour] = {
+                        viaSwap: true,
+                        swappedFrom: assignment.swapped_from
+                    };
+                }
             }
         });
     });
@@ -580,6 +622,8 @@ function getMyContinuousShiftsForDay(schedule, dayIdx) {
     let segmentStart = hoursWorked[0];
     let prevHour = hoursWorked[0];
     let segmentRole = hourRoles[hoursWorked[0]]; // Use first hour's role for the segment
+    let segmentViaSwap = hourSwapInfo[hoursWorked[0]]?.viaSwap || false;
+    let segmentSwappedFrom = hourSwapInfo[hoursWorked[0]]?.swappedFrom || null;
     
     for (let i = 1; i <= hoursWorked.length; i++) {
         const currentHour = hoursWorked[i];
@@ -590,13 +634,22 @@ function getMyContinuousShiftsForDay(schedule, dayIdx) {
                 employeeId: myId,
                 start: segmentStart,
                 end: prevHour + 1,
-                role: segmentRole
+                role: segmentRole,
+                viaSwap: segmentViaSwap,
+                swappedFrom: segmentSwappedFrom
             });
             
             if (i < hoursWorked.length) {
                 segmentStart = currentHour;
                 segmentRole = hourRoles[currentHour];
+                segmentViaSwap = hourSwapInfo[currentHour]?.viaSwap || false;
+                segmentSwappedFrom = hourSwapInfo[currentHour]?.swappedFrom || null;
             }
+        }
+        // Track if any hour in segment was via swap
+        if (hourSwapInfo[currentHour]?.viaSwap) {
+            segmentViaSwap = true;
+            segmentSwappedFrom = hourSwapInfo[currentHour]?.swappedFrom;
         }
         prevHour = currentHour;
     }
@@ -699,12 +752,17 @@ function renderGridShifts(schedule, container, showEveryone) {
                 if (!showEveryone && empId !== myId) return;
                 
                 if (!empHours[empId]) {
-                    empHours[empId] = { hours: new Map() };
+                    empHours[empId] = { hours: new Map(), viaSwap: false, swappedFrom: null };
                 }
                 if (!empHours[empId].hours.has(hour)) {
                     empHours[empId].hours.set(hour, new Set());
                 }
                 empHours[empId].hours.get(hour).add(assignment.role_id);
+                // Track swap info
+                if (assignment.via_swap) {
+                    empHours[empId].viaSwap = true;
+                    empHours[empId].swappedFrom = assignment.swapped_from;
+                }
             });
         });
         
@@ -727,7 +785,9 @@ function renderGridShifts(schedule, container, showEveryone) {
                         day,
                         colIdx, // Use column index for positioning
                         startHour: segmentStart,
-                        endHour: prevHour + 1
+                        endHour: prevHour + 1,
+                        viaSwap: data.viaSwap,
+                        swappedFrom: data.swappedFrom
                     });
                     
                     if (i < hoursList.length) {
@@ -804,6 +864,9 @@ function renderGridShifts(schedule, container, showEveryone) {
         
         const el = document.createElement('div');
         el.className = isMine ? 'schedule-shift-block my-shift' : 'schedule-shift-block other-shift';
+        if (segment.viaSwap) {
+            el.classList.add('via-swap');
+        }
         el.style.backgroundColor = color;
         
         // Use colIdx for column position (not day number)
@@ -815,8 +878,17 @@ function renderGridShifts(schedule, container, showEveryone) {
         el.style.height = `${duration * slotHeight - 4}px`;
         el.style.zIndex = 10 + (segment.subColumn || 0);
         
-        el.innerHTML = `<span class="shift-name">${emp.name}</span>`;
-        el.title = `${emp.name}\nRoles: ${roleNames}\n${formatTime(segment.startHour)} - ${formatTime(segment.endHour)}`;
+        // Build tooltip
+        let tooltipText = `${emp.name}\nRoles: ${roleNames}\n${formatTime(segment.startHour)} - ${formatTime(segment.endHour)}`;
+        let swapIndicator = '';
+        if (segment.viaSwap) {
+            const swappedFromName = segment.swappedFrom ? (employeeMap[segment.swappedFrom]?.name || 'another employee') : 'another employee';
+            tooltipText += `\n\n🔄 Obtained via shift swap from ${swappedFromName}`;
+            swapIndicator = '<span class="swap-indicator">🔄</span>';
+        }
+        
+        el.innerHTML = `<span class="shift-name">${emp.name}</span>${swapIndicator}`;
+        el.title = tooltipText;
         
         container.appendChild(el);
     });
@@ -1106,13 +1178,18 @@ function renderUpcomingShifts() {
             role: shift.role
         }).replace(/"/g, '&quot;');
         
-        html += `<div class="upcoming-shift-item">
+        // Check if shift was obtained via swap
+        const swapBadge = shift.viaSwap 
+            ? `<span class="swap-badge" title="Obtained via shift swap from ${employeeMap[shift.swappedFrom]?.name || 'another employee'}">🔄 Swapped</span>` 
+            : '';
+        
+        html += `<div class="upcoming-shift-item ${shift.viaSwap ? 'via-swap' : ''}">
             <div class="shift-date-badge">
                 <span class="day-name">${DAYS_SHORT[shift.dayIdx]}</span>
                 <span class="day-num">${shift.date.getDate()}</span>
             </div>
             <div class="shift-details">
-                <div class="shift-time">${formatTimeRange(shift.start, shift.end)}</div>
+                <div class="shift-time">${formatTimeRange(shift.start, shift.end)} ${swapBadge}</div>
                 <div class="shift-role">
                     <span class="shift-role-dot" style="background: ${role.color || '#6366f1'}"></span>
                     ${role.name || 'Shift'}
@@ -1679,14 +1756,39 @@ async function loadEligibleStaff(shift) {
         if (data.success && data.eligible.length > 0) {
             employeeState.eligibleStaff = data.eligible;
             
-            eligibleList.innerHTML = data.eligible.map(emp => {
+            // Count pickups vs swaps
+            const pickupCount = data.eligible.filter(e => e.eligibility_type === 'pickup').length;
+            const swapCount = data.eligible.filter(e => e.eligibility_type !== 'pickup').length;
+            
+            // Build quick select buttons
+            let quickSelectButtons = '<div class="quick-select-buttons">';
+            if (pickupCount > 0) {
+                quickSelectButtons += `<button type="button" class="btn btn-sm btn-quick-select pickup" onclick="selectAllByType('pickup')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    All Pickups (${pickupCount})
+                </button>`;
+            }
+            if (swapCount > 0) {
+                quickSelectButtons += `<button type="button" class="btn btn-sm btn-quick-select swap" onclick="selectAllByType('swap_only')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l4 4-4 4"></path><path d="M20 7H4"></path><path d="M8 21l-4-4 4-4"></path><path d="M4 17h16"></path></svg>
+                    All Swaps (${swapCount})
+                </button>`;
+            }
+            quickSelectButtons += `<button type="button" class="btn btn-sm btn-quick-select clear" onclick="clearAllRecipients()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                Clear
+            </button>`;
+            quickSelectButtons += '</div>';
+            
+            // Build staff list
+            const staffList = data.eligible.map(emp => {
                 const statusText = emp.eligibility_type === 'pickup' 
                     ? 'Can pick up' 
                     : `Needs to swap (${emp.current_hours}h scheduled)`;
                 const badgeClass = emp.eligibility_type === 'pickup' ? 'pickup' : 'swap-only';
                 
                 return `
-                    <label class="eligible-item" data-emp-id="${emp.employee_id}">
+                    <label class="eligible-item" data-emp-id="${emp.employee_id}" data-type="${emp.eligibility_type}">
                         <input type="checkbox" onchange="toggleRecipient('${emp.employee_id}')">
                         <div class="eligible-avatar" style="background: ${employeeMap[emp.employee_id]?.color || '#666'}">
                             ${emp.employee_name.charAt(0).toUpperCase()}
@@ -1699,6 +1801,8 @@ async function loadEligibleStaff(shift) {
                     </label>
                 `;
             }).join('');
+            
+            eligibleList.innerHTML = quickSelectButtons + staffList;
             
             if (submitBtn) submitBtn.disabled = false;
         } else {
@@ -1722,7 +1826,40 @@ function toggleRecipient(empId) {
     const item = document.querySelector(`.eligible-item[data-emp-id="${empId}"]`);
     if (item) {
         item.classList.toggle('selected', idx === -1);
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        if (checkbox) checkbox.checked = idx === -1;
     }
+}
+
+function selectAllByType(type) {
+    // Get all employees of this type
+    const empsOfType = employeeState.eligibleStaff.filter(e => e.eligibility_type === type);
+    
+    // Add them to selected if not already
+    empsOfType.forEach(emp => {
+        if (!employeeState.selectedRecipients.includes(emp.employee_id)) {
+            employeeState.selectedRecipients.push(emp.employee_id);
+        }
+        // Update visual state
+        const item = document.querySelector(`.eligible-item[data-emp-id="${emp.employee_id}"]`);
+        if (item) {
+            item.classList.add('selected');
+            const checkbox = item.querySelector('input[type="checkbox"]');
+            if (checkbox) checkbox.checked = true;
+        }
+    });
+}
+
+function clearAllRecipients() {
+    // Clear all selections
+    employeeState.selectedRecipients = [];
+    
+    // Update visual state for all items
+    document.querySelectorAll('.eligible-item').forEach(item => {
+        item.classList.remove('selected');
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        if (checkbox) checkbox.checked = false;
+    });
 }
 
 function hideSwapModal() {

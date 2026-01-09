@@ -485,6 +485,113 @@ This email was sent by Staff Scheduler on behalf of {business_name}.
         
         return self.send_email(to_email, subject, html_body, text_body)
 
+    def send_swap_completed_manager_notification(
+        self,
+        to_email: str,
+        manager_name: str,
+        requester_name: str,
+        accepter_name: str,
+        business_name: str,
+        shift_details: str,
+        swap_shift_details: Optional[str],
+        schedule_url: str
+    ) -> Tuple[bool, str]:
+        """
+        Send notification to manager when a shift swap is completed.
+        """
+        subject = f"Shift swap completed: {requester_name} ↔ {accepter_name}"
+        
+        swap_info = ""
+        if swap_shift_details:
+            swap_info = f"""
+                        <div style="background-color: #e0f2fe; border-radius: 10px; padding: 15px; margin: 15px 0; border-left: 4px solid #0ea5e9;">
+                            <p style="margin: 0; font-size: 14px; color: #0369a1;">
+                                🔄 <strong>{accepter_name}</strong> traded their shift: {swap_shift_details}
+                            </p>
+                        </div>
+"""
+        
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5fa;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <tr>
+            <td>
+                <div style="background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); padding: 3px; border-radius: 16px;">
+                    <div style="background-color: #ffffff; border-radius: 14px; padding: 40px;">
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="margin: 0; font-size: 24px; color: #1a1a2e;">
+                                📋 Shift Swap Completed
+                            </h1>
+                        </div>
+                        
+                        <p style="font-size: 16px; color: #4a4a5a; margin: 0 0 20px;">
+                            Hi {manager_name},
+                        </p>
+                        
+                        <p style="font-size: 16px; color: #4a4a5a; margin: 0 0 20px;">
+                            A shift swap has been completed at <strong>{business_name}</strong>. The schedule has been automatically updated.
+                        </p>
+                        
+                        <div style="background-color: #f3e8ff; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                            <p style="margin: 0 0 10px; font-size: 16px; color: #1a1a2e;">
+                                <strong>Original shift:</strong> {shift_details}
+                            </p>
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #6b6b7b;">
+                                <span style="text-decoration: line-through;">{requester_name}</span> → <strong style="color: #7c3aed;">{accepter_name}</strong>
+                            </p>
+                        </div>
+                        
+                        {swap_info}
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{schedule_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                View Updated Schedule
+                            </a>
+                        </div>
+                        
+                        <p style="font-size: 14px; color: #6b6b7b; margin: 20px 0 0; text-align: center;">
+                            No action is required - this is for your records.
+                        </p>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #9090a0;">
+                    This notification was sent by Staff Scheduler.
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+        
+        text_body = f"""
+Hi {manager_name},
+
+A shift swap has been completed at {business_name}. The schedule has been automatically updated.
+
+Original shift: {shift_details}
+{requester_name} → {accepter_name}
+
+{"In exchange, " + accepter_name + " traded their shift: " + swap_shift_details if swap_shift_details else ""}
+
+View the updated schedule:
+{schedule_url}
+
+No action is required - this is for your records.
+
+---
+This notification was sent by Staff Scheduler.
+"""
+        
+        return self.send_email(to_email, subject, html_body, text_body)
+
 
 # Singleton instance
 _email_service = None
