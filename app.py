@@ -32,7 +32,7 @@ from scheduler.models import (
     CoverageMode, ShiftTemplate, ShiftRoleRequirement
 )
 from config import get_config
-from models import db, bcrypt, User, BusinessSettings, UserBusinessSettings, init_db, ShiftSwapRequest, SwapRequestRecipient, DBSchedule
+from models import db, bcrypt, User, BusinessSettings, UserBusinessSettings, init_db, ShiftSwapRequest, SwapRequestRecipient, DBSchedule, DBEmployee
 from auth import auth_bp
 from email_service import get_email_service
 
@@ -572,7 +572,7 @@ def contact_page():
 
 # ==================== EMPLOYEE PORTAL ====================
 
-@app.route('/employee/<business_slug>/<employee_id>/schedule')
+@app.route('/employee/<business_slug>/<int:employee_id>/schedule')
 def employee_schedule(business_slug, employee_id):
     """Employee schedule view - read-only view of their shifts."""
     # Force reload from database to ensure we have latest employee data
@@ -581,33 +581,54 @@ def employee_schedule(business_slug, employee_id):
     if not business:
         return redirect('/')
     
-    # Find the employee
-    employee = None
-    for emp in business.employees:
-        if emp.id == employee_id:
-            employee = emp
-            break
-    
-    if not employee:
-        # For debugging: surface a clearer error instead of silent redirect
+    # Find the employee by database ID
+    # The employee_id in URL is the DBEmployee.id (integer), not the model string ID
+    db_employee = DBEmployee.query.get(employee_id)
+    if not db_employee:
         return jsonify({
             'success': False,
             'message': f"Employee not found for {business_slug}",
             'employee_id': employee_id
         }), 404
     
+    # Find the matching Employee model object using the employee_id string
+    employee = None
+    for emp in business.employees:
+        if emp.id == db_employee.employee_id:
+            employee = emp
+            break
+    
+    if not employee:
+        return jsonify({
+            'success': False,
+            'message': f"Employee model not found for {business_slug}",
+            'employee_id': employee_id,
+            'db_employee_id': db_employee.employee_id
+        }), 404
+    
     # Get schedule data (if any exists for this week)
     schedule_data = {}  # Will be populated by JS from localStorage or API
     
-    # Get all employees data for "Everyone" view
-    all_employees_data = [emp.to_dict() for emp in business.employees]
+    # Create employee data with DB ID for URL generation
+    employee_dict = employee.to_dict()
+    employee_dict['db_id'] = employee_id  # Add DB ID for API calls
+    
+    # Get all employees data with DB IDs for consistent lookups
+    all_employees_data = []
+    for emp in business.employees:
+        emp_dict = emp.to_dict()
+        db_emp = DBEmployee.query.filter_by(employee_id=emp.id).first()
+        if db_emp:
+            emp_dict['db_id'] = db_emp.id
+        all_employees_data.append(emp_dict)
     
     return render_template('employee_schedule.html',
         business=business,
         business_data=business.to_dict(),
         business_slug=business_slug,
         employee=employee,
-        employee_data=employee.to_dict(),
+        employee_id=employee_id,  # Pass DB ID separately
+        employee_data=employee_dict,
         all_employees_data=all_employees_data,
         roles=business.roles,
         roles_data=[r.to_dict() for r in business.roles],
@@ -620,7 +641,7 @@ def employee_schedule(business_slug, employee_id):
     )
 
 
-@app.route('/employee/<business_slug>/<employee_id>/availability')
+@app.route('/employee/<business_slug>/<int:employee_id>/availability')
 def employee_availability(business_slug, employee_id):
     """Employee availability editor - edit their own availability."""
     # Force reload from database to ensure we have latest employee data
@@ -628,10 +649,15 @@ def employee_availability(business_slug, employee_id):
     if not business:
         return redirect('/')
     
-    # Find the employee
+    # Find the employee by database ID
+    db_employee = DBEmployee.query.get(employee_id)
+    if not db_employee:
+        return redirect('/')
+    
+    # Find the matching Employee model object
     employee = None
     for emp in business.employees:
-        if emp.id == employee_id:
+        if emp.id == db_employee.employee_id:
             employee = emp
             break
     
@@ -681,7 +707,7 @@ def employee_availability(business_slug, employee_id):
     )
 
 
-@app.route('/api/employee/<business_slug>/<employee_id>/schedule', methods=['GET'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/schedule', methods=['GET'])
 def get_employee_schedule(business_slug, employee_id):
     """Get the published schedule for an employee (no login required - public for employees)."""
     week_offset = request.args.get('weekOffset', 0, type=int)
@@ -728,7 +754,7 @@ def get_employee_schedule(business_slug, employee_id):
         }), 500
 
 
-@app.route('/api/employee/<employee_id>/availability', methods=['PUT'])
+@app.route('/api/employee/<int:employee_id>/availability', methods=['PUT'])
 def employee_update_availability(employee_id):
     """Employee API to update their own availability (no login required for testing)."""
     global _solver
@@ -958,7 +984,7 @@ def get_eligible_employees_for_swap(business, requester_id, shift_day, shift_sta
     return eligible
 
 
-@app.route('/api/employee/<business_slug>/<employee_id>/swap-requests', methods=['GET'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-requests', methods=['GET'])
 def get_swap_requests(business_slug, employee_id):
     """Get swap requests - both incoming (to respond to) and outgoing (created by employee)."""
     business = get_business_by_slug(business_slug, force_reload=True)
@@ -1031,7 +1057,7 @@ def get_swap_requests(business_slug, employee_id):
     })
 
 
-@app.route('/api/employee/<business_slug>/<employee_id>/swap-request', methods=['POST'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request', methods=['POST'])
 def create_swap_request(business_slug, employee_id):
     """Create a new shift swap request."""
     business = get_business_by_slug(business_slug, force_reload=True)
@@ -1166,7 +1192,7 @@ def create_swap_request(business_slug, employee_id):
     })
 
 
-@app.route('/api/employee/<business_slug>/<employee_id>/swap-request/<request_id>/respond', methods=['POST'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<int:request_id>/respond', methods=['POST'])
 def respond_to_swap_request(business_slug, employee_id, request_id):
     """Respond to a swap request (accept/decline)."""
     business = get_business_by_slug(business_slug, force_reload=True)
@@ -1442,7 +1468,7 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     })
 
 
-@app.route('/api/employee/<business_slug>/<employee_id>/swap-request/<request_id>/cancel', methods=['POST'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<int:request_id>/cancel', methods=['POST'])
 def cancel_swap_request(business_slug, employee_id, request_id):
     """Cancel a swap request (only by the requester)."""
     business = get_business_by_slug(business_slug, force_reload=True)
@@ -1471,7 +1497,7 @@ def cancel_swap_request(business_slug, employee_id, request_id):
     })
 
 
-@app.route('/api/employee/<business_slug>/<employee_id>/eligible-for-swap', methods=['GET'])
+@app.route('/api/employee/<business_slug>/<int:employee_id>/eligible-for-swap', methods=['GET'])
 def get_eligible_for_swap(business_slug, employee_id):
     """Get list of eligible employees for a potential swap (preview before creating request)."""
     business = get_business_by_slug(business_slug, force_reload=True)

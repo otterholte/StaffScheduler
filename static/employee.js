@@ -191,8 +191,10 @@ function updateWeekDisplay() {
 async function loadScheduleData() {
     // Always fetch from API to get the latest published schedule (including swaps)
     try {
+        // Use db_id for API calls (integer ID from database)
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/schedule?weekOffset=${employeeState.weekOffset}`
+            `/api/employee/${employeeState.businessSlug}/${empId}/schedule?weekOffset=${employeeState.weekOffset}`
         );
         const data = await response.json();
         
@@ -1536,7 +1538,8 @@ async function saveAvailability() {
     if (saveBtn) saveBtn.disabled = true;
     
     try {
-        const response = await fetch(`/api/employee/${employeeState.employee.id}/availability`, {
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
+        const response = await fetch(`/api/employee/${empId}/availability`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1746,7 +1749,8 @@ function getMyUpcomingShifts() {
 
 async function loadSwapRequests() {
     try {
-        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-requests`);
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
+        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${empId}/swap-requests`);
         const data = await response.json();
         
         if (data.success) {
@@ -1772,13 +1776,14 @@ function updateNotificationBell() {
     const pendingCount = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').length;
     
     if (pendingCount > 0) {
-        bell.style.display = 'flex';
+        // Has notifications - amber bell, show badge with count
         bell.classList.add('has-notifications');
         badge.textContent = pendingCount;
         updateNotificationDropdown();
     } else {
-        bell.style.display = 'none';
+        // No notifications - default color, hide badge
         bell.classList.remove('has-notifications');
+        badge.textContent = ''; // Empty hides via CSS :not(:empty)
     }
 }
 
@@ -2017,8 +2022,9 @@ async function loadEligibleStaff(shift) {
             week_start: weekStart
         });
         
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/eligible-for-swap?${params}`
+            `/api/employee/${employeeState.businessSlug}/${empId}/eligible-for-swap?${params}`
         );
         const data = await response.json();
         
@@ -2425,8 +2431,9 @@ async function submitSwapRequest() {
         const dates = getWeekDates(employeeState.weekOffset);
         const weekStart = dates[0].toISOString().split('T')[0];
         
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request`,
+            `/api/employee/${employeeState.businessSlug}/${empId}/swap-request`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2626,8 +2633,9 @@ async function acceptSwapRequest() {
             };
         }
         
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request/${request.id}/respond`,
+            `/api/employee/${employeeState.businessSlug}/${empId}/swap-request/${request.id}/respond`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2667,8 +2675,9 @@ async function declineSwapRequest() {
     }
     
     try {
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request/${request.id}/respond`,
+            `/api/employee/${employeeState.businessSlug}/${empId}/swap-request/${request.id}/respond`,
             {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2700,8 +2709,9 @@ async function cancelMySwapRequest(requestId) {
     if (!confirm('Are you sure you want to cancel this swap request?')) return;
     
     try {
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request/${requestId}/cancel`,
+            `/api/employee/${employeeState.businessSlug}/${empId}/swap-request/${requestId}/cancel`,
             { method: 'POST' }
         );
         

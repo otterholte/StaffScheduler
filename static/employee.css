@@ -39,6 +39,12 @@ body.employee-view {
 }
 
 /* ==================== NOTIFICATION BELL ==================== */
+.notification-bell-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
 .notification-bell {
     position: relative;
     background: transparent;
@@ -48,6 +54,9 @@ body.employee-view {
     border-radius: 8px;
     transition: all 0.2s ease;
     margin-right: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .notification-bell svg {
@@ -72,20 +81,25 @@ body.employee-view {
 
 .notification-badge {
     position: absolute;
-    top: 2px;
-    right: 2px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0 5px;
+    top: 0;
+    right: 0;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
     background: #ef4444;
     color: white;
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     font-weight: 700;
-    border-radius: 9px;
-    display: flex;
+    border-radius: 8px;
+    display: none; /* Hidden by default */
     align-items: center;
     justify-content: center;
     box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+}
+
+/* Show badge only when it has content */
+.notification-badge:not(:empty) {
+    display: flex;
 }
 
 @keyframes bellRing {
@@ -131,7 +145,8 @@ body.employee-view {
     align-items: center;
 }
 
-.notification-header h3 {
+.notification-header h3,
+.notification-header span {
     margin: 0;
     font-size: 0.95rem;
     font-weight: 600;
