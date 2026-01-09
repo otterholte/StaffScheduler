@@ -24,7 +24,7 @@ from scheduler import (
     DAYS_OF_WEEK
 )
 from scheduler.businesses import sync_business_to_db, load_businesses_from_db
-from db_service import save_schedule_to_db, get_schedule_from_db, publish_schedule_in_db, get_published_schedule_from_db
+from db_service import save_schedule_to_db, get_schedule_from_db, get_schedule_with_status_from_db, publish_schedule_in_db, get_published_schedule_from_db
 from datetime import date, timedelta
 from scheduler.models import (
     Employee, Role, TimeSlot, EmployeeClassification,
@@ -1189,11 +1189,12 @@ def load_saved_schedule():
     week_start = get_week_start(week_offset)
     
     try:
-        schedule = get_schedule_from_db(business.id, week_start)
+        schedule, status = get_schedule_with_status_from_db(business.id, week_start)
         if schedule:
             return jsonify({
                 'success': True,
                 'schedule': schedule.to_dict(),
+                'status': status,  # 'draft' or 'published'
                 'business': {
                     'id': business.id,
                     'name': business.name,

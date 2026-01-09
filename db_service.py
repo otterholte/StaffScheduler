@@ -524,6 +524,29 @@ def get_schedule_from_db(business_id: str, week_start: date) -> Optional[Schedul
     return None
 
 
+def get_schedule_with_status_from_db(business_id: str, week_start: date) -> tuple[Optional[Schedule], Optional[str]]:
+    """Get a schedule and its status from the database.
+    
+    Returns:
+        A tuple of (Schedule, status) where status is 'draft' or 'published'.
+        Returns (None, None) if no schedule exists.
+    """
+    db_business = get_db_business(business_id)
+    if not db_business:
+        return None, None
+    
+    week_id = week_start.strftime('%Y-W%V')
+    
+    db_schedule = DBSchedule.query.filter_by(
+        business_db_id=db_business.id,
+        week_id=week_id
+    ).first()
+    
+    if db_schedule:
+        return _db_schedule_to_model(db_schedule), db_schedule.status
+    return None, None
+
+
 def get_published_schedule_from_db(business_id: str, week_start: date) -> Optional[Schedule]:
     """Get a published schedule from the database."""
     db_business = get_db_business(business_id)

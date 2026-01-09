@@ -140,10 +140,16 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
                 state.employees = data.employees;
                 buildLookups();
             }
-            // Mark week as having a schedule
+            // Mark week as having a schedule and set published status based on database
             if (data.schedule.slot_assignments && Object.keys(data.schedule.slot_assignments).length > 0) {
                 markWeekAsGenerated(state.weekOffset, 0);
-                updateScheduleStatus('Schedule loaded from server', 'success');
+                // If the schedule is published in the database, mark it as published
+                if (data.status === 'published') {
+                    markWeekAsPublished(state.weekOffset);
+                    updateScheduleStatus('Published schedule loaded', 'success');
+                } else {
+                    updateScheduleStatus('Draft schedule loaded', 'success');
+                }
                 if (dom.alternativeBtn) dom.alternativeBtn.disabled = false;
                 if (dom.exportBtn) dom.exportBtn.disabled = false;
                 scheduleLoaded = true;
