@@ -852,6 +852,31 @@ def employee_update_availability(employee_id):
 
 # ==================== SHIFT SWAP API ====================
 
+def lookup_db_employee_by_any_id(employee_id_str):
+    """
+    Look up a DBEmployee by either DB ID (integer as string like "7") 
+    or model ID (string like "owner_7").
+    Returns (DBEmployee, model_id) tuple or (None, None) if not found.
+    """
+    if not employee_id_str:
+        return None, None
+    
+    # Try as DB ID first (if it's a number)
+    try:
+        db_id = int(employee_id_str)
+        db_emp = DBEmployee.query.get(db_id)
+        if db_emp:
+            return db_emp, db_emp.employee_id
+    except (ValueError, TypeError):
+        pass
+    
+    # Try as model ID (e.g., "owner_7")
+    db_emp = DBEmployee.query.filter_by(employee_id=employee_id_str).first()
+    if db_emp:
+        return db_emp, employee_id_str
+    
+    return None, None
+
 def format_shift_time(start_hour, end_hour):
     """Format shift hours to readable string like '9am-5pm'."""
     def fmt(h):
@@ -1057,13 +1082,22 @@ def get_swap_requests(business_slug, employee_id):
             print(f"[DEBUG]   Processing recipient: swap_req.business_db_id={swap_req.business_db_id}, status={swap_req.status}, requester_employee_id={swap_req.requester_employee_id}")
             # Only include if the request is for this business
             if swap_req.business_db_id == db_business.id and swap_req.status == 'pending':
-                # Get requester info - look up by DB ID
-                print(f"[DEBUG]   Looking up requester by DB ID: {swap_req.requester_employee_id}")
+                # Get requester info - handle both DB ID (new format) and model ID (old format)
+                requester_db = None
+                requester_id = swap_req.requester_employee_id
+                print(f"[DEBUG]   Looking up requester: {requester_id}")
+                
+                # Try as DB ID first (if it's a number)
                 try:
-                    requester_db = DBEmployee.query.get(int(swap_req.requester_employee_id))
-                except (ValueError, TypeError) as e:
-                    print(f"[DEBUG]   Could not convert requester_employee_id to int: {e}")
-                    requester_db = None
+                    db_id = int(requester_id)
+                    requester_db = DBEmployee.query.get(db_id)
+                    print(f"[DEBUG]   Looked up by DB ID {db_id}: found={requester_db is not None}")
+                except (ValueError, TypeError):
+                    # Not a number, try as model ID (e.g., "owner_7")
+                    print(f"[DEBUG]   Not a DB ID, trying as model ID")
+                    requester_db = DBEmployee.query.filter_by(employee_id=requester_id).first()
+                    print(f"[DEBUG]   Looked up by model ID: found={requester_db is not None}")
+                
                 requester_name = requester_db.name if requester_db else 'Unknown'
                 print(f"[DEBUG]   Requester name: {requester_name}")
                 
@@ -1369,9 +1403,8 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         shift_details = f"{day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)}"
         
         # Get requester and decliner info
-        # requester_employee_id stores DB ID as string, need to look up model ID
-        db_requester = DBEmployee.query.get(int(swap_request.requester_employee_id)) if swap_request.requester_employee_id else None
-        requester_model_id = db_requester.employee_id if db_requester else None
+        # requester_employee_id could be DB ID (string) or model ID - handle both
+        db_requester, requester_model_id = lookup_db_employee_by_any_id(swap_request.requester_employee_id)
         
         requester = None
         decliner = None
@@ -1424,8 +1457,8 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     swap_request.resolved_at = datetime.utcnow()
     
     # Look up model IDs for schedule updates
-    db_requester = DBEmployee.query.get(int(swap_request.requester_employee_id)) if swap_request.requester_employee_id else None
-    requester_model_id = db_requester.employee_id if db_requester else None
+    # requester_employee_id could be DB ID (string) or model ID - handle both
+    db_requester, requester_model_id = lookup_db_employee_by_any_id(swap_request.requester_employee_id)
     accepter_model_id = employee_model_id  # Already looked up above
     
     # Record swap shift if provided
