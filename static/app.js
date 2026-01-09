@@ -2357,6 +2357,110 @@ function resetWeekPublishState(offset = 0) {
     updateWeekNavigationBar();
 }
 
+// Demo business IDs that don't support server-side publishing
+const DEMO_BUSINESS_IDS = ['coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'];
+
+function isDemoBusiness() {
+    return DEMO_BUSINESS_IDS.includes(state.business?.id);
+}
+
+function showDemoPublishModal(weekRange) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('demoPublishModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'demoPublishModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-backdrop"></div>
+            <div class="modal-content demo-publish-modal">
+                <div class="modal-header">
+                    <h2>
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        Demo Mode
+                    </h2>
+                    <button class="modal-close" id="demoPublishClose">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="demo-info-card">
+                        <div class="demo-info-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+                                <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9"></path>
+                            </svg>
+                        </div>
+                        <h3>Local Save Only</h3>
+                        <p>You're using a <strong>demo business</strong>. Your schedule will be saved to this device only and won't sync across other devices or browsers.</p>
+                        <p class="demo-tip">To save schedules to the cloud and share with your team, <a href="/login" class="demo-link">create an account</a> and add your own business.</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="demoPublishCancel">Cancel</button>
+                    <button class="btn btn-primary" id="demoPublishConfirm">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        Save Locally
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Setup event handlers
+        modal.querySelector('.modal-backdrop').addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+        modal.querySelector('#demoPublishClose').addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+        modal.querySelector('#demoPublishCancel').addEventListener('click', () => {
+            modal.classList.remove('active');
+        });
+    }
+    
+    // Setup confirm handler (recreate each time to get fresh weekRange)
+    const confirmBtn = modal.querySelector('#demoPublishConfirm');
+    const newConfirmBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+    newConfirmBtn.addEventListener('click', () => {
+        modal.classList.remove('active');
+        publishScheduleLocally(weekRange);
+    });
+    
+    // Show modal
+    modal.classList.add('active');
+}
+
+function publishScheduleLocally(weekRange) {
+    // Save to localStorage
+    saveScheduleToStorage();
+    
+    // Mark the week as published locally
+    markWeekAsPublished(state.weekOffset);
+    
+    // Show success toast
+    showToast(`Schedule saved locally for ${weekRange}`, 'success');
+    
+    // Visual feedback
+    if (dom.publishBtn) {
+        dom.publishBtn.classList.add('published');
+        setTimeout(() => {
+            dom.publishBtn.classList.remove('published');
+        }, 1500);
+    }
+}
+
 async function publishSchedule() {
     if (!state.currentSchedule || !state.currentSchedule.slot_assignments) {
         showToast('No schedule to publish', 'warning');
@@ -2365,6 +2469,12 @@ async function publishSchedule() {
     
     // Get the week range for the confirmation message
     const weekRange = getWeekRangeString(state.weekOffset);
+    
+    // Check if this is a demo business
+    if (isDemoBusiness()) {
+        showDemoPublishModal(weekRange);
+        return;
+    }
     
     // Show loading state
     if (dom.publishBtn) {

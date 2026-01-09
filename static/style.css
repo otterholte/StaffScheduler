@@ -4714,6 +4714,87 @@ kbd {
     border-top: 1px solid var(--border-color);
 }
 
+/* ---------- Demo Publish Modal ---------- */
+.demo-publish-modal {
+    max-width: 440px;
+}
+
+.demo-publish-modal .modal-header h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--warning);
+}
+
+.demo-publish-modal .modal-header h2 .icon {
+    color: var(--warning);
+}
+
+.demo-info-card {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(139, 92, 246, 0.08));
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.demo-info-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(139, 92, 246, 0.15));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 1rem;
+    color: var(--primary);
+}
+
+.demo-info-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+}
+
+.demo-info-card p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    margin: 0 0 1rem;
+}
+
+.demo-info-card p:last-child {
+    margin-bottom: 0;
+}
+
+.demo-tip {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    font-size: 0.85rem !important;
+}
+
+.demo-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.demo-link:hover {
+    text-decoration: underline;
+}
+
+/* Light theme adjustments for demo modal */
+body[data-theme="light"] .demo-info-card {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.06));
+    border-color: rgba(99, 102, 241, 0.15);
+}
+
+body[data-theme="light"] .demo-tip {
+    background: rgba(0, 0, 0, 0.03);
+}
+
 /* ---------- Gap Modal (Coverage Gaps) ---------- */
 .gap-modal-info {
     background: var(--bg-tertiary);
