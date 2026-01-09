@@ -1001,16 +1001,21 @@ def get_swap_requests(business_slug, employee_id):
             'incoming': []
         })
     
-    # Get outgoing requests (created by this employee)
+    # Look up the string employee model ID from the DB integer ID
+    db_employee = DBEmployee.query.get(employee_id)
+    employee_model_id = db_employee.employee_id if db_employee else None
+    
+    # Get outgoing requests (created by this employee) - check both DB ID (as string) and model ID
     outgoing = ShiftSwapRequest.query.filter_by(
         business_db_id=db_business.id,
-        requester_employee_id=employee_id
+        requester_employee_id=str(employee_id)  # DB ID stored as string
     ).order_by(ShiftSwapRequest.created_at.desc()).all()
     
     # Get incoming requests (where this employee is a recipient)
+    # Recipients store string model IDs like "maria_0"
     incoming_recipients = SwapRequestRecipient.query.filter_by(
-        employee_id=employee_id
-    ).all()
+        employee_id=employee_model_id
+    ).all() if employee_model_id else []
     
     incoming = []
     for recipient in incoming_recipients:
@@ -1067,6 +1072,12 @@ def create_swap_request(business_slug, employee_id):
     if not db_business:
         return jsonify({'success': False, 'message': 'Business not properly configured'}), 400
     
+    # Look up the string employee_id from the DB integer ID
+    db_employee = DBEmployee.query.get(employee_id)
+    if not db_employee:
+        return jsonify({'success': False, 'message': 'Employee not found'}), 404
+    requester_model_id = db_employee.employee_id  # String ID like "maria_0"
+    
     data = request.json
     
     # Required fields
@@ -1088,10 +1099,10 @@ def create_swap_request(business_slug, employee_id):
     note = data.get('note', '')
     specific_recipients = data.get('recipients', [])  # Optional: specific employee IDs to request
     
-    # Create the swap request
+    # Create the swap request - use string model ID for consistency
     swap_request = ShiftSwapRequest(
         business_db_id=db_business.id,
-        requester_employee_id=employee_id,
+        requester_employee_id=str(employee_id),  # Store DB ID as string for now
         original_day=shift_day,
         original_start_hour=shift_start,
         original_end_hour=shift_end,
@@ -1107,9 +1118,9 @@ def create_swap_request(business_slug, employee_id):
     db.session.add(swap_request)
     db.session.flush()  # Get the ID
     
-    # Find eligible employees
+    # Find eligible employees - use string model ID for comparison
     all_eligible = get_eligible_employees_for_swap(
-        business, employee_id, shift_day, shift_start, shift_end, shift_role, week_start
+        business, requester_model_id, shift_day, shift_start, shift_end, shift_role, week_start
     )
     
     # Filter to specific recipients if provided
@@ -1216,10 +1227,14 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     if swap_request.status != 'pending':
         return jsonify({'success': False, 'message': f'Swap request is already {swap_request.status}'}), 400
     
-    # Find this employee's recipient record
+    # Look up the string employee model ID from the DB integer ID
+    db_employee = DBEmployee.query.get(employee_id)
+    employee_model_id = db_employee.employee_id if db_employee else None
+    
+    # Find this employee's recipient record - recipients store string model IDs
     recipient = SwapRequestRecipient.query.filter_by(
         swap_request_id=swap_request.id,
-        employee_id=employee_id
+        employee_id=employee_model_id
     ).first()
     
     if not recipient:
@@ -1238,14 +1253,13 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         recipient.responded_at = datetime.utcnow()
         
         # Get counter-offerer info
-        counter_offerer = DBEmployee.query.get(employee_id)
-        counter_offerer_name = counter_offerer.name if counter_offerer else 'A coworker'
+        counter_offerer_name = db_employee.name if db_employee else 'A coworker'
         
         # Create a new counter offer request
         day_names = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
         counter_request = ShiftSwapRequest(
             business_db_id=db_business.id,
-            requester_employee_id=employee_id,  # The counter-offerer
+            requester_employee_id=str(employee_id),  # Store DB ID as string
             original_day=swap_shift.get('day'),
             original_start_hour=swap_shift.get('start_hour'),
             original_end_hour=swap_shift.get('end_hour'),
@@ -1287,12 +1301,16 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         shift_details = f"{day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)}"
         
         # Get requester and decliner info
+        # requester_employee_id stores DB ID as string, need to look up model ID
+        db_requester = DBEmployee.query.get(int(swap_request.requester_employee_id)) if swap_request.requester_employee_id else None
+        requester_model_id = db_requester.employee_id if db_requester else None
+        
         requester = None
         decliner = None
         for emp in business.employees:
-            if emp.id == swap_request.requester_employee_id:
+            if emp.id == requester_model_id:
                 requester = emp
-            if emp.id == employee_id:
+            if emp.id == employee_model_id:
                 decliner = emp
         
         if requester and requester.email:
@@ -1332,10 +1350,15 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
             'message': 'You must offer a shift to swap since picking up would exceed your max hours'
         }), 400
     
-    # Update the swap request
+    # Update the swap request - store DB ID as string
     swap_request.status = 'accepted'
-    swap_request.accepted_by_employee_id = employee_id
+    swap_request.accepted_by_employee_id = str(employee_id)
     swap_request.resolved_at = datetime.utcnow()
+    
+    # Look up model IDs for schedule updates
+    db_requester = DBEmployee.query.get(int(swap_request.requester_employee_id)) if swap_request.requester_employee_id else None
+    requester_model_id = db_requester.employee_id if db_requester else None
+    accepter_model_id = employee_model_id  # Already looked up above
     
     # Record swap shift if provided
     if swap_shift:
@@ -1368,6 +1391,7 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                 role_id = swap_request.original_role_id or 'staff'
                 
                 # Remove requester from original shift, add accepter
+                # Use model IDs (string like "maria_0") for schedule, not DB IDs
                 for hour in range(swap_request.original_start_hour, swap_request.original_end_hour):
                     # Try both key formats: string "day,hour" and list [day, hour]
                     slot_key = f"{swap_request.original_day},{hour}"
@@ -1384,24 +1408,24 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                         new_assignments = []
                         for a in current_assignments:
                             if isinstance(a, (list, tuple)):
-                                if a[0] != swap_request.requester_employee_id:
+                                if a[0] != requester_model_id:
                                     new_assignments.append(a)
                             elif isinstance(a, dict):
-                                if a.get('employee_id') != swap_request.requester_employee_id:
+                                if a.get('employee_id') != requester_model_id:
                                     new_assignments.append(a)
                         
                         # Add accepter in the same format, with swap marker
                         if current_assignments and isinstance(current_assignments[0], (list, tuple)):
-                            new_assignments.append([employee_id, role_id])
+                            new_assignments.append([accepter_model_id, role_id])
                         else:
                             accepter_info = {
-                                'employee_id': employee_id, 
+                                'employee_id': accepter_model_id, 
                                 'role_id': role_id,
                                 'via_swap': True,
-                                'swapped_from': swap_request.requester_employee_id
+                                'swapped_from': requester_model_id
                             }
                             for emp in business.employees:
-                                if emp.id == employee_id:
+                                if emp.id == accepter_model_id:
                                     accepter_info['employee_name'] = emp.name
                                     accepter_info['color'] = emp.color
                                     break
@@ -1410,7 +1434,7 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                         slot_assignments[actual_key] = new_assignments
                     else:
                         # Key doesn't exist, create new assignment
-                        slot_assignments[slot_key] = [[employee_id, role_id]]
+                        slot_assignments[slot_key] = [[accepter_model_id, role_id]]
                 
                 # If there's a swap shift, swap those too
                 if swap_shift:
@@ -1423,19 +1447,19 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                             new_assignments = []
                             for a in current_assignments:
                                 if isinstance(a, (list, tuple)):
-                                    if a[0] != employee_id:
+                                    if a[0] != accepter_model_id:
                                         new_assignments.append(a)
                                 elif isinstance(a, dict):
-                                    if a.get('employee_id') != employee_id:
+                                    if a.get('employee_id') != accepter_model_id:
                                         new_assignments.append(a)
                             
                             # Add requester
                             if current_assignments and isinstance(current_assignments[0], (list, tuple)):
-                                new_assignments.append([swap_request.requester_employee_id, swap_role_id])
+                                new_assignments.append([requester_model_id, swap_role_id])
                             else:
-                                requester_info = {'employee_id': swap_request.requester_employee_id, 'role_id': swap_role_id}
+                                requester_info = {'employee_id': requester_model_id, 'role_id': swap_role_id}
                                 for emp in business.employees:
-                                    if emp.id == swap_request.requester_employee_id:
+                                    if emp.id == requester_model_id:
                                         requester_info['employee_name'] = emp.name
                                         requester_info['color'] = emp.color
                                         break
@@ -1447,7 +1471,7 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                 schedule_data['slot_assignments'] = slot_assignments
                 db_schedule.schedule_json = json.dumps(schedule_data)
                 db.session.add(db_schedule)
-                print(f"Schedule updated: removed {swap_request.requester_employee_id}, added {employee_id}")
+                print(f"Schedule updated: removed {requester_model_id}, added {accepter_model_id}")
     except Exception as e:
         import traceback
         print(f"Warning: Could not update schedule: {e}")
@@ -1462,13 +1486,13 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     if swap_shift:
         swap_shift_details = f"{day_names[swap_shift['day']]} {format_shift_time(swap_shift['start_hour'], swap_shift['end_hour'])}"
     
-    # Get names and emails
+    # Get names and emails using model IDs
     requester = None
     accepter = None
     for emp in business.employees:
-        if emp.id == swap_request.requester_employee_id:
+        if emp.id == requester_model_id:
             requester = emp
-        if emp.id == employee_id:
+        if emp.id == accepter_model_id:
             accepter = emp
     
     email_service = get_email_service()
