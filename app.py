@@ -1158,7 +1158,12 @@ def create_swap_request(business_slug, employee_id):
             try:
                 email_service = get_email_service()
                 if email_service.is_configured():
-                    portal_url = f"{base_url}/employee/{business_slug}/{eligible['employee_id']}/schedule"
+                    # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+                    db_emp = DBEmployee.query.filter_by(employee_id=eligible['employee_id']).first()
+                    if not db_emp:
+                        notification_errors.append(f"{eligible['employee_name']}: Employee not found in database")
+                        continue
+                    portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
                     success, msg = email_service.send_swap_request_notification(
                         to_email=eligible['employee_email'],
                         recipient_name=eligible['employee_name'],
@@ -1296,18 +1301,21 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                 if email_service.is_configured():
                     business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
                     base_url = get_site_url()
-                    portal_url = f"{base_url}/employee/{business_slug}/{requester.id}/schedule"
-                    
-                    email_service.send_swap_response_notification(
-                        to_email=requester.email,
-                        requester_name=requester.name,
-                        responder_name=decliner.name if decliner else 'A coworker',
-                        business_name=business_name,
-                        shift_details=shift_details,
-                        response='declined',
-                        swap_shift_details=None,
-                        portal_url=portal_url
-                    )
+                    # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+                    db_requester = DBEmployee.query.filter_by(employee_id=requester.id).first()
+                    if db_requester:
+                        portal_url = f"{base_url}/employee/{business_slug}/{db_requester.id}/schedule"
+                        
+                        email_service.send_swap_response_notification(
+                            to_email=requester.email,
+                            requester_name=requester.name,
+                            responder_name=decliner.name if decliner else 'A coworker',
+                            business_name=business_name,
+                            shift_details=shift_details,
+                            response='declined',
+                            swap_shift_details=None,
+                            portal_url=portal_url
+                        )
             except Exception as e:
                 print(f"Warning: Could not send decline notification: {e}")
         
@@ -1471,18 +1479,21 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     if requester and requester.email:
         try:
             if email_service.is_configured():
-                portal_url = f"{base_url}/employee/{business_slug}/{requester.id}/schedule"
-                
-                email_service.send_swap_response_notification(
-                    to_email=requester.email,
-                    requester_name=requester.name,
-                    responder_name=accepter.name if accepter else 'Unknown',
-                    business_name=business_name,
-                    shift_details=shift_details,
-                    response='accepted',
-                    swap_shift_details=swap_shift_details,
-                    portal_url=portal_url
-                )
+                # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+                db_requester = DBEmployee.query.filter_by(employee_id=requester.id).first()
+                if db_requester:
+                    portal_url = f"{base_url}/employee/{business_slug}/{db_requester.id}/schedule"
+                    
+                    email_service.send_swap_response_notification(
+                        to_email=requester.email,
+                        requester_name=requester.name,
+                        responder_name=accepter.name if accepter else 'Unknown',
+                        business_name=business_name,
+                        shift_details=shift_details,
+                        response='accepted',
+                        swap_shift_details=swap_shift_details,
+                        portal_url=portal_url
+                    )
         except Exception as e:
             print(f"Warning: Could not send acceptance notification: {e}")
     
@@ -2072,7 +2083,11 @@ def add_employee():
         try:
             business_slug = get_business_slug(business.id)
             base_url = get_site_url()
-            portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+            # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+            db_emp = DBEmployee.query.filter_by(employee_id=employee.id).first()
+            if not db_emp:
+                raise ValueError("Employee not found in database for invitation URL")
+            portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
             
             # Get custom business name if available
             business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
@@ -2190,7 +2205,11 @@ def update_employee(emp_id):
         try:
             business_slug = get_business_slug(business.id)
             base_url = get_site_url()
-            portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+            # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+            db_emp = DBEmployee.query.filter_by(employee_id=employee.id).first()
+            if not db_emp:
+                raise ValueError("Employee not found in database for invitation URL")
+            portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
             
             # Get custom business name if available
             business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
@@ -2307,7 +2326,14 @@ def send_employee_invitation(emp_id):
     # Generate invitation link
     business_slug = get_business_slug(business.id)
     base_url = get_site_url()
-    portal_url = f"{base_url}/employee/{business_slug}/{employee.id}/schedule"
+    # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+    db_emp = DBEmployee.query.filter_by(employee_id=employee.id).first()
+    if not db_emp:
+        return jsonify({
+            'success': False,
+            'message': 'Employee not found in database'
+        }), 404
+    portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
     
     # Get custom business name if available
     business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
