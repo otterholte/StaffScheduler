@@ -1795,12 +1795,16 @@ function updateNotificationDropdown() {
     
     const pending = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending');
     
+    // Update header text based on pending count
+    const header = document.querySelector('.notification-header span');
+    if (header) {
+        header.textContent = pending.length > 0 
+            ? `Pending Requests (${pending.length})`
+            : 'No Pending Requests';
+    }
+    
     if (pending.length === 0) {
-        list.innerHTML = `
-            <div class="notification-empty">
-                <p>You have no new notifications</p>
-            </div>
-        `;
+        list.innerHTML = '';
         return;
     }
     
