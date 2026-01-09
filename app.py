@@ -711,6 +711,7 @@ def employee_availability(business_slug, employee_id):
             business_data=business.to_dict(),
             business_slug=business_slug,
             employee=employee,
+            employee_id=employee_id,  # Pass DB ID for URL generation
             employee_data=employee.to_dict(),
             roles=business.roles,
             roles_data=[r.to_dict() for r in business.roles],
