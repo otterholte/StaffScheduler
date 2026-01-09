@@ -349,6 +349,61 @@
         </div>
     </div>
 
+    <!-- Shift Details Popover -->
+    <div class="shift-popover" id="shiftPopover">
+        <div class="popover-arrow"></div>
+        <div class="popover-content">
+            <div class="popover-header">
+                <span class="popover-date" id="popoverDate">Friday, Jan 9</span>
+                <button class="popover-close" id="popoverClose">&times;</button>
+            </div>
+            <div class="popover-body">
+                <div class="popover-employee" id="popoverEmployee" style="display: none;">
+                    <span class="popover-avatar" id="popoverAvatar">A</span>
+                    <span class="popover-name" id="popoverName">Ava Smith</span>
+                </div>
+                <div class="popover-details">
+                    <div class="popover-detail">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span id="popoverTime">9:00 AM - 5:00 PM</span>
+                    </div>
+                    <div class="popover-detail">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                        </svg>
+                        <span id="popoverRole">Staff</span>
+                    </div>
+                    <div class="popover-detail">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                        </svg>
+                        <span id="popoverDuration">8 hours</span>
+                    </div>
+                </div>
+                <div class="popover-swap-info" id="popoverSwapInfo" style="display: none;">
+                    <div class="swap-info-badge">
+                        🔄 <span id="popoverSwapFrom">Picked up from Johnny Socks</span>
+                    </div>
+                </div>
+            </div>
+            <div class="popover-footer" id="popoverFooter">
+                <button class="btn btn-swap-action" id="popoverSwapBtn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="17 1 21 5 17 9"></polyline>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                        <polyline points="7 23 3 19 7 15"></polyline>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                    </svg>
+                    Request Swap
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Pass data to JavaScript -->
     <script>
         const EMPLOYEE_DATA = {

@@ -1517,3 +1517,256 @@ body.employee-view {
     }
 }
 
+/* ==================== SHIFT DETAILS POPOVER ==================== */
+.shift-popover {
+    position: fixed;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
+    pointer-events: none;
+}
+
+.shift-popover.visible {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+.popover-content {
+    background: #1a1a2e;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
+    min-width: 280px;
+    max-width: 320px;
+    overflow: hidden;
+}
+
+.popover-arrow {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: #1a1a2e;
+    border: 1px solid var(--border-color);
+    border-right: none;
+    border-bottom: none;
+    transform: rotate(45deg);
+    top: -7px;
+    left: 24px;
+}
+
+.shift-popover.arrow-bottom .popover-arrow {
+    top: auto;
+    bottom: -7px;
+    transform: rotate(225deg);
+}
+
+.popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1rem 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+    background: linear-gradient(135deg, #252540 0%, #1e1e35 100%);
+}
+
+.popover-date {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.popover-date::before {
+    content: '📅';
+}
+
+.popover-close {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.popover-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.popover-body {
+    padding: 1rem;
+    background: #1a1a2e;
+}
+
+.popover-employee {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.popover-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: var(--employee-accent);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.popover-name {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
+}
+
+.popover-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.popover-detail {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.popover-detail svg {
+    width: 18px;
+    height: 18px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.popover-detail span {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.popover-swap-info {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.swap-info-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #8b5cf6;
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 6px;
+}
+
+.popover-footer {
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid var(--border-color);
+    background: #151525;
+}
+
+.btn-swap-action {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: white;
+    background: linear-gradient(135deg, var(--employee-accent) 0%, #059669 100%);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-swap-action:hover {
+    background: linear-gradient(135deg, #059669 0%, var(--employee-accent) 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.btn-swap-action svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Make shift blocks clickable */
+.timeline-shift-block,
+.schedule-shift-block {
+    cursor: pointer;
+}
+
+.timeline-shift-block:hover,
+.schedule-shift-block:hover {
+    filter: brightness(1.1);
+}
+
+/* Shift is selected/active for popover */
+.timeline-shift-block.popover-active,
+.schedule-shift-block.popover-active {
+    outline: 2px solid var(--employee-accent);
+    outline-offset: 2px;
+}
+
+/* Table view shift blocks */
+.shift-block {
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.shift-block:hover {
+    background: rgba(16, 185, 129, 0.2);
+}
+
+.shift-block.popover-active {
+    background: rgba(16, 185, 129, 0.25);
+    outline: 2px solid var(--employee-accent);
+    outline-offset: 1px;
+}
+
+/* Clickable shift details in upcoming shifts */
+.shift-clickable {
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    margin: -0.25rem -0.5rem;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.shift-clickable:hover {
+    background: var(--bg-tertiary);
+}
+
+.upcoming-shift-item.popover-active .shift-clickable {
+    background: rgba(16, 185, 129, 0.15);
+}
+

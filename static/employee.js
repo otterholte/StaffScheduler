@@ -121,13 +121,12 @@ function showToast(message, type = 'info') {
 }
 
 // ==================== SCHEDULE VIEW ====================
-function initScheduleView() {
+async function initScheduleView() {
     setupViewToggle();
     setupFilterToggle();
     setupWeekNavigation();
     updateWeekDisplay();
-    loadScheduleData();
-    renderScheduleView();
+    await loadScheduleData(); // This now fetches from API and handles rendering
     initSwapFeature();
 }
 
@@ -165,18 +164,18 @@ function setupWeekNavigation() {
     const nextBtn = document.getElementById('weekNavNext');
     
     if (prevBtn) {
-        prevBtn.addEventListener('click', () => {
+        prevBtn.addEventListener('click', async () => {
             employeeState.weekOffset--;
             updateWeekDisplay();
-            loadScheduleData();
+            await loadScheduleData();
         });
     }
     
     if (nextBtn) {
-        nextBtn.addEventListener('click', () => {
+        nextBtn.addEventListener('click', async () => {
             employeeState.weekOffset++;
             updateWeekDisplay();
-            loadScheduleData();
+            await loadScheduleData();
         });
     }
 }
@@ -189,19 +188,46 @@ function updateWeekDisplay() {
     }
 }
 
-function loadScheduleData() {
-    // Try to load from localStorage (same key format as main app)
-    const storageKey = `schedule_${employeeState.business.id}_week_${employeeState.weekOffset}`;
-    const savedData = localStorage.getItem(storageKey);
-    
-    if (savedData) {
-        try {
-            employeeState.schedule = JSON.parse(savedData);
-        } catch (e) {
+async function loadScheduleData() {
+    // Always fetch from API to get the latest published schedule (including swaps)
+    try {
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/schedule?weekOffset=${employeeState.weekOffset}`
+        );
+        const data = await response.json();
+        
+        if (data.success && data.schedule) {
+            employeeState.schedule = data.schedule;
+        } else {
+            // Fallback to localStorage if API fails
+            const storageKey = `schedule_${employeeState.business.id}_week_${employeeState.weekOffset}`;
+            const savedData = localStorage.getItem(storageKey);
+            
+            if (savedData) {
+                try {
+                    employeeState.schedule = JSON.parse(savedData);
+                } catch (e) {
+                    employeeState.schedule = null;
+                }
+            } else {
+                employeeState.schedule = null;
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load schedule from API:', error);
+        // Fallback to localStorage
+        const storageKey = `schedule_${employeeState.business.id}_week_${employeeState.weekOffset}`;
+        const savedData = localStorage.getItem(storageKey);
+        
+        if (savedData) {
+            try {
+                employeeState.schedule = JSON.parse(savedData);
+            } catch (e) {
+                employeeState.schedule = null;
+            }
+        } else {
             employeeState.schedule = null;
         }
-    } else {
-        employeeState.schedule = null;
     }
     
     renderScheduleView();
@@ -440,6 +466,18 @@ function renderTimelineView() {
                 
                 // Content
                 block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>${swapIndicator}`;
+                
+                // Attach click handler for popover
+                const shiftData = {
+                    dayIdx: dayIdx,
+                    empId: shift.empId,
+                    roleId: shift.roleId,
+                    startHour: shift.startHour,
+                    endHour: shift.endHour,
+                    viaSwap: shift.viaSwap,
+                    swappedFrom: shift.swappedFrom
+                };
+                block.addEventListener('click', (e) => showShiftPopover(e, shiftData));
                 
                 rowContainer.appendChild(block);
             });
@@ -890,6 +928,18 @@ function renderGridShifts(schedule, container, showEveryone) {
         el.innerHTML = `<span class="shift-name">${emp.name}</span>${swapIndicator}`;
         el.title = tooltipText;
         
+        // Attach click handler for popover
+        const shiftData = {
+            dayIdx: segment.day,
+            empId: segment.employeeId,
+            roleId: Array.from(segment.roles)[0],
+            startHour: segment.startHour,
+            endHour: segment.endHour,
+            viaSwap: segment.viaSwap,
+            swappedFrom: segment.swappedFrom
+        };
+        el.addEventListener('click', (e) => showShiftPopover(e, shiftData));
+        
         container.appendChild(el);
     });
 }
@@ -1036,7 +1086,10 @@ function renderTableView() {
                 if (shifts.length === 0) {
                     html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
                 } else {
-                    const shiftStrs = shifts.map(s => `<span class="shift-block">${formatTime(s.start)}-${formatTime(s.end)}</span>`).join('');
+                    const shiftStrs = shifts.map(s => {
+                        const dataAttrs = `data-emp-id="${emp.id}" data-day="${day}" data-start="${s.start}" data-end="${s.end}"`;
+                        return `<span class="shift-block" ${dataAttrs}>${formatTime(s.start)}-${formatTime(s.end)}</span>`;
+                    }).join('');
                     html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
                 }
             }
@@ -1183,12 +1236,15 @@ function renderUpcomingShifts() {
             ? `<span class="swap-badge" title="Obtained via shift swap from ${employeeMap[shift.swappedFrom]?.name || 'another employee'}">🔄 Swapped</span>` 
             : '';
         
-        html += `<div class="upcoming-shift-item ${shift.viaSwap ? 'via-swap' : ''}">
+        // Add data attributes for click handler
+        const dataAttrs = `data-day="${shift.dayIdx}" data-start="${shift.start}" data-end="${shift.end}" data-role="${shift.role}" data-via-swap="${shift.viaSwap || ''}" data-swapped-from="${shift.swappedFrom || ''}"`;
+        
+        html += `<div class="upcoming-shift-item ${shift.viaSwap ? 'via-swap' : ''}" ${dataAttrs}>
             <div class="shift-date-badge">
                 <span class="day-name">${DAYS_SHORT[shift.dayIdx]}</span>
                 <span class="day-num">${shift.date.getDate()}</span>
             </div>
-            <div class="shift-details">
+            <div class="shift-details shift-clickable" title="Click to view details">
                 <div class="shift-time">${formatTimeRange(shift.start, shift.end)} ${swapBadge}</div>
                 <div class="shift-role">
                     <span class="shift-role-dot" style="background: ${role.color || '#6366f1'}"></span>
@@ -1870,6 +1926,276 @@ function hideSwapModal() {
     employeeState.selectedRecipients = [];
 }
 
+// ==================== SHIFT DETAILS POPOVER ====================
+let popoverState = {
+    visible: false,
+    activeElement: null,
+    shiftData: null
+};
+
+function showShiftPopover(event, shiftData) {
+    event.stopPropagation();
+    
+    const popover = document.getElementById('shiftPopover');
+    if (!popover) return;
+    
+    // Store state
+    popoverState.shiftData = shiftData;
+    
+    // Remove active class from previous element
+    if (popoverState.activeElement) {
+        popoverState.activeElement.classList.remove('popover-active');
+    }
+    
+    // Add active class to clicked element
+    const clickedEl = event.currentTarget;
+    clickedEl.classList.add('popover-active');
+    popoverState.activeElement = clickedEl;
+    
+    // Get shift details
+    const myId = employeeState.employee.id;
+    const isMine = shiftData.employeeId === myId || shiftData.empId === myId;
+    const empId = shiftData.employeeId || shiftData.empId;
+    const emp = employeeMap[empId];
+    
+    // Format date
+    const dates = getWeekDates(employeeState.weekOffset);
+    const dayIdx = shiftData.dayIdx !== undefined ? shiftData.dayIdx : shiftData.day;
+    const shiftDate = dates[dayIdx];
+    const dateStr = shiftDate ? shiftDate.toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        month: 'short', 
+        day: 'numeric' 
+    }) : employeeState.days[dayIdx];
+    
+    // Get role info
+    const roleId = shiftData.role || shiftData.roleId;
+    const role = roleMap[roleId];
+    const roleName = role?.name || roleId || 'Staff';
+    
+    // Calculate duration
+    const startHour = shiftData.start || shiftData.startHour;
+    const endHour = shiftData.end || shiftData.endHour;
+    const duration = endHour - startHour;
+    
+    // Update popover content
+    document.getElementById('popoverDate').textContent = dateStr;
+    document.getElementById('popoverTime').textContent = `${formatTime(startHour)} - ${formatTime(endHour)}`;
+    document.getElementById('popoverRole').textContent = roleName;
+    document.getElementById('popoverDuration').textContent = `${duration} hour${duration !== 1 ? 's' : ''}`;
+    
+    // Show/hide employee info (for other people's shifts)
+    const employeeSection = document.getElementById('popoverEmployee');
+    if (!isMine && emp) {
+        employeeSection.style.display = 'flex';
+        document.getElementById('popoverAvatar').textContent = emp.name.charAt(0).toUpperCase();
+        document.getElementById('popoverAvatar').style.background = emp.color || '#6366f1';
+        document.getElementById('popoverName').textContent = emp.name;
+    } else {
+        employeeSection.style.display = 'none';
+    }
+    
+    // Show/hide swap info
+    const swapInfoSection = document.getElementById('popoverSwapInfo');
+    if (shiftData.viaSwap) {
+        swapInfoSection.style.display = 'block';
+        const swappedFromName = shiftData.swappedFrom ? 
+            (employeeMap[shiftData.swappedFrom]?.name || 'another employee') : 
+            'another employee';
+        document.getElementById('popoverSwapFrom').textContent = `Picked up from ${swappedFromName}`;
+    } else {
+        swapInfoSection.style.display = 'none';
+    }
+    
+    // Show/hide swap button (only for own shifts)
+    const footer = document.getElementById('popoverFooter');
+    if (isMine) {
+        footer.style.display = 'block';
+    } else {
+        footer.style.display = 'none';
+    }
+    
+    // Position the popover
+    positionPopover(clickedEl, popover);
+    
+    // Show popover
+    popover.classList.add('visible');
+    popoverState.visible = true;
+}
+
+function positionPopover(targetEl, popover) {
+    const targetRect = targetEl.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const arrow = popover.querySelector('.popover-arrow');
+    
+    // Calculate initial position (below target)
+    let top = targetRect.bottom + 10;
+    let left = targetRect.left + (targetRect.width / 2) - 140; // Center popover
+    
+    // Check if popover would go off the right edge
+    const viewportWidth = window.innerWidth;
+    if (left + 280 > viewportWidth - 20) {
+        left = viewportWidth - 280 - 20;
+    }
+    
+    // Check if popover would go off the left edge
+    if (left < 20) {
+        left = 20;
+    }
+    
+    // Check if popover would go off the bottom
+    const viewportHeight = window.innerHeight;
+    const popoverHeight = 280; // Approximate height
+    
+    if (top + popoverHeight > viewportHeight - 20) {
+        // Position above instead
+        top = targetRect.top - popoverHeight - 10;
+        popover.classList.add('arrow-bottom');
+    } else {
+        popover.classList.remove('arrow-bottom');
+    }
+    
+    // Position arrow relative to target center
+    const arrowLeft = targetRect.left + (targetRect.width / 2) - left - 6;
+    arrow.style.left = `${Math.max(16, Math.min(arrowLeft, 260))}px`;
+    
+    // Apply position
+    popover.style.top = `${top}px`;
+    popover.style.left = `${left}px`;
+}
+
+function hideShiftPopover() {
+    const popover = document.getElementById('shiftPopover');
+    if (popover) {
+        popover.classList.remove('visible');
+    }
+    
+    if (popoverState.activeElement) {
+        popoverState.activeElement.classList.remove('popover-active');
+        popoverState.activeElement = null;
+    }
+    
+    popoverState.visible = false;
+    popoverState.shiftData = null;
+}
+
+function openSwapFromPopover() {
+    const shiftData = popoverState.shiftData;
+    if (!shiftData) return;
+    
+    // Hide the popover first
+    hideShiftPopover();
+    
+    // Convert to the format expected by showSwapModal
+    const dayIdx = shiftData.dayIdx !== undefined ? shiftData.dayIdx : shiftData.day;
+    const swapShiftData = {
+        dayIdx: dayIdx,
+        start: shiftData.start || shiftData.startHour,
+        end: shiftData.end || shiftData.endHour,
+        role: shiftData.role || shiftData.roleId
+    };
+    
+    // Open the swap modal
+    showSwapModal(swapShiftData);
+}
+
+// Initialize popover event listeners
+function initShiftPopover() {
+    const popover = document.getElementById('shiftPopover');
+    if (!popover) return;
+    
+    // Close button
+    const closeBtn = document.getElementById('popoverClose');
+    if (closeBtn) {
+        closeBtn.addEventListener('click', hideShiftPopover);
+    }
+    
+    // Swap button
+    const swapBtn = document.getElementById('popoverSwapBtn');
+    if (swapBtn) {
+        swapBtn.addEventListener('click', openSwapFromPopover);
+    }
+    
+    // Close on click outside
+    document.addEventListener('click', (e) => {
+        if (!popoverState.visible) return;
+        
+        const popover = document.getElementById('shiftPopover');
+        if (!popover.contains(e.target) && !e.target.closest('.timeline-shift-block') && 
+            !e.target.closest('.schedule-shift-block') && !e.target.closest('.shift-block')) {
+            hideShiftPopover();
+        }
+    });
+    
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && popoverState.visible) {
+            hideShiftPopover();
+        }
+    });
+    
+    // Event delegation for table view shift blocks
+    const tableBody = document.getElementById('simpleScheduleBody');
+    if (tableBody) {
+        tableBody.addEventListener('click', (e) => {
+            const shiftBlock = e.target.closest('.shift-block');
+            if (shiftBlock) {
+                const empId = shiftBlock.dataset.empId;
+                const day = parseInt(shiftBlock.dataset.day);
+                const start = parseInt(shiftBlock.dataset.start);
+                const end = parseInt(shiftBlock.dataset.end);
+                
+                const shiftData = {
+                    dayIdx: day,
+                    empId: empId,
+                    startHour: start,
+                    endHour: end
+                };
+                
+                showShiftPopover(e, shiftData);
+            }
+        });
+    }
+    
+    // Event delegation for upcoming shifts
+    const upcomingShiftsContainer = document.getElementById('upcomingShiftsList');
+    if (upcomingShiftsContainer) {
+        upcomingShiftsContainer.addEventListener('click', (e) => {
+            // Don't trigger if clicking the swap button
+            if (e.target.closest('.shift-swap-btn')) return;
+            
+            const clickable = e.target.closest('.shift-clickable');
+            const shiftItem = e.target.closest('.upcoming-shift-item');
+            if (clickable && shiftItem) {
+                const day = parseInt(shiftItem.dataset.day);
+                const start = parseInt(shiftItem.dataset.start);
+                const end = parseInt(shiftItem.dataset.end);
+                const role = shiftItem.dataset.role;
+                const viaSwap = shiftItem.dataset.viaSwap === 'true';
+                const swappedFrom = shiftItem.dataset.swappedFrom || null;
+                
+                const shiftData = {
+                    dayIdx: day,
+                    empId: employeeState.employee.id,
+                    roleId: role,
+                    startHour: start,
+                    endHour: end,
+                    viaSwap: viaSwap,
+                    swappedFrom: swappedFrom
+                };
+                
+                showShiftPopover(e, shiftData);
+            }
+        });
+    }
+}
+
+// Helper to attach click handlers to shift blocks
+function attachShiftClickHandler(element, shiftData) {
+    element.addEventListener('click', (e) => showShiftPopover(e, shiftData));
+    element.style.cursor = 'pointer';
+}
+
 async function submitSwapRequest() {
     const shift = employeeState.currentSwapShift;
     if (!shift) return;
@@ -2071,7 +2397,7 @@ async function acceptSwapRequest() {
             showToast('Swap accepted! The schedule has been updated.', 'success');
             hideSwapResponseModal();
             loadSwapRequests();
-            loadScheduleData(); // Reload schedule to show updated shifts
+            await loadScheduleData(); // Reload schedule to show updated shifts
         } else {
             showToast(data.message || 'Failed to accept swap', 'error');
         }
@@ -2157,6 +2483,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (scheduleView) {
         initScheduleView();
+        initShiftPopover();
     }
     
     if (availabilityTable) {
