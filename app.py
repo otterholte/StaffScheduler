@@ -644,67 +644,87 @@ def employee_schedule(business_slug, employee_id):
 @app.route('/employee/<business_slug>/<int:employee_id>/availability')
 def employee_availability(business_slug, employee_id):
     """Employee availability editor - edit their own availability."""
-    # Force reload from database to ensure we have latest employee data
-    business = get_business_by_slug(business_slug, force_reload=True)
-    if not business:
-        return redirect('/')
+    import traceback
+    print(f"\n[DEBUG] employee_availability called: business_slug={business_slug}, employee_id={employee_id}")
     
-    # Find the employee by database ID
-    db_employee = DBEmployee.query.get(employee_id)
-    if not db_employee:
-        return redirect('/')
-    
-    # Find the matching Employee model object
-    employee = None
-    for emp in business.employees:
-        if emp.id == db_employee.employee_id:
-            employee = emp
-            break
-    
-    if not employee:
-        return redirect('/')
-    
-    # Get availability data - convert TimeSlot set to dict of day -> [[start, end], ...]
-    availability_data = {}
-    if hasattr(employee, 'availability') and employee.availability:
-        # Group by day
-        from collections import defaultdict
-        day_hours = defaultdict(list)
-        for slot in employee.availability:
-            day_hours[slot.day].append(slot.hour)
+    try:
+        # Force reload from database to ensure we have latest employee data
+        print(f"[DEBUG] Getting business by slug: {business_slug}")
+        business = get_business_by_slug(business_slug, force_reload=True)
+        if not business:
+            print(f"[DEBUG] Business not found for slug: {business_slug}")
+            return redirect('/')
+        print(f"[DEBUG] Business found: {business.name}, id={business.id}")
         
-        # Convert to ranges
-        for day, hours in day_hours.items():
-            hours = sorted(hours)
-            ranges = []
-            if hours:
-                start = hours[0]
-                end = hours[0] + 1
-                for h in hours[1:]:
-                    if h == end:
-                        end = h + 1
-                    else:
-                        ranges.append([start, end])
-                        start = h
-                        end = h + 1
-                ranges.append([start, end])
-            availability_data[day] = ranges
-    
-    return render_template('employee_availability.html',
-        business=business,
-        business_data=business.to_dict(),
-        business_slug=business_slug,
-        employee=employee,
-        employee_data=employee.to_dict(),
-        roles=business.roles,
-        roles_data=[r.to_dict() for r in business.roles],
-        days=DAYS_OF_WEEK,
-        days_open=business.days_open,
-        hours=list(business.get_operating_hours()),
-        start_hour=business.start_hour,
-        end_hour=business.end_hour,
-        availability_data=availability_data
-    )
+        # Find the employee by database ID
+        print(f"[DEBUG] Looking up DBEmployee with id={employee_id}")
+        db_employee = DBEmployee.query.get(employee_id)
+        if not db_employee:
+            print(f"[DEBUG] DBEmployee not found for id={employee_id}")
+            return redirect('/')
+        print(f"[DEBUG] DBEmployee found: name={db_employee.name}, employee_id={db_employee.employee_id}")
+        
+        # Find the matching Employee model object
+        print(f"[DEBUG] Searching for Employee model with id={db_employee.employee_id} among {len(business.employees)} employees")
+        employee = None
+        for emp in business.employees:
+            print(f"[DEBUG]   Checking emp.id={emp.id}")
+            if emp.id == db_employee.employee_id:
+                employee = emp
+                print(f"[DEBUG]   MATCH FOUND!")
+                break
+        
+        if not employee:
+            print(f"[DEBUG] Employee model not found! Available IDs: {[e.id for e in business.employees]}")
+            return redirect('/')
+        print(f"[DEBUG] Employee model found: {employee.name}")
+        
+        # Get availability data - convert TimeSlot set to dict of day -> [[start, end], ...]
+        availability_data = {}
+        if hasattr(employee, 'availability') and employee.availability:
+            # Group by day
+            from collections import defaultdict
+            day_hours = defaultdict(list)
+            for slot in employee.availability:
+                day_hours[slot.day].append(slot.hour)
+            
+            # Convert to ranges
+            for day, hours in day_hours.items():
+                hours = sorted(hours)
+                ranges = []
+                if hours:
+                    start = hours[0]
+                    end = hours[0] + 1
+                    for h in hours[1:]:
+                        if h == end:
+                            end = h + 1
+                        else:
+                            ranges.append([start, end])
+                            start = h
+                            end = h + 1
+                    ranges.append([start, end])
+                availability_data[day] = ranges
+        
+        print(f"[DEBUG] Rendering template with availability_data keys: {list(availability_data.keys())}")
+        return render_template('employee_availability.html',
+            business=business,
+            business_data=business.to_dict(),
+            business_slug=business_slug,
+            employee=employee,
+            employee_data=employee.to_dict(),
+            roles=business.roles,
+            roles_data=[r.to_dict() for r in business.roles],
+            days=DAYS_OF_WEEK,
+            days_open=business.days_open,
+            hours=list(business.get_operating_hours()),
+            start_hour=business.start_hour,
+            end_hour=business.end_hour,
+            availability_data=availability_data
+        )
+    except Exception as e:
+        print(f"[ERROR] employee_availability crashed: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
 @app.route('/api/employee/<business_slug>/<int:employee_id>/schedule', methods=['GET'])
@@ -987,222 +1007,269 @@ def get_eligible_employees_for_swap(business, requester_id, shift_day, shift_sta
 @app.route('/api/employee/<business_slug>/<int:employee_id>/swap-requests', methods=['GET'])
 def get_swap_requests(business_slug, employee_id):
     """Get swap requests - both incoming (to respond to) and outgoing (created by employee)."""
-    business = get_business_by_slug(business_slug, force_reload=True)
-    if not business:
-        return jsonify({'success': False, 'message': 'Business not found'}), 404
+    import traceback
+    print(f"\n[DEBUG] get_swap_requests called: business_slug={business_slug}, employee_id={employee_id}")
     
-    # Get business DB ID
-    from db_service import get_db_business
-    db_business = get_db_business(business.id)
-    if not db_business:
+    try:
+        business = get_business_by_slug(business_slug, force_reload=True)
+        if not business:
+            print(f"[DEBUG] Business not found: {business_slug}")
+            return jsonify({'success': False, 'message': 'Business not found'}), 404
+        print(f"[DEBUG] Business found: {business.name}, id={business.id}")
+        
+        # Get business DB ID
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        if not db_business:
+            print(f"[DEBUG] No DB business found, returning empty")
+            return jsonify({
+                'success': True,
+                'outgoing': [],
+                'incoming': []
+            })
+        print(f"[DEBUG] DB Business found: db_id={db_business.id}")
+        
+        # Look up the string employee model ID from the DB integer ID
+        db_employee = DBEmployee.query.get(employee_id)
+        employee_model_id = db_employee.employee_id if db_employee else None
+        print(f"[DEBUG] DBEmployee lookup: db_id={employee_id} -> employee_model_id={employee_model_id}")
+        
+        # Get outgoing requests (created by this employee) - check both DB ID (as string) and model ID
+        print(f"[DEBUG] Querying outgoing requests with requester_employee_id='{employee_id}' (as string)")
+        outgoing = ShiftSwapRequest.query.filter_by(
+            business_db_id=db_business.id,
+            requester_employee_id=str(employee_id)  # DB ID stored as string
+        ).order_by(ShiftSwapRequest.created_at.desc()).all()
+        print(f"[DEBUG] Found {len(outgoing)} outgoing requests")
+        
+        # Get incoming requests (where this employee is a recipient)
+        # Recipients store string model IDs like "maria_0"
+        print(f"[DEBUG] Querying incoming recipients with employee_id='{employee_model_id}'")
+        incoming_recipients = SwapRequestRecipient.query.filter_by(
+            employee_id=employee_model_id
+        ).all() if employee_model_id else []
+        print(f"[DEBUG] Found {len(incoming_recipients)} incoming recipients")
+        
+        incoming = []
+        for recipient in incoming_recipients:
+            swap_req = recipient.swap_request
+            print(f"[DEBUG]   Processing recipient: swap_req.business_db_id={swap_req.business_db_id}, status={swap_req.status}, requester_employee_id={swap_req.requester_employee_id}")
+            # Only include if the request is for this business
+            if swap_req.business_db_id == db_business.id and swap_req.status == 'pending':
+                # Get requester info - look up by DB ID
+                print(f"[DEBUG]   Looking up requester by DB ID: {swap_req.requester_employee_id}")
+                try:
+                    requester_db = DBEmployee.query.get(int(swap_req.requester_employee_id))
+                except (ValueError, TypeError) as e:
+                    print(f"[DEBUG]   Could not convert requester_employee_id to int: {e}")
+                    requester_db = None
+                requester_name = requester_db.name if requester_db else 'Unknown'
+                print(f"[DEBUG]   Requester name: {requester_name}")
+                
+                incoming.append({
+                    **swap_req.to_dict(),
+                    'requester_name': requester_name,
+                    'my_response': recipient.response,
+                    'my_eligibility_type': recipient.eligibility_type
+                })
+        print(f"[DEBUG] Final incoming count: {len(incoming)}")
+        
+        # Get employee info for outgoing requests
+        outgoing_data = []
+        for req in outgoing:
+            req_dict = req.to_dict()
+            # Add recipient names
+            recipients_with_names = []
+            for r in req.recipients:
+                emp = None
+                for e in business.employees:
+                    if e.id == r.employee_id:
+                        emp = e
+                        break
+                recipients_with_names.append({
+                    **r.to_dict(),
+                    'employee_name': emp.name if emp else 'Unknown'
+                })
+            req_dict['recipients'] = recipients_with_names
+            outgoing_data.append(req_dict)
+        
+        print(f"[DEBUG] Returning {len(outgoing_data)} outgoing, {len(incoming)} incoming")
         return jsonify({
             'success': True,
-            'outgoing': [],
-            'incoming': []
+            'outgoing': outgoing_data,
+            'incoming': incoming
         })
-    
-    # Look up the string employee model ID from the DB integer ID
-    db_employee = DBEmployee.query.get(employee_id)
-    employee_model_id = db_employee.employee_id if db_employee else None
-    
-    # Get outgoing requests (created by this employee) - check both DB ID (as string) and model ID
-    outgoing = ShiftSwapRequest.query.filter_by(
-        business_db_id=db_business.id,
-        requester_employee_id=str(employee_id)  # DB ID stored as string
-    ).order_by(ShiftSwapRequest.created_at.desc()).all()
-    
-    # Get incoming requests (where this employee is a recipient)
-    # Recipients store string model IDs like "maria_0"
-    incoming_recipients = SwapRequestRecipient.query.filter_by(
-        employee_id=employee_model_id
-    ).all() if employee_model_id else []
-    
-    incoming = []
-    for recipient in incoming_recipients:
-        swap_req = recipient.swap_request
-        # Only include if the request is for this business
-        if swap_req.business_db_id == db_business.id and swap_req.status == 'pending':
-            # Get requester info - look up by DB ID
-            requester_db = DBEmployee.query.get(swap_req.requester_employee_id)
-            requester_name = requester_db.name if requester_db else 'Unknown'
-            
-            incoming.append({
-                **swap_req.to_dict(),
-                'requester_name': requester_name,
-                'my_response': recipient.response,
-                'my_eligibility_type': recipient.eligibility_type
-            })
-    
-    # Get employee info for outgoing requests
-    outgoing_data = []
-    for req in outgoing:
-        req_dict = req.to_dict()
-        # Add recipient names
-        recipients_with_names = []
-        for r in req.recipients:
-            emp = None
-            for e in business.employees:
-                if e.id == r.employee_id:
-                    emp = e
-                    break
-            recipients_with_names.append({
-                **r.to_dict(),
-                'employee_name': emp.name if emp else 'Unknown'
-            })
-        req_dict['recipients'] = recipients_with_names
-        outgoing_data.append(req_dict)
-    
-    return jsonify({
-        'success': True,
-        'outgoing': outgoing_data,
-        'incoming': incoming
-    })
+    except Exception as e:
+        print(f"[ERROR] get_swap_requests crashed: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
 @app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request', methods=['POST'])
 def create_swap_request(business_slug, employee_id):
     """Create a new shift swap request."""
-    business = get_business_by_slug(business_slug, force_reload=True)
-    if not business:
-        return jsonify({'success': False, 'message': 'Business not found'}), 404
-    
-    # Get business DB ID
-    from db_service import get_db_business
-    db_business = get_db_business(business.id)
-    if not db_business:
-        return jsonify({'success': False, 'message': 'Business not properly configured'}), 400
-    
-    # Look up the string employee_id from the DB integer ID
-    db_employee = DBEmployee.query.get(employee_id)
-    if not db_employee:
-        return jsonify({'success': False, 'message': 'Employee not found'}), 404
-    requester_model_id = db_employee.employee_id  # String ID like "maria_0"
-    
-    data = request.json
-    
-    # Required fields
-    shift_day = data.get('day')
-    shift_start = data.get('start_hour')
-    shift_end = data.get('end_hour')
-    week_start_str = data.get('week_start')
-    
-    if shift_day is None or shift_start is None or shift_end is None or not week_start_str:
-        return jsonify({'success': False, 'message': 'Missing required shift details'}), 400
+    import traceback
+    print(f"\n[DEBUG] create_swap_request called: business_slug={business_slug}, employee_id={employee_id}")
     
     try:
-        week_start = date.fromisoformat(week_start_str)
-    except ValueError:
-        return jsonify({'success': False, 'message': 'Invalid week_start date format'}), 400
-    
-    # Optional fields
-    shift_role = data.get('role_id')
-    note = data.get('note', '')
-    specific_recipients = data.get('recipients', [])  # Optional: specific employee IDs to request
-    
-    # Create the swap request - use string model ID for consistency
-    swap_request = ShiftSwapRequest(
-        business_db_id=db_business.id,
-        requester_employee_id=str(employee_id),  # Store DB ID as string for now
-        original_day=shift_day,
-        original_start_hour=shift_start,
-        original_end_hour=shift_end,
-        original_role_id=shift_role,
-        week_start_date=week_start,
-        note=note,
-        status='pending'
-    )
-    
-    # Set expiration (48 hours from now)
-    swap_request.expires_at = datetime.utcnow() + timedelta(hours=48)
-    
-    db.session.add(swap_request)
-    db.session.flush()  # Get the ID
-    
-    # Find eligible employees - use string model ID for comparison
-    all_eligible = get_eligible_employees_for_swap(
-        business, requester_model_id, shift_day, shift_start, shift_end, shift_role, week_start
-    )
-    
-    # Filter to specific recipients if provided
-    if specific_recipients:
-        eligible_to_notify = [e for e in all_eligible if e['employee_id'] in specific_recipients]
-    else:
-        eligible_to_notify = all_eligible
-    
-    if not eligible_to_notify:
-        db.session.rollback()
-        return jsonify({
-            'success': False,
-            'message': 'No eligible employees found to swap with',
-            'eligible_count': len(all_eligible)
-        }), 400
-    
-    # Create recipient records
-    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    shift_details = f"{day_names[shift_day]} {format_shift_time(shift_start, shift_end)}"
-    
-    # Get requester name
-    requester_name = 'Unknown'
-    for emp in business.employees:
-        if emp.id == employee_id:
-            requester_name = emp.name
-            break
-    
-    # Get custom business name
-    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
-    base_url = get_site_url()
-    
-    notifications_sent = 0
-    notification_errors = []
-    
-    for eligible in eligible_to_notify:
-        recipient = SwapRequestRecipient(
-            swap_request_id=swap_request.id,
-            employee_id=eligible['employee_id'],
-            eligibility_type=eligible['eligibility_type'],
-            response='pending'
-        )
-        db.session.add(recipient)
+        business = get_business_by_slug(business_slug, force_reload=True)
+        if not business:
+            print(f"[DEBUG] Business not found: {business_slug}")
+            return jsonify({'success': False, 'message': 'Business not found'}), 404
+        print(f"[DEBUG] Business found: {business.name}, id={business.id}")
         
-        # Send email notification if employee has email
-        if eligible.get('employee_email'):
-            try:
-                email_service = get_email_service()
-                if email_service.is_configured():
-                    # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
-                    db_emp = DBEmployee.query.filter_by(employee_id=eligible['employee_id']).first()
-                    if not db_emp:
-                        notification_errors.append(f"{eligible['employee_name']}: Employee not found in database")
-                        continue
-                    portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
-                    success, msg = email_service.send_swap_request_notification(
-                        to_email=eligible['employee_email'],
-                        recipient_name=eligible['employee_name'],
-                        requester_name=requester_name,
-                        business_name=business_name,
-                        shift_details=shift_details,
-                        eligibility_type=eligible['eligibility_type'],
-                        portal_url=portal_url
-                    )
-                    if success:
-                        recipient.notified_at = datetime.utcnow()
-                        recipient.notification_method = 'email'
-                        notifications_sent += 1
-                    else:
-                        notification_errors.append(f"{eligible['employee_name']}: {msg}")
-            except Exception as e:
-                notification_errors.append(f"{eligible['employee_name']}: {str(e)}")
+        # Get business DB ID
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        if not db_business:
+            print(f"[DEBUG] DB Business not found")
+            return jsonify({'success': False, 'message': 'Business not properly configured'}), 400
+        print(f"[DEBUG] DB Business found: db_id={db_business.id}")
+        
+        # Look up the string employee_id from the DB integer ID
+        db_employee = DBEmployee.query.get(employee_id)
+        if not db_employee:
+            print(f"[DEBUG] DBEmployee not found for id={employee_id}")
+            return jsonify({'success': False, 'message': 'Employee not found'}), 404
+        requester_model_id = db_employee.employee_id  # String ID like "maria_0"
+        print(f"[DEBUG] Requester: db_id={employee_id}, model_id={requester_model_id}, name={db_employee.name}")
+        
+        data = request.json
+        print(f"[DEBUG] Request data: {data}")
     
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'swap_request': swap_request.to_dict(),
-        'eligible_count': len(eligible_to_notify),
-        'notifications_sent': notifications_sent,
-        'notification_errors': notification_errors if notification_errors else None,
-        'message': f'Swap request created. {notifications_sent} notification(s) sent.'
-    })
+        # Required fields
+        shift_day = data.get('day')
+        shift_start = data.get('start_hour')
+        shift_end = data.get('end_hour')
+        week_start_str = data.get('week_start')
+        
+        if shift_day is None or shift_start is None or shift_end is None or not week_start_str:
+            return jsonify({'success': False, 'message': 'Missing required shift details'}), 400
+        
+        try:
+            week_start = date.fromisoformat(week_start_str)
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Invalid week_start date format'}), 400
+        
+        print(f"[DEBUG] Shift: day={shift_day}, start={shift_start}, end={shift_end}, week={week_start}")
+        
+        # Optional fields
+        shift_role = data.get('role_id')
+        note = data.get('note', '')
+        specific_recipients = data.get('recipients', [])  # Optional: specific employee IDs to request
+        
+        # Create the swap request - use string model ID for consistency
+        swap_request = ShiftSwapRequest(
+            business_db_id=db_business.id,
+            requester_employee_id=str(employee_id),  # Store DB ID as string for now
+            original_day=shift_day,
+            original_start_hour=shift_start,
+            original_end_hour=shift_end,
+            original_role_id=shift_role,
+            week_start_date=week_start,
+            note=note,
+            status='pending'
+        )
+        
+        # Set expiration (48 hours from now)
+        swap_request.expires_at = datetime.utcnow() + timedelta(hours=48)
+        
+        db.session.add(swap_request)
+        db.session.flush()  # Get the ID
+        print(f"[DEBUG] Created swap request with id={swap_request.id}")
+        
+        # Find eligible employees - use string model ID for comparison
+        all_eligible = get_eligible_employees_for_swap(
+            business, requester_model_id, shift_day, shift_start, shift_end, shift_role, week_start
+        )
+        print(f"[DEBUG] Found {len(all_eligible)} eligible employees")
+        
+        # Filter to specific recipients if provided
+        if specific_recipients:
+            eligible_to_notify = [e for e in all_eligible if e['employee_id'] in specific_recipients]
+        else:
+            eligible_to_notify = all_eligible
+        
+        if not eligible_to_notify:
+            db.session.rollback()
+            return jsonify({
+                'success': False,
+                'message': 'No eligible employees found to swap with',
+                'eligible_count': len(all_eligible)
+            }), 400
+        
+        # Create recipient records
+        day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        shift_details = f"{day_names[shift_day]} {format_shift_time(shift_start, shift_end)}"
+        
+        # Get requester name using model ID
+        requester_name = 'Unknown'
+        for emp in business.employees:
+            if emp.id == requester_model_id:
+                requester_name = emp.name
+                break
+        print(f"[DEBUG] Requester name: {requester_name}")
+        
+        # Get custom business name
+        business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+        base_url = get_site_url()
+        
+        notifications_sent = 0
+        notification_errors = []
+        
+        for eligible in eligible_to_notify:
+            recipient = SwapRequestRecipient(
+                swap_request_id=swap_request.id,
+                employee_id=eligible['employee_id'],
+                eligibility_type=eligible['eligibility_type'],
+                response='pending'
+            )
+            db.session.add(recipient)
+            
+            # Send email notification if employee has email
+            if eligible.get('employee_email'):
+                try:
+                    email_service = get_email_service()
+                    if email_service.is_configured():
+                        # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
+                        db_emp = DBEmployee.query.filter_by(employee_id=eligible['employee_id']).first()
+                        if not db_emp:
+                            notification_errors.append(f"{eligible['employee_name']}: Employee not found in database")
+                            continue
+                        portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
+                        success, msg = email_service.send_swap_request_notification(
+                            to_email=eligible['employee_email'],
+                            recipient_name=eligible['employee_name'],
+                            requester_name=requester_name,
+                            business_name=business_name,
+                            shift_details=shift_details,
+                            eligibility_type=eligible['eligibility_type'],
+                            portal_url=portal_url
+                        )
+                        if success:
+                            recipient.notified_at = datetime.utcnow()
+                            recipient.notification_method = 'email'
+                            notifications_sent += 1
+                        else:
+                            notification_errors.append(f"{eligible['employee_name']}: {msg}")
+                except Exception as e:
+                    notification_errors.append(f"{eligible['employee_name']}: {str(e)}")
+        
+        db.session.commit()
+        
+        print(f"[DEBUG] Swap request created successfully, {notifications_sent} notifications sent")
+        return jsonify({
+            'success': True,
+            'swap_request': swap_request.to_dict(),
+            'eligible_count': len(eligible_to_notify),
+            'notifications_sent': notifications_sent,
+            'notification_errors': notification_errors if notification_errors else None,
+            'message': f'Swap request created. {notifications_sent} notification(s) sent.'
+        })
+    except Exception as e:
+        print(f"[ERROR] create_swap_request crashed: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
 @app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request/<int:request_id>/respond', methods=['POST'])
