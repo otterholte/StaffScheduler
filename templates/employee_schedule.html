@@ -255,8 +255,98 @@
                         <p class="no-shifts-message" id="noShiftsMessage">No upcoming shifts scheduled</p>
                     </div>
                 </div>
+
+                <!-- Incoming Swap Requests -->
+                <div class="panel-card swap-requests-card" id="incomingSwapsCard" style="display: none;">
+                    <h3 class="card-title">
+                        <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="17 1 21 5 17 9"></polyline>
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                            <polyline points="7 23 3 19 7 15"></polyline>
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
+                        Shift Swap Requests
+                        <span class="swap-badge" id="swapRequestCount">0</span>
+                    </h3>
+                    <div class="swap-requests-list" id="incomingSwapsList">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- My Outgoing Swap Requests -->
+                <div class="panel-card outgoing-swaps-card" id="outgoingSwapsCard" style="display: none;">
+                    <h3 class="card-title">
+                        <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        My Swap Requests
+                    </h3>
+                    <div class="outgoing-swaps-list" id="outgoingSwapsList">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
             </section>
         </main>
+    </div>
+
+    <!-- Swap Request Modal -->
+    <div class="modal-overlay" id="swapModal" style="display: none;">
+        <div class="modal-content swap-modal">
+            <div class="modal-header">
+                <h2>Request Shift Swap</h2>
+                <button class="modal-close" id="closeSwapModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="swap-shift-details" id="swapShiftDetails">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="swap-form-group">
+                    <label>Note (optional)</label>
+                    <textarea id="swapNote" placeholder="Add a note explaining why you need to swap this shift..." rows="3"></textarea>
+                </div>
+                
+                <div class="eligible-staff-section">
+                    <h4>Eligible Staff</h4>
+                    <p class="eligible-hint">These coworkers can cover your shift. Select specific people or send to all.</p>
+                    <div class="eligible-list" id="eligibleStaffList">
+                        <div class="loading-spinner">Checking eligibility...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelSwapBtn">Cancel</button>
+                <button class="btn btn-primary" id="submitSwapBtn" disabled>Send Request</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Swap Response Modal -->
+    <div class="modal-overlay" id="swapResponseModal" style="display: none;">
+        <div class="modal-content swap-response-modal">
+            <div class="modal-header">
+                <h2>Respond to Swap Request</h2>
+                <button class="modal-close" id="closeSwapResponseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="swap-request-details" id="swapRequestDetails">
+                    <!-- Populated by JS -->
+                </div>
+                
+                <div class="swap-offer-section" id="swapOfferSection" style="display: none;">
+                    <h4>Select a Shift to Swap</h4>
+                    <p class="swap-offer-hint">Since picking up this shift would exceed your max hours, you need to offer one of your shifts in exchange.</p>
+                    <div class="my-shifts-list" id="myShiftsForSwap">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="declineSwapBtn">Decline</button>
+                <button class="btn btn-success" id="acceptSwapBtn">Accept</button>
+            </div>
+        </div>
     </div>
 
     <!-- Pass data to JavaScript -->

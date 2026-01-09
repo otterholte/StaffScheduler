@@ -504,6 +504,107 @@ class DBShiftAssignment(db.Model):
         }
 
 
+class ShiftSwapRequest(db.Model):
+    """Shift swap request from an employee."""
+    __tablename__ = 'shift_swap_requests'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.String(20), unique=True, nullable=False, default=generate_uuid)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    requester_employee_id = db.Column(db.String(50), nullable=False)
+    
+    # The shift being offered (the one requester wants to give away)
+    original_day = db.Column(db.Integer, nullable=False)  # 0-6
+    original_start_hour = db.Column(db.Integer, nullable=False)
+    original_end_hour = db.Column(db.Integer, nullable=False)
+    original_role_id = db.Column(db.String(50), nullable=True)
+    
+    # Week identifier
+    week_start_date = db.Column(db.Date, nullable=False)
+    
+    # Status: 'pending', 'accepted', 'declined', 'expired', 'cancelled'
+    status = db.Column(db.String(20), default='pending')
+    
+    # Note from requester
+    note = db.Column(db.Text, nullable=True)
+    
+    # Who accepted (if accepted)
+    accepted_by_employee_id = db.Column(db.String(50), nullable=True)
+    
+    # If accepter had to swap (their shift they're giving up)
+    swap_day = db.Column(db.Integer, nullable=True)
+    swap_start_hour = db.Column(db.Integer, nullable=True)
+    swap_end_hour = db.Column(db.Integer, nullable=True)
+    swap_role_id = db.Column(db.String(50), nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=True)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationship
+    business = db.relationship('DBBusiness', backref=db.backref('swap_requests', lazy=True))
+    recipients = db.relationship('SwapRequestRecipient', backref='swap_request', lazy=True, cascade='all, delete-orphan')
+    
+    def __repr__(self):
+        return f'<ShiftSwapRequest {self.request_id} from {self.requester_employee_id}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.request_id,
+            'requester_employee_id': self.requester_employee_id,
+            'original_day': self.original_day,
+            'original_start_hour': self.original_start_hour,
+            'original_end_hour': self.original_end_hour,
+            'original_role_id': self.original_role_id,
+            'week_start_date': self.week_start_date.isoformat() if self.week_start_date else None,
+            'status': self.status,
+            'note': self.note,
+            'accepted_by_employee_id': self.accepted_by_employee_id,
+            'swap_day': self.swap_day,
+            'swap_start_hour': self.swap_start_hour,
+            'swap_end_hour': self.swap_end_hour,
+            'swap_role_id': self.swap_role_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
+            'resolved_at': self.resolved_at.isoformat() if self.resolved_at else None,
+            'recipients': [r.to_dict() for r in self.recipients]
+        }
+
+
+class SwapRequestRecipient(db.Model):
+    """Track who was notified about a swap request."""
+    __tablename__ = 'swap_request_recipients'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    swap_request_id = db.Column(db.Integer, db.ForeignKey('shift_swap_requests.id'), nullable=False)
+    employee_id = db.Column(db.String(50), nullable=False)
+    
+    # Eligibility type: 'pickup' (can just take it) or 'swap_only' (must swap)
+    eligibility_type = db.Column(db.String(20), default='pickup')
+    
+    # Notification tracking
+    notified_at = db.Column(db.DateTime, nullable=True)
+    notification_method = db.Column(db.String(20), nullable=True)  # 'email', 'sms', 'both'
+    
+    # Response: 'pending', 'accepted', 'declined', 'counter'
+    response = db.Column(db.String(20), default='pending')
+    responded_at = db.Column(db.DateTime, nullable=True)
+    
+    def __repr__(self):
+        return f'<SwapRequestRecipient {self.employee_id} for request {self.swap_request_id}>'
+    
+    def to_dict(self):
+        return {
+            'employee_id': self.employee_id,
+            'eligibility_type': self.eligibility_type,
+            'notified_at': self.notified_at.isoformat() if self.notified_at else None,
+            'notification_method': self.notification_method,
+            'response': self.response,
+            'responded_at': self.responded_at.isoformat() if self.responded_at else None
+        }
+
+
 def init_db(app):
     """Initialize the database with the Flask app."""
     db.init_app(app)

@@ -266,6 +266,224 @@ This email was sent by Staff Scheduler on behalf of {business_name}.
 """
         
         return self.send_email(to_email, subject, html_body, text_body)
+    
+    def send_swap_request_notification(
+        self,
+        to_email: str,
+        recipient_name: str,
+        requester_name: str,
+        business_name: str,
+        shift_details: str,
+        eligibility_type: str,  # 'pickup' or 'swap_only'
+        portal_url: str
+    ) -> Tuple[bool, str]:
+        """
+        Send a shift swap request notification to an eligible employee.
+        
+        Args:
+            to_email: Recipient's email address
+            recipient_name: Recipient's name
+            requester_name: Name of the person requesting the swap
+            business_name: Name of the business
+            shift_details: Description of the shift (e.g., "Monday 9am-5pm")
+            eligibility_type: 'pickup' or 'swap_only'
+            portal_url: Full URL to the employee portal
+            
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        subject = f"Shift available: {shift_details} at {business_name}"
+        
+        action_text = "pick up this shift" if eligibility_type == 'pickup' else "swap for this shift"
+        
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5fa;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <tr>
+            <td>
+                <div style="background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); padding: 3px; border-radius: 16px;">
+                    <div style="background-color: #ffffff; border-radius: 14px; padding: 40px;">
+                        <!-- Logo/Header -->
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="margin: 0; font-size: 24px; color: #1a1a2e;">
+                                🔄 Shift Swap Request
+                            </h1>
+                        </div>
+                        
+                        <!-- Main Content -->
+                        <h2 style="margin: 0 0 15px; font-size: 20px; color: #1a1a2e;">
+                            Hi {recipient_name}!
+                        </h2>
+                        
+                        <p style="margin: 0 0 20px; font-size: 16px; color: #5a5a70; line-height: 1.6;">
+                            <strong>{requester_name}</strong> is looking for someone to cover their shift at <strong>{business_name}</strong>.
+                        </p>
+                        
+                        <!-- Shift Details Box -->
+                        <div style="background-color: #fef3c7; border-radius: 10px; padding: 20px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+                            <p style="margin: 0; font-size: 18px; color: #92400e; font-weight: 600;">
+                                📅 {shift_details}
+                            </p>
+                        </div>
+                        
+                        <p style="margin: 0 0 25px; font-size: 16px; color: #5a5a70; line-height: 1.6;">
+                            You can <strong>{action_text}</strong>. Tap the button below to respond.
+                        </p>
+                        
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{portal_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                View Swap Request
+                            </a>
+                        </div>
+                        
+                        <p style="margin: 25px 0 0; font-size: 14px; color: #9090a0; line-height: 1.6;">
+                            Or copy and paste this link into your browser:<br>
+                            <a href="{portal_url}" style="color: #f59e0b; word-break: break-all;">{portal_url}</a>
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #9090a0;">
+                    This email was sent by Staff Scheduler on behalf of {business_name}.
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+        
+        text_body = f"""
+Hi {recipient_name}!
+
+{requester_name} is looking for someone to cover their shift at {business_name}.
+
+Shift Details:
+{shift_details}
+
+You can {action_text}. Click here to respond:
+{portal_url}
+
+---
+This email was sent by Staff Scheduler on behalf of {business_name}.
+"""
+        
+        return self.send_email(to_email, subject, html_body, text_body)
+    
+    def send_swap_response_notification(
+        self,
+        to_email: str,
+        requester_name: str,
+        responder_name: str,
+        business_name: str,
+        shift_details: str,
+        response: str,  # 'accepted' or 'declined'
+        swap_shift_details: Optional[str],  # Details of swap shift if it was a swap
+        portal_url: str
+    ) -> Tuple[bool, str]:
+        """
+        Send notification to requester when someone responds to their swap request.
+        """
+        if response == 'accepted':
+            subject = f"Great news! {responder_name} accepted your shift swap"
+            emoji = "✅"
+            action = "accepted"
+            color_start = "#10b981"
+            color_end = "#059669"
+        else:
+            subject = f"{responder_name} declined your shift swap request"
+            emoji = "❌"
+            action = "declined"
+            color_start = "#ef4444"
+            color_end = "#dc2626"
+        
+        swap_info = ""
+        if swap_shift_details and response == 'accepted':
+            swap_info = f"""
+                        <div style="background-color: #e0f2fe; border-radius: 10px; padding: 20px; margin: 15px 0; border-left: 4px solid #0ea5e9;">
+                            <p style="margin: 0; font-size: 16px; color: #0369a1; font-weight: 600;">
+                                🔄 In exchange, you'll take their shift: {swap_shift_details}
+                            </p>
+                        </div>
+"""
+        
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5fa;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <tr>
+            <td>
+                <div style="background: linear-gradient(135deg, {color_start} 0%, {color_end} 100%); padding: 3px; border-radius: 16px;">
+                    <div style="background-color: #ffffff; border-radius: 14px; padding: 40px;">
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="margin: 0; font-size: 24px; color: #1a1a2e;">
+                                {emoji} Swap Request {action.title()}
+                            </h1>
+                        </div>
+                        
+                        <h2 style="margin: 0 0 15px; font-size: 20px; color: #1a1a2e;">
+                            Hi {requester_name}!
+                        </h2>
+                        
+                        <p style="margin: 0 0 20px; font-size: 16px; color: #5a5a70; line-height: 1.6;">
+                            <strong>{responder_name}</strong> has {action} your request to swap the shift:
+                        </p>
+                        
+                        <div style="background-color: #f3f4f6; border-radius: 10px; padding: 20px; margin: 25px 0;">
+                            <p style="margin: 0; font-size: 18px; color: #374151; font-weight: 600;">
+                                📅 {shift_details}
+                            </p>
+                        </div>
+                        
+                        {swap_info}
+                        
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{portal_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, {color_start} 0%, {color_end} 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                View Updated Schedule
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #9090a0;">
+                    This email was sent by Staff Scheduler on behalf of {business_name}.
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+        
+        text_body = f"""
+Hi {requester_name}!
+
+{responder_name} has {action} your request to swap the shift:
+{shift_details}
+
+{"In exchange, you'll take their shift: " + swap_shift_details if swap_shift_details and response == 'accepted' else ""}
+
+View your updated schedule:
+{portal_url}
+
+---
+This email was sent by Staff Scheduler on behalf of {business_name}.
+"""
+        
+        return self.send_email(to_email, subject, html_body, text_body)
 
 
 # Singleton instance

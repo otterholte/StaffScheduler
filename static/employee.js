@@ -23,7 +23,14 @@ const employeeState = {
     // Availability editing state
     isSelecting: false,
     selectionStart: null,
-    selectionMode: null // 'add' or 'remove'
+    selectionMode: null, // 'add' or 'remove'
+    // Swap request state
+    swapRequests: { incoming: [], outgoing: [] },
+    currentSwapShift: null,
+    eligibleStaff: [],
+    selectedRecipients: [],
+    currentSwapRequest: null,
+    selectedSwapShift: null
 };
 
 // Build lookup maps
@@ -121,6 +128,7 @@ function initScheduleView() {
     updateWeekDisplay();
     loadScheduleData();
     renderScheduleView();
+    initSwapFeature();
 }
 
 function setupViewToggle() {
@@ -1086,9 +1094,17 @@ function renderUpcomingShifts() {
     if (noShiftsMsg) noShiftsMsg.style.display = 'none';
     
     let html = '';
-    displayShifts.forEach(shift => {
+    displayShifts.forEach((shift, idx) => {
         const role = roleMap[shift.role] || {};
         const duration = shift.end - shift.start;
+        
+        // Create a unique shift identifier for the swap button
+        const shiftData = JSON.stringify({
+            dayIdx: shift.dayIdx,
+            start: shift.start,
+            end: shift.end,
+            role: shift.role
+        }).replace(/"/g, '&quot;');
         
         html += `<div class="upcoming-shift-item">
             <div class="shift-date-badge">
@@ -1102,7 +1118,17 @@ function renderUpcomingShifts() {
                     ${role.name || 'Shift'}
                 </div>
             </div>
-            <div class="shift-duration">${duration}h</div>
+            <div class="shift-actions">
+                <div class="shift-duration">${duration}h</div>
+                <button class="shift-swap-btn" title="Request to swap this shift" onclick='showSwapModal(${shiftData})'>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="17 1 21 5 17 9"></polyline>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                        <polyline points="7 23 3 19 7 15"></polyline>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                    </svg>
+                </button>
+            </div>
         </div>`;
     });
     
@@ -1406,6 +1432,583 @@ async function saveAvailability() {
         showToast('Failed to save availability', 'error');
     } finally {
         if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+// ==================== SHIFT SWAP FEATURE ====================
+
+function initSwapFeature() {
+    // Setup modal events
+    setupSwapModals();
+    // Load existing swap requests
+    loadSwapRequests();
+}
+
+function setupSwapModals() {
+    // Create Swap Request Modal
+    const closeSwapModal = document.getElementById('closeSwapModal');
+    const cancelSwapBtn = document.getElementById('cancelSwapBtn');
+    const submitSwapBtn = document.getElementById('submitSwapBtn');
+    
+    if (closeSwapModal) {
+        closeSwapModal.addEventListener('click', hideSwapModal);
+    }
+    if (cancelSwapBtn) {
+        cancelSwapBtn.addEventListener('click', hideSwapModal);
+    }
+    if (submitSwapBtn) {
+        submitSwapBtn.addEventListener('click', submitSwapRequest);
+    }
+    
+    // Swap Response Modal
+    const closeSwapResponseModal = document.getElementById('closeSwapResponseModal');
+    const declineSwapBtn = document.getElementById('declineSwapBtn');
+    const acceptSwapBtn = document.getElementById('acceptSwapBtn');
+    
+    if (closeSwapResponseModal) {
+        closeSwapResponseModal.addEventListener('click', hideSwapResponseModal);
+    }
+    if (declineSwapBtn) {
+        declineSwapBtn.addEventListener('click', declineSwapRequest);
+    }
+    if (acceptSwapBtn) {
+        acceptSwapBtn.addEventListener('click', acceptSwapRequest);
+    }
+    
+    // Close modals when clicking overlay
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.style.display = 'none';
+            }
+        });
+    });
+}
+
+async function loadSwapRequests() {
+    try {
+        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-requests`);
+        const data = await response.json();
+        
+        if (data.success) {
+            employeeState.swapRequests = {
+                incoming: data.incoming || [],
+                outgoing: data.outgoing || []
+            };
+            renderSwapRequests();
+        }
+    } catch (error) {
+        console.error('Failed to load swap requests:', error);
+    }
+}
+
+function renderSwapRequests() {
+    renderIncomingSwapRequests();
+    renderOutgoingSwapRequests();
+}
+
+function renderIncomingSwapRequests() {
+    const card = document.getElementById('incomingSwapsCard');
+    const list = document.getElementById('incomingSwapsList');
+    const countBadge = document.getElementById('swapRequestCount');
+    
+    if (!card || !list) return;
+    
+    const incoming = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending');
+    
+    if (incoming.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    if (countBadge) countBadge.textContent = incoming.length;
+    
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    list.innerHTML = incoming.map(req => {
+        const shiftTime = `${dayNames[req.original_day]} ${formatTime(req.original_start_hour)}-${formatTime(req.original_end_hour)}`;
+        const eligibilityBadge = req.my_eligibility_type === 'pickup' 
+            ? '<span class="swap-eligibility-badge pickup">Can Pick Up</span>'
+            : '<span class="swap-eligibility-badge swap-only">Swap Required</span>';
+        
+        return `
+            <div class="swap-request-item incoming" data-request-id="${req.id}">
+                <div class="swap-request-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="17 1 21 5 17 9"></polyline>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                        <polyline points="7 23 3 19 7 15"></polyline>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                    </svg>
+                </div>
+                <div class="swap-request-info">
+                    <div class="swap-request-header">
+                        <span class="swap-request-from">${req.requester_name}</span>
+                        ${eligibilityBadge}
+                    </div>
+                    <div class="swap-request-shift">
+                        Wants to swap: <strong>${shiftTime}</strong>
+                    </div>
+                    ${req.note ? `<div class="swap-request-note">"${req.note}"</div>` : ''}
+                    <div class="swap-request-actions">
+                        <button class="btn btn-success btn-sm" onclick="showSwapResponseModal('${req.id}')">
+                            Respond
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderOutgoingSwapRequests() {
+    const card = document.getElementById('outgoingSwapsCard');
+    const list = document.getElementById('outgoingSwapsList');
+    
+    if (!card || !list) return;
+    
+    const outgoing = employeeState.swapRequests.outgoing;
+    
+    if (outgoing.length === 0) {
+        card.style.display = 'none';
+        return;
+    }
+    
+    card.style.display = 'block';
+    
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    list.innerHTML = outgoing.slice(0, 5).map(req => {
+        const shiftTime = `${dayNames[req.original_day]} ${formatTime(req.original_start_hour)}-${formatTime(req.original_end_hour)}`;
+        
+        const statusBadges = {
+            'pending': '<span class="swap-status-badge pending">Pending</span>',
+            'accepted': '<span class="swap-status-badge accepted">Accepted</span>',
+            'declined': '<span class="swap-status-badge declined">Declined</span>',
+            'cancelled': '<span class="swap-status-badge cancelled">Cancelled</span>',
+            'expired': '<span class="swap-status-badge cancelled">Expired</span>'
+        };
+        
+        const recipientCount = req.recipients?.length || 0;
+        const respondedCount = req.recipients?.filter(r => r.response !== 'pending').length || 0;
+        
+        return `
+            <div class="swap-request-item outgoing ${req.status}" data-request-id="${req.id}">
+                <div class="swap-request-info">
+                    <div class="swap-request-header">
+                        <span class="swap-request-shift"><strong>${shiftTime}</strong></span>
+                        ${statusBadges[req.status] || ''}
+                    </div>
+                    <div class="swap-request-time">
+                        Sent to ${recipientCount} staff • ${respondedCount} responded
+                    </div>
+                    ${req.status === 'pending' ? `
+                        <div class="swap-request-actions" style="margin-top: 0.5rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="cancelMySwapRequest('${req.id}')">
+                                Cancel Request
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function showSwapModal(shift) {
+    employeeState.currentSwapShift = shift;
+    employeeState.selectedRecipients = [];
+    
+    const modal = document.getElementById('swapModal');
+    const shiftDetails = document.getElementById('swapShiftDetails');
+    const eligibleList = document.getElementById('eligibleStaffList');
+    const submitBtn = document.getElementById('submitSwapBtn');
+    const noteField = document.getElementById('swapNote');
+    
+    if (!modal) return;
+    
+    // Clear previous state
+    if (noteField) noteField.value = '';
+    if (submitBtn) submitBtn.disabled = true;
+    
+    // Show shift details
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const role = roleMap[shift.role] || {};
+    
+    if (shiftDetails) {
+        shiftDetails.innerHTML = `
+            <div class="shift-day">${dayNames[shift.dayIdx]}</div>
+            <div class="shift-time">${formatTime(shift.start)} - ${formatTime(shift.end)}</div>
+            ${role.name ? `<div class="shift-role"><span style="background: ${role.color || '#666'}; width: 10px; height: 10px; border-radius: 50%; display: inline-block;"></span> ${role.name}</div>` : ''}
+        `;
+    }
+    
+    // Show loading in eligible list
+    if (eligibleList) {
+        eligibleList.innerHTML = '<div class="loading-spinner">Checking eligible staff...</div>';
+    }
+    
+    modal.style.display = 'flex';
+    
+    // Fetch eligible staff
+    loadEligibleStaff(shift);
+}
+
+async function loadEligibleStaff(shift) {
+    const eligibleList = document.getElementById('eligibleStaffList');
+    const submitBtn = document.getElementById('submitSwapBtn');
+    
+    try {
+        const dates = getWeekDates(employeeState.weekOffset);
+        const weekStart = dates[0].toISOString().split('T')[0];
+        
+        const params = new URLSearchParams({
+            day: shift.dayIdx,
+            start_hour: shift.start,
+            end_hour: shift.end,
+            role_id: shift.role || '',
+            week_start: weekStart
+        });
+        
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/eligible-for-swap?${params}`
+        );
+        const data = await response.json();
+        
+        if (data.success && data.eligible.length > 0) {
+            employeeState.eligibleStaff = data.eligible;
+            
+            eligibleList.innerHTML = data.eligible.map(emp => {
+                const statusText = emp.eligibility_type === 'pickup' 
+                    ? 'Can pick up' 
+                    : `Needs to swap (${emp.current_hours}h scheduled)`;
+                const badgeClass = emp.eligibility_type === 'pickup' ? 'pickup' : 'swap-only';
+                
+                return `
+                    <label class="eligible-item" data-emp-id="${emp.employee_id}">
+                        <input type="checkbox" onchange="toggleRecipient('${emp.employee_id}')">
+                        <div class="eligible-avatar" style="background: ${employeeMap[emp.employee_id]?.color || '#666'}">
+                            ${emp.employee_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="eligible-info">
+                            <div class="eligible-name">${emp.employee_name}</div>
+                            <div class="eligible-status">${statusText}</div>
+                        </div>
+                        <span class="swap-eligibility-badge ${badgeClass}">${emp.eligibility_type === 'pickup' ? 'Pickup' : 'Swap'}</span>
+                    </label>
+                `;
+            }).join('');
+            
+            if (submitBtn) submitBtn.disabled = false;
+        } else {
+            eligibleList.innerHTML = '<div class="loading-spinner">No eligible staff found for this shift.</div>';
+        }
+    } catch (error) {
+        console.error('Failed to load eligible staff:', error);
+        eligibleList.innerHTML = '<div class="loading-spinner">Failed to load eligible staff.</div>';
+    }
+}
+
+function toggleRecipient(empId) {
+    const idx = employeeState.selectedRecipients.indexOf(empId);
+    if (idx === -1) {
+        employeeState.selectedRecipients.push(empId);
+    } else {
+        employeeState.selectedRecipients.splice(idx, 1);
+    }
+    
+    // Update visual state
+    const item = document.querySelector(`.eligible-item[data-emp-id="${empId}"]`);
+    if (item) {
+        item.classList.toggle('selected', idx === -1);
+    }
+}
+
+function hideSwapModal() {
+    const modal = document.getElementById('swapModal');
+    if (modal) modal.style.display = 'none';
+    employeeState.currentSwapShift = null;
+    employeeState.eligibleStaff = [];
+    employeeState.selectedRecipients = [];
+}
+
+async function submitSwapRequest() {
+    const shift = employeeState.currentSwapShift;
+    if (!shift) return;
+    
+    const noteField = document.getElementById('swapNote');
+    const submitBtn = document.getElementById('submitSwapBtn');
+    
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending...';
+    }
+    
+    try {
+        const dates = getWeekDates(employeeState.weekOffset);
+        const weekStart = dates[0].toISOString().split('T')[0];
+        
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    day: shift.dayIdx,
+                    start_hour: shift.start,
+                    end_hour: shift.end,
+                    role_id: shift.role,
+                    week_start: weekStart,
+                    note: noteField?.value || '',
+                    recipients: employeeState.selectedRecipients.length > 0 
+                        ? employeeState.selectedRecipients 
+                        : undefined
+                })
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(`Swap request sent! ${data.notifications_sent} notification(s) sent.`, 'success');
+            hideSwapModal();
+            loadSwapRequests();
+        } else {
+            showToast(data.message || 'Failed to create swap request', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to submit swap request:', error);
+        showToast('Failed to send swap request', 'error');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Send Request';
+        }
+    }
+}
+
+function showSwapResponseModal(requestId) {
+    const request = employeeState.swapRequests.incoming.find(r => r.id === requestId);
+    if (!request) return;
+    
+    employeeState.currentSwapRequest = request;
+    employeeState.selectedSwapShift = null;
+    
+    const modal = document.getElementById('swapResponseModal');
+    const details = document.getElementById('swapRequestDetails');
+    const swapOfferSection = document.getElementById('swapOfferSection');
+    const myShiftsList = document.getElementById('myShiftsForSwap');
+    const acceptBtn = document.getElementById('acceptSwapBtn');
+    
+    if (!modal) return;
+    
+    // Show request details
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    
+    if (details) {
+        details.innerHTML = `
+            <div class="swap-shift-details">
+                <p style="margin: 0 0 0.5rem 0;"><strong>${request.requester_name}</strong> wants to swap:</p>
+                <div class="shift-day">${dayNames[request.original_day]}</div>
+                <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
+                ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
+            </div>
+        `;
+    }
+    
+    // Show swap offer section if needed
+    if (request.my_eligibility_type === 'swap_only') {
+        if (swapOfferSection) swapOfferSection.style.display = 'block';
+        if (acceptBtn) acceptBtn.disabled = true;
+        
+        // Get my shifts for this week
+        const myShifts = getMyShiftsForWeek();
+        
+        if (myShiftsList) {
+            if (myShifts.length === 0) {
+                myShiftsList.innerHTML = '<p>You have no shifts to offer in exchange.</p>';
+            } else {
+                myShiftsList.innerHTML = myShifts.map((shift, idx) => `
+                    <label class="my-shift-option" data-shift-idx="${idx}">
+                        <input type="radio" name="swapShift" onchange="selectSwapShift(${idx})">
+                        <div style="flex: 1;">
+                            <strong>${dayNames[shift.dayIdx]}</strong> ${formatTime(shift.start)} - ${formatTime(shift.end)}
+                        </div>
+                    </label>
+                `).join('');
+            }
+        }
+    } else {
+        if (swapOfferSection) swapOfferSection.style.display = 'none';
+        if (acceptBtn) acceptBtn.disabled = false;
+    }
+    
+    modal.style.display = 'flex';
+}
+
+function getMyShiftsForWeek() {
+    const shifts = [];
+    const schedule = employeeState.schedule;
+    const dates = getWeekDates(employeeState.weekOffset);
+    
+    if (!schedule) return shifts;
+    
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        const dayShifts = getMyContinuousShiftsForDay(schedule, dayIdx);
+        dayShifts.forEach(shift => {
+            shifts.push({
+                ...shift,
+                dayIdx,
+                date: dates[dayIdx]
+            });
+        });
+    }
+    
+    return shifts;
+}
+
+function selectSwapShift(idx) {
+    const myShifts = getMyShiftsForWeek();
+    employeeState.selectedSwapShift = myShifts[idx];
+    
+    // Update visual state
+    document.querySelectorAll('.my-shift-option').forEach((el, i) => {
+        el.classList.toggle('selected', i === idx);
+    });
+    
+    // Enable accept button
+    const acceptBtn = document.getElementById('acceptSwapBtn');
+    if (acceptBtn) acceptBtn.disabled = false;
+}
+
+function hideSwapResponseModal() {
+    const modal = document.getElementById('swapResponseModal');
+    if (modal) modal.style.display = 'none';
+    employeeState.currentSwapRequest = null;
+    employeeState.selectedSwapShift = null;
+}
+
+async function acceptSwapRequest() {
+    const request = employeeState.currentSwapRequest;
+    if (!request) return;
+    
+    // If swap-only and no shift selected, error
+    if (request.my_eligibility_type === 'swap_only' && !employeeState.selectedSwapShift) {
+        showToast('Please select a shift to offer in exchange', 'error');
+        return;
+    }
+    
+    const acceptBtn = document.getElementById('acceptSwapBtn');
+    if (acceptBtn) {
+        acceptBtn.disabled = true;
+        acceptBtn.textContent = 'Accepting...';
+    }
+    
+    try {
+        const body = {
+            response: 'accept'
+        };
+        
+        if (employeeState.selectedSwapShift) {
+            body.swap_shift = {
+                day: employeeState.selectedSwapShift.dayIdx,
+                start_hour: employeeState.selectedSwapShift.start,
+                end_hour: employeeState.selectedSwapShift.end,
+                role_id: employeeState.selectedSwapShift.role
+            };
+        }
+        
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request/${request.id}/respond`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Swap accepted! The schedule has been updated.', 'success');
+            hideSwapResponseModal();
+            loadSwapRequests();
+            loadScheduleData(); // Reload schedule to show updated shifts
+        } else {
+            showToast(data.message || 'Failed to accept swap', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to accept swap:', error);
+        showToast('Failed to accept swap request', 'error');
+    } finally {
+        if (acceptBtn) {
+            acceptBtn.disabled = false;
+            acceptBtn.textContent = 'Accept';
+        }
+    }
+}
+
+async function declineSwapRequest() {
+    const request = employeeState.currentSwapRequest;
+    if (!request) return;
+    
+    const declineBtn = document.getElementById('declineSwapBtn');
+    if (declineBtn) {
+        declineBtn.disabled = true;
+        declineBtn.textContent = 'Declining...';
+    }
+    
+    try {
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request/${request.id}/respond`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ response: 'decline' })
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Swap request declined', 'info');
+            hideSwapResponseModal();
+            loadSwapRequests();
+        } else {
+            showToast(data.message || 'Failed to decline swap', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to decline swap:', error);
+        showToast('Failed to decline swap request', 'error');
+    } finally {
+        if (declineBtn) {
+            declineBtn.disabled = false;
+            declineBtn.textContent = 'Decline';
+        }
+    }
+}
+
+async function cancelMySwapRequest(requestId) {
+    if (!confirm('Are you sure you want to cancel this swap request?')) return;
+    
+    try {
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${employeeState.employee.id}/swap-request/${requestId}/cancel`,
+            { method: 'POST' }
+        );
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Swap request cancelled', 'info');
+            loadSwapRequests();
+        } else {
+            showToast(data.message || 'Failed to cancel swap request', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to cancel swap request:', error);
+        showToast('Failed to cancel swap request', 'error');
     }
 }
 

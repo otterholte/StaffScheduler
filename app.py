@@ -25,14 +25,14 @@ from scheduler import (
 )
 from scheduler.businesses import sync_business_to_db, load_businesses_from_db
 from db_service import save_schedule_to_db, get_schedule_from_db, get_schedule_with_status_from_db, publish_schedule_in_db, get_published_schedule_from_db
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from scheduler.models import (
     Employee, Role, TimeSlot, EmployeeClassification,
     PeakPeriod, RoleCoverageConfig, CoverageRequirement,
     CoverageMode, ShiftTemplate, ShiftRoleRequirement
 )
 from config import get_config
-from models import db, bcrypt, User, BusinessSettings, UserBusinessSettings, init_db
+from models import db, bcrypt, User, BusinessSettings, UserBusinessSettings, init_db, ShiftSwapRequest, SwapRequestRecipient, DBSchedule
 from auth import auth_bp
 from email_service import get_email_service
 
@@ -402,6 +402,11 @@ def app_page(location_slug, page_slug):
     """Render the main app with specified location and page."""
     global _current_business, _solver
     
+    # Exclude reserved prefixes - these are handled by other routes
+    if location_slug in ('api', 'auth', 'employee', 'static', 'demo'):
+        from flask import abort
+        abort(404)
+    
     # Ensure user's business exists if they have one (in case server restarted)
     if current_user.is_authenticated:
         ensure_user_business_exists(current_user)
@@ -520,6 +525,11 @@ def app_page(location_slug, page_slug):
 @app.route('/<location_slug>')
 def app_page_default(location_slug):
     """Redirect to schedule page for a location."""
+    # Exclude reserved prefixes - these are handled by other routes
+    if location_slug in ('api', 'auth', 'employee', 'static', 'demo'):
+        from flask import abort
+        abort(404)
+    
     # Ensure user's business exists if they have one (in case server restarted)
     if current_user.is_authenticated:
         ensure_user_business_exists(current_user)
@@ -790,6 +800,644 @@ def employee_update_availability(employee_id):
         'success': True,
         'message': 'Availability updated',
         'availability': avail_data
+    })
+
+
+# ==================== SHIFT SWAP API ====================
+
+def format_shift_time(start_hour, end_hour):
+    """Format shift hours to readable string like '9am-5pm'."""
+    def fmt(h):
+        if h == 0:
+            return '12am'
+        elif h < 12:
+            return f'{h}am'
+        elif h == 12:
+            return '12pm'
+        else:
+            return f'{h-12}pm'
+    return f'{fmt(start_hour)}-{fmt(end_hour)}'
+
+
+def get_eligible_employees_for_swap(business, requester_id, shift_day, shift_start, shift_end, shift_role, week_start):
+    """
+    Find employees who are eligible to take a shift.
+    
+    Returns list of dicts with:
+    - employee_id
+    - employee_name
+    - eligibility_type: 'pickup' (can just take it) or 'swap_only' (must swap a shift)
+    - current_shifts: list of their current shifts for the week
+    """
+    from scheduler.models import TimeSlot
+    
+    eligible = []
+    
+    # Get the current schedule from database
+    schedule = get_published_schedule_from_db(business.id, week_start)
+    if not schedule:
+        # No schedule means anyone available could pick it up
+        pass
+    
+    # Get slot assignments from schedule
+    # Schedule model uses slot_assignments directly, not get_schedule_data()
+    slot_assignments = schedule.slot_assignments if schedule else {}
+    
+    # Helper to get employee_id from assignment (handles tuple or dict format)
+    def get_assign_employee_id(assignment):
+        if isinstance(assignment, (list, tuple)):
+            return assignment[0]
+        elif isinstance(assignment, dict):
+            return assignment.get('employee_id')
+        return None
+    
+    # Count hours per employee in current schedule
+    def get_employee_hours(emp_id):
+        hours = 0
+        if not slot_assignments:
+            return hours
+        for slot_key, assignments in slot_assignments.items():
+            for assignment in assignments:
+                if get_assign_employee_id(assignment) == emp_id:
+                    hours += 1
+        return hours
+    
+    # Get employee shifts as continuous blocks
+    def get_employee_shifts(emp_id):
+        shifts = []
+        if not slot_assignments:
+            return shifts
+        
+        # Group by day
+        day_hours = {}
+        for slot_key, assignments in slot_assignments.items():
+            # Handle both tuple keys (day, hour) and string keys "day,hour"
+            if isinstance(slot_key, tuple):
+                day, hour = slot_key
+            else:
+                parts = str(slot_key).split(',')
+                if len(parts) >= 2:
+                    day = int(parts[0])
+                    hour = int(parts[1])
+                else:
+                    continue
+            for assignment in assignments:
+                if get_assign_employee_id(assignment) == emp_id:
+                    if day not in day_hours:
+                        day_hours[day] = []
+                    day_hours[day].append(hour)
+        
+        # Convert to continuous shifts
+        for day, hours in day_hours.items():
+            hours = sorted(hours)
+            if not hours:
+                continue
+            start = hours[0]
+            prev = hours[0]
+            for h in hours[1:]:
+                if h != prev + 1:
+                    shifts.append({'day': day, 'start': start, 'end': prev + 1})
+                    start = h
+                prev = h
+            shifts.append({'day': day, 'start': start, 'end': prev + 1})
+        
+        return shifts
+    
+    for emp in business.employees:
+        if emp.id == requester_id:
+            continue  # Skip the requester
+        
+        # Check 1: Employee has the required role (if specified)
+        if shift_role and shift_role not in emp.roles:
+            continue
+        
+        # Check 2: Employee is available during the shift hours
+        is_available = True
+        for hour in range(shift_start, shift_end):
+            slot = TimeSlot(shift_day, hour)
+            if slot not in emp.availability:
+                is_available = False
+                break
+        
+        if not is_available:
+            continue
+        
+        # Check 3: Employee doesn't have time off for this shift
+        has_time_off = False
+        for hour in range(shift_start, shift_end):
+            slot = TimeSlot(shift_day, hour)
+            if hasattr(emp, 'time_off') and slot in emp.time_off:
+                has_time_off = True
+                break
+        
+        if has_time_off:
+            continue
+        
+        # Get current hours and shifts
+        current_hours = get_employee_hours(emp.id)
+        current_shifts = get_employee_shifts(emp.id)
+        shift_duration = shift_end - shift_start
+        
+        # Check 4: Would picking up this shift exceed max hours?
+        new_hours = current_hours + shift_duration
+        can_pickup = new_hours <= emp.max_hours or emp.overtime_allowed
+        
+        # Note: We no longer disqualify based on number of days
+        # Instead, we determine if they can pickup or need to swap
+        
+        eligible.append({
+            'employee_id': emp.id,
+            'employee_name': emp.name,
+            'employee_email': emp.email,
+            'eligibility_type': 'pickup' if can_pickup else 'swap_only',
+            'current_hours': current_hours,
+            'current_shifts': current_shifts,
+            'would_exceed_hours': not can_pickup
+        })
+    
+    return eligible
+
+
+@app.route('/api/employee/<business_slug>/<employee_id>/swap-requests', methods=['GET'])
+def get_swap_requests(business_slug, employee_id):
+    """Get swap requests - both incoming (to respond to) and outgoing (created by employee)."""
+    business = get_business_by_slug(business_slug, force_reload=True)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
+    
+    # Get business DB ID
+    from db_service import get_db_business
+    db_business = get_db_business(business.id)
+    if not db_business:
+        return jsonify({
+            'success': True,
+            'outgoing': [],
+            'incoming': []
+        })
+    
+    # Get outgoing requests (created by this employee)
+    outgoing = ShiftSwapRequest.query.filter_by(
+        business_db_id=db_business.id,
+        requester_employee_id=employee_id
+    ).order_by(ShiftSwapRequest.created_at.desc()).all()
+    
+    # Get incoming requests (where this employee is a recipient)
+    incoming_recipients = SwapRequestRecipient.query.filter_by(
+        employee_id=employee_id
+    ).all()
+    
+    incoming = []
+    for recipient in incoming_recipients:
+        swap_req = recipient.swap_request
+        # Only include if the request is for this business
+        if swap_req.business_db_id == db_business.id and swap_req.status == 'pending':
+            # Get requester info
+            requester = None
+            for emp in business.employees:
+                if emp.id == swap_req.requester_employee_id:
+                    requester = emp
+                    break
+            
+            incoming.append({
+                **swap_req.to_dict(),
+                'requester_name': requester.name if requester else 'Unknown',
+                'my_response': recipient.response,
+                'my_eligibility_type': recipient.eligibility_type
+            })
+    
+    # Get employee info for outgoing requests
+    outgoing_data = []
+    for req in outgoing:
+        req_dict = req.to_dict()
+        # Add recipient names
+        recipients_with_names = []
+        for r in req.recipients:
+            emp = None
+            for e in business.employees:
+                if e.id == r.employee_id:
+                    emp = e
+                    break
+            recipients_with_names.append({
+                **r.to_dict(),
+                'employee_name': emp.name if emp else 'Unknown'
+            })
+        req_dict['recipients'] = recipients_with_names
+        outgoing_data.append(req_dict)
+    
+    return jsonify({
+        'success': True,
+        'outgoing': outgoing_data,
+        'incoming': incoming
+    })
+
+
+@app.route('/api/employee/<business_slug>/<employee_id>/swap-request', methods=['POST'])
+def create_swap_request(business_slug, employee_id):
+    """Create a new shift swap request."""
+    business = get_business_by_slug(business_slug, force_reload=True)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
+    
+    # Get business DB ID
+    from db_service import get_db_business
+    db_business = get_db_business(business.id)
+    if not db_business:
+        return jsonify({'success': False, 'message': 'Business not properly configured'}), 400
+    
+    data = request.json
+    
+    # Required fields
+    shift_day = data.get('day')
+    shift_start = data.get('start_hour')
+    shift_end = data.get('end_hour')
+    week_start_str = data.get('week_start')
+    
+    if shift_day is None or shift_start is None or shift_end is None or not week_start_str:
+        return jsonify({'success': False, 'message': 'Missing required shift details'}), 400
+    
+    try:
+        week_start = date.fromisoformat(week_start_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid week_start date format'}), 400
+    
+    # Optional fields
+    shift_role = data.get('role_id')
+    note = data.get('note', '')
+    specific_recipients = data.get('recipients', [])  # Optional: specific employee IDs to request
+    
+    # Create the swap request
+    swap_request = ShiftSwapRequest(
+        business_db_id=db_business.id,
+        requester_employee_id=employee_id,
+        original_day=shift_day,
+        original_start_hour=shift_start,
+        original_end_hour=shift_end,
+        original_role_id=shift_role,
+        week_start_date=week_start,
+        note=note,
+        status='pending'
+    )
+    
+    # Set expiration (48 hours from now)
+    swap_request.expires_at = datetime.utcnow() + timedelta(hours=48)
+    
+    db.session.add(swap_request)
+    db.session.flush()  # Get the ID
+    
+    # Find eligible employees
+    all_eligible = get_eligible_employees_for_swap(
+        business, employee_id, shift_day, shift_start, shift_end, shift_role, week_start
+    )
+    
+    # Filter to specific recipients if provided
+    if specific_recipients:
+        eligible_to_notify = [e for e in all_eligible if e['employee_id'] in specific_recipients]
+    else:
+        eligible_to_notify = all_eligible
+    
+    if not eligible_to_notify:
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'No eligible employees found to swap with',
+            'eligible_count': len(all_eligible)
+        }), 400
+    
+    # Create recipient records
+    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    shift_details = f"{day_names[shift_day]} {format_shift_time(shift_start, shift_end)}"
+    
+    # Get requester name
+    requester_name = 'Unknown'
+    for emp in business.employees:
+        if emp.id == employee_id:
+            requester_name = emp.name
+            break
+    
+    # Get custom business name
+    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+    base_url = get_site_url()
+    
+    notifications_sent = 0
+    notification_errors = []
+    
+    for eligible in eligible_to_notify:
+        recipient = SwapRequestRecipient(
+            swap_request_id=swap_request.id,
+            employee_id=eligible['employee_id'],
+            eligibility_type=eligible['eligibility_type'],
+            response='pending'
+        )
+        db.session.add(recipient)
+        
+        # Send email notification if employee has email
+        if eligible.get('employee_email'):
+            try:
+                email_service = get_email_service()
+                if email_service.is_configured():
+                    portal_url = f"{base_url}/employee/{business_slug}/{eligible['employee_id']}/schedule"
+                    success, msg = email_service.send_swap_request_notification(
+                        to_email=eligible['employee_email'],
+                        recipient_name=eligible['employee_name'],
+                        requester_name=requester_name,
+                        business_name=business_name,
+                        shift_details=shift_details,
+                        eligibility_type=eligible['eligibility_type'],
+                        portal_url=portal_url
+                    )
+                    if success:
+                        recipient.notified_at = datetime.utcnow()
+                        recipient.notification_method = 'email'
+                        notifications_sent += 1
+                    else:
+                        notification_errors.append(f"{eligible['employee_name']}: {msg}")
+            except Exception as e:
+                notification_errors.append(f"{eligible['employee_name']}: {str(e)}")
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'swap_request': swap_request.to_dict(),
+        'eligible_count': len(eligible_to_notify),
+        'notifications_sent': notifications_sent,
+        'notification_errors': notification_errors if notification_errors else None,
+        'message': f'Swap request created. {notifications_sent} notification(s) sent.'
+    })
+
+
+@app.route('/api/employee/<business_slug>/<employee_id>/swap-request/<request_id>/respond', methods=['POST'])
+def respond_to_swap_request(business_slug, employee_id, request_id):
+    """Respond to a swap request (accept/decline)."""
+    business = get_business_by_slug(business_slug, force_reload=True)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
+    
+    data = request.json
+    response_type = data.get('response')  # 'accept' or 'decline'
+    swap_shift = data.get('swap_shift')  # Optional: shift to offer in return
+    
+    if response_type not in ['accept', 'decline']:
+        return jsonify({'success': False, 'message': 'Invalid response type'}), 400
+    
+    # Find the swap request
+    swap_request = ShiftSwapRequest.query.filter_by(request_id=request_id).first()
+    if not swap_request:
+        return jsonify({'success': False, 'message': 'Swap request not found'}), 404
+    
+    if swap_request.status != 'pending':
+        return jsonify({'success': False, 'message': f'Swap request is already {swap_request.status}'}), 400
+    
+    # Find this employee's recipient record
+    recipient = SwapRequestRecipient.query.filter_by(
+        swap_request_id=swap_request.id,
+        employee_id=employee_id
+    ).first()
+    
+    if not recipient:
+        return jsonify({'success': False, 'message': 'You are not a recipient of this swap request'}), 403
+    
+    if response_type == 'decline':
+        recipient.response = 'declined'
+        recipient.responded_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Swap request declined'
+        })
+    
+    # Accept the swap
+    # If employee must swap and didn't provide a shift, error
+    if recipient.eligibility_type == 'swap_only' and not swap_shift:
+        return jsonify({
+            'success': False,
+            'message': 'You must offer a shift to swap since picking up would exceed your max hours'
+        }), 400
+    
+    # Update the swap request
+    swap_request.status = 'accepted'
+    swap_request.accepted_by_employee_id = employee_id
+    swap_request.resolved_at = datetime.utcnow()
+    
+    # Record swap shift if provided
+    if swap_shift:
+        swap_request.swap_day = swap_shift.get('day')
+        swap_request.swap_start_hour = swap_shift.get('start_hour')
+        swap_request.swap_end_hour = swap_shift.get('end_hour')
+        swap_request.swap_role_id = swap_shift.get('role_id')
+    
+    recipient.response = 'accepted'
+    recipient.responded_at = datetime.utcnow()
+    
+    # Update the schedule in database
+    # This modifies slot_assignments to swap the employees
+    try:
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        if db_business:
+            week_id = swap_request.week_start_date.strftime('%Y-W%V')
+            db_schedule = DBSchedule.query.filter_by(
+                business_db_id=db_business.id,
+                week_id=week_id,
+                status='published'
+            ).first()
+            
+            if db_schedule:
+                import json
+                schedule_data = json.loads(db_schedule.schedule_json) if db_schedule.schedule_json else {}
+                slot_assignments = schedule_data.get('slot_assignments', {})
+                
+                role_id = swap_request.original_role_id or 'staff'
+                
+                # Remove requester from original shift, add accepter
+                for hour in range(swap_request.original_start_hour, swap_request.original_end_hour):
+                    # Try both key formats: string "day,hour" and list [day, hour]
+                    slot_key = f"{swap_request.original_day},{hour}"
+                    list_key = [swap_request.original_day, hour]
+                    
+                    # Check which format is used
+                    actual_key = None
+                    if slot_key in slot_assignments:
+                        actual_key = slot_key
+                    
+                    if actual_key:
+                        current_assignments = slot_assignments[actual_key]
+                        # Remove requester - handle both tuple and dict formats
+                        new_assignments = []
+                        for a in current_assignments:
+                            if isinstance(a, (list, tuple)):
+                                if a[0] != swap_request.requester_employee_id:
+                                    new_assignments.append(a)
+                            elif isinstance(a, dict):
+                                if a.get('employee_id') != swap_request.requester_employee_id:
+                                    new_assignments.append(a)
+                        
+                        # Add accepter in the same format
+                        if current_assignments and isinstance(current_assignments[0], (list, tuple)):
+                            new_assignments.append([employee_id, role_id])
+                        else:
+                            accepter_info = {'employee_id': employee_id, 'role_id': role_id}
+                            for emp in business.employees:
+                                if emp.id == employee_id:
+                                    accepter_info['employee_name'] = emp.name
+                                    accepter_info['color'] = emp.color
+                                    break
+                            new_assignments.append(accepter_info)
+                        
+                        slot_assignments[actual_key] = new_assignments
+                    else:
+                        # Key doesn't exist, create new assignment
+                        slot_assignments[slot_key] = [[employee_id, role_id]]
+                
+                # If there's a swap shift, swap those too
+                if swap_shift:
+                    swap_role_id = swap_shift.get('role_id') or 'staff'
+                    for hour in range(swap_shift['start_hour'], swap_shift['end_hour']):
+                        slot_key = f"{swap_shift['day']},{hour}"
+                        
+                        if slot_key in slot_assignments:
+                            current_assignments = slot_assignments[slot_key]
+                            new_assignments = []
+                            for a in current_assignments:
+                                if isinstance(a, (list, tuple)):
+                                    if a[0] != employee_id:
+                                        new_assignments.append(a)
+                                elif isinstance(a, dict):
+                                    if a.get('employee_id') != employee_id:
+                                        new_assignments.append(a)
+                            
+                            # Add requester
+                            if current_assignments and isinstance(current_assignments[0], (list, tuple)):
+                                new_assignments.append([swap_request.requester_employee_id, swap_role_id])
+                            else:
+                                requester_info = {'employee_id': swap_request.requester_employee_id, 'role_id': swap_role_id}
+                                for emp in business.employees:
+                                    if emp.id == swap_request.requester_employee_id:
+                                        requester_info['employee_name'] = emp.name
+                                        requester_info['color'] = emp.color
+                                        break
+                                new_assignments.append(requester_info)
+                            
+                            slot_assignments[slot_key] = new_assignments
+                
+                # Save updated schedule
+                schedule_data['slot_assignments'] = slot_assignments
+                db_schedule.schedule_json = json.dumps(schedule_data)
+                db.session.add(db_schedule)
+                print(f"Schedule updated: removed {swap_request.requester_employee_id}, added {employee_id}")
+    except Exception as e:
+        import traceback
+        print(f"Warning: Could not update schedule: {e}")
+        traceback.print_exc()
+    
+    db.session.commit()
+    
+    # Send notification to requester
+    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    shift_details = f"{day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)}"
+    swap_shift_details = None
+    if swap_shift:
+        swap_shift_details = f"{day_names[swap_shift['day']]} {format_shift_time(swap_shift['start_hour'], swap_shift['end_hour'])}"
+    
+    # Get names and emails
+    requester = None
+    accepter = None
+    for emp in business.employees:
+        if emp.id == swap_request.requester_employee_id:
+            requester = emp
+        if emp.id == employee_id:
+            accepter = emp
+    
+    if requester and requester.email:
+        try:
+            email_service = get_email_service()
+            if email_service.is_configured():
+                business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
+                base_url = get_site_url()
+                portal_url = f"{base_url}/employee/{business_slug}/{requester.id}/schedule"
+                
+                email_service.send_swap_response_notification(
+                    to_email=requester.email,
+                    requester_name=requester.name,
+                    responder_name=accepter.name if accepter else 'Unknown',
+                    business_name=business_name,
+                    shift_details=shift_details,
+                    response='accepted',
+                    swap_shift_details=swap_shift_details,
+                    portal_url=portal_url
+                )
+        except Exception as e:
+            print(f"Warning: Could not send acceptance notification: {e}")
+    
+    return jsonify({
+        'success': True,
+        'message': 'Swap request accepted! The schedule has been updated.',
+        'swap_request': swap_request.to_dict()
+    })
+
+
+@app.route('/api/employee/<business_slug>/<employee_id>/swap-request/<request_id>/cancel', methods=['POST'])
+def cancel_swap_request(business_slug, employee_id, request_id):
+    """Cancel a swap request (only by the requester)."""
+    business = get_business_by_slug(business_slug, force_reload=True)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
+    
+    # Find the swap request
+    swap_request = ShiftSwapRequest.query.filter_by(request_id=request_id).first()
+    if not swap_request:
+        return jsonify({'success': False, 'message': 'Swap request not found'}), 404
+    
+    # Only requester can cancel
+    if swap_request.requester_employee_id != employee_id:
+        return jsonify({'success': False, 'message': 'Only the requester can cancel'}), 403
+    
+    if swap_request.status != 'pending':
+        return jsonify({'success': False, 'message': f'Cannot cancel - request is already {swap_request.status}'}), 400
+    
+    swap_request.status = 'cancelled'
+    swap_request.resolved_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Swap request cancelled'
+    })
+
+
+@app.route('/api/employee/<business_slug>/<employee_id>/eligible-for-swap', methods=['GET'])
+def get_eligible_for_swap(business_slug, employee_id):
+    """Get list of eligible employees for a potential swap (preview before creating request)."""
+    business = get_business_by_slug(business_slug, force_reload=True)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
+    
+    # Get query params
+    shift_day = request.args.get('day', type=int)
+    shift_start = request.args.get('start_hour', type=int)
+    shift_end = request.args.get('end_hour', type=int)
+    shift_role = request.args.get('role_id')
+    week_start_str = request.args.get('week_start')
+    
+    if shift_day is None or shift_start is None or shift_end is None or not week_start_str:
+        return jsonify({'success': False, 'message': 'Missing required parameters'}), 400
+    
+    try:
+        week_start = date.fromisoformat(week_start_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Invalid week_start date format'}), 400
+    
+    eligible = get_eligible_employees_for_swap(
+        business, employee_id, shift_day, shift_start, shift_end, shift_role, week_start
+    )
+    
+    return jsonify({
+        'success': True,
+        'eligible': eligible,
+        'total_count': len(eligible),
+        'pickup_count': len([e for e in eligible if e['eligibility_type'] == 'pickup']),
+        'swap_only_count': len([e for e in eligible if e['eligibility_type'] == 'swap_only'])
     })
 
 
