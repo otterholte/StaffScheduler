@@ -1113,14 +1113,17 @@ def get_swap_requests(business_slug, employee_id):
     """Get swap requests - both incoming (to respond to) and outgoing (created by employee)."""
     import traceback
     print(f"\n[DEBUG] get_swap_requests called: business_slug={business_slug}, employee_id={employee_id}")
+    debug_step = "start"
     
     try:
+        debug_step = "get_business"
         business = get_business_by_slug(business_slug, force_reload=True)
         if not business:
             print(f"[DEBUG] Business not found: {business_slug}")
             return jsonify({'success': False, 'message': 'Business not found'}), 404
         print(f"[DEBUG] Business found: {business.name}, id={business.id}")
         
+        debug_step = "get_db_business"
         # Get business DB ID
         from db_service import get_db_business
         db_business = get_db_business(business.id)
@@ -1133,11 +1136,13 @@ def get_swap_requests(business_slug, employee_id):
             })
         print(f"[DEBUG] DB Business found: db_id={db_business.id}")
         
+        debug_step = "get_db_employee"
         # Look up the string employee model ID from the DB integer ID
         db_employee = DBEmployee.query.get(employee_id)
         employee_model_id = db_employee.employee_id if db_employee else None
         print(f"[DEBUG] DBEmployee lookup: db_id={employee_id} -> employee_model_id={employee_model_id}")
         
+        debug_step = "query_outgoing"
         # Get outgoing requests (created by this employee) - check both DB ID (as string) and model ID
         print(f"[DEBUG] Querying outgoing requests with requester_employee_id='{employee_id}' (as string)")
         outgoing = ShiftSwapRequest.query.filter_by(
@@ -1146,6 +1151,7 @@ def get_swap_requests(business_slug, employee_id):
         ).order_by(ShiftSwapRequest.created_at.desc()).all()
         print(f"[DEBUG] Found {len(outgoing)} outgoing requests")
         
+        debug_step = "query_incoming"
         # Get incoming requests (where this employee is a recipient)
         # Recipients store string model IDs like "maria_0"
         print(f"[DEBUG] Querying incoming recipients with employee_id='{employee_model_id}'")
@@ -1187,18 +1193,22 @@ def get_swap_requests(business_slug, employee_id):
                 })
         print(f"[DEBUG] Final incoming count: {len(incoming)}")
         
+        debug_step = "process_outgoing"
         # Get employee info for outgoing requests
         outgoing_data = []
-        for req in outgoing:
+        for i, req in enumerate(outgoing):
+            debug_step = f"process_outgoing_{i}_to_dict"
             req_dict = req.to_dict()
             # Add recipient names
             recipients_with_names = []
+            debug_step = f"process_outgoing_{i}_recipients"
             for r in req.recipients:
                 emp = None
                 for e in business.employees:
                     if e.id == r.employee_id:
                         emp = e
                         break
+                debug_step = f"process_outgoing_{i}_recipient_to_dict"
                 recipients_with_names.append({
                     **r.to_dict(),
                     'employee_name': emp.name if emp else 'Unknown'
@@ -1213,9 +1223,14 @@ def get_swap_requests(business_slug, employee_id):
             'incoming': incoming
         })
     except Exception as e:
-        print(f"[ERROR] get_swap_requests crashed: {e}")
+        print(f"[ERROR] get_swap_requests crashed at step '{debug_step}': {e}")
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e), 'traceback': traceback.format_exc()}), 500
+        return jsonify({
+            'success': False, 
+            'error': str(e), 
+            'failed_at_step': debug_step,
+            'traceback': traceback.format_exc()
+        }), 500
 
 
 @app.route('/api/employee/<business_slug>/<int:employee_id>/swap-request', methods=['POST'])
