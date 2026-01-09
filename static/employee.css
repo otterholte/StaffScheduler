@@ -579,55 +579,44 @@ body.employee-view {
     min-height: 400px;
 }
 
-.employee-timeline .timeline-row {
-    position: relative;
-}
-
-.employee-timeline .shift-block {
+/* Timeline shift blocks for employee view - these use the same structure as manager */
+.employee-view .timeline-shift-block {
     position: absolute;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 36px;
+    top: 2px;
+    height: calc(100% - 4px);
     border-radius: 6px;
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.7rem;
+    align-items: center;
+    padding: 0 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
     color: white;
     overflow: hidden;
     cursor: default;
     transition: opacity 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
+    margin-right: 1px;
 }
 
-.employee-timeline .shift-block .shift-name {
-    font-weight: 600;
-    white-space: nowrap;
+.employee-view .timeline-shift-block .shift-name {
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 100%;
-}
-
-.employee-timeline .shift-block .shift-time-small {
-    font-size: 0.6rem;
-    opacity: 0.9;
     white-space: nowrap;
 }
 
 /* Highlight current employee's shifts */
-.employee-timeline .shift-block.my-shift {
+.employee-view .timeline-shift-block.my-shift {
     border: 2px solid var(--employee-accent);
     box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
     z-index: 20 !important;
 }
 
 /* Dim other employees' shifts in the full view */
-.employee-timeline .shift-block.other-shift {
+.employee-view .timeline-shift-block.other-shift {
     opacity: 0.5;
 }
 
-.employee-timeline .shift-block.other-shift:hover {
+.employee-view .timeline-shift-block.other-shift:hover {
     opacity: 0.8;
 }
 
@@ -657,6 +646,35 @@ body.employee-view {
     text-align: center;
 }
 
+/* Day header with date */
+.employee-view .schedule-grid th .day-name {
+    display: block;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.employee-view .schedule-grid th .day-date {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-top: 1px;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+/* Alternating day column backgrounds */
+.employee-view .schedule-grid th.day-even,
+.employee-view .schedule-grid .slot.day-even {
+    background: #2c304e;
+}
+
+.employee-view .schedule-grid th.day-odd,
+.employee-view .schedule-grid .slot.day-odd {
+    background: #3e4269;
+}
+
 .employee-view .schedule-grid .time-col {
     width: 60px;
     text-align: right;
@@ -672,7 +690,6 @@ body.employee-view {
 }
 
 .employee-view .schedule-grid .slot {
-    background: var(--bg-secondary);
     border-radius: 4px;
     height: 32px;
     min-width: 80px;
@@ -693,13 +710,14 @@ body.employee-view {
     align-items: center;
     justify-content: center;
     padding: 0.25rem;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: white;
     overflow: hidden;
     pointer-events: auto;
     cursor: default;
     transition: opacity 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
 }
 
 .employee-view .schedule-shift-block .shift-name {
@@ -724,106 +742,45 @@ body.employee-view {
     opacity: 0.8;
 }
 
-/* Employee Shift List (Table View) */
-.employee-shift-list {
-    padding: 1rem;
+/* Employee Table View */
+.employee-view .simple-table-wrapper {
+    overflow-x: auto;
+    padding: 0.5rem;
 }
 
-.shift-list-day {
-    margin-bottom: 1.5rem;
+/* Highlight my row in table view */
+.employee-view .simple-schedule-table tr.my-row {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.12) 0%, transparent 30%);
 }
 
-.shift-list-day-header {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 0.75rem;
-}
-
-.shift-list-item {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1rem;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    margin-bottom: 0.5rem;
-    transition: all 0.2s ease;
-}
-
-/* Highlight my shifts in list view */
-.shift-list-item.my-shift {
+.employee-view .simple-schedule-table tr.my-row td:first-child {
     border-left: 3px solid var(--employee-accent);
-    background: linear-gradient(90deg, rgba(16, 185, 129, 0.08) 0%, var(--bg-secondary) 50%);
 }
 
-/* Dim other shifts in list view */
-.shift-list-item.other-shift {
-    opacity: 0.7;
+.employee-view .simple-schedule-table tr.my-row .emp-name span:last-child {
+    font-weight: 700;
 }
 
-.shift-list-item.other-shift:hover {
-    opacity: 1;
+.employee-view .simple-schedule-table tr.my-row .total-hours {
+    color: var(--employee-accent);
+    font-weight: 700;
 }
 
-.shift-list-employee {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    min-width: 120px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-primary);
-}
-
-.shift-list-employee .employee-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-
-.shift-list-time {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-primary);
-    min-width: 110px;
-}
-
-.shift-list-role {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.shift-list-role-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-}
-
-.shift-list-role-name {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
-.shift-list-duration {
-    margin-left: auto;
-    font-size: 0.85rem;
-    color: var(--text-tertiary);
-    font-family: 'JetBrains Mono', monospace;
-}
-
-.no-shifts-day {
-    color: var(--text-tertiary);
-    font-size: 0.85rem;
+/* No data message */
+.employee-view .simple-schedule-table .no-data {
+    text-align: center;
+    color: var(--text-muted);
     font-style: italic;
-    padding: 0.5rem 0;
+    padding: 2rem;
+}
+
+/* Placeholder rows for empty table */
+.employee-view .simple-schedule-table .placeholder-row {
+    height: 48px;
+}
+
+.employee-view .simple-schedule-table .placeholder-row td {
+    border-bottom: 1px solid var(--border-subtle);
 }
 
 /* ==================== RESPONSIVE ==================== */

@@ -101,7 +101,7 @@
                                             </svg>
                                             Grid
                                         </button>
-                                        <button class="view-toggle-btn" data-view="table" title="Simple List View">
+                                        <button class="view-toggle-btn" data-view="table" title="Table View">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <line x1="8" y1="6" x2="21" y2="6"></line>
                                                 <line x1="8" y1="12" x2="21" y2="12"></line>
@@ -110,7 +110,7 @@
                                                 <line x1="3" y1="12" x2="3.01" y2="12"></line>
                                                 <line x1="3" y1="18" x2="3.01" y2="18"></line>
                                             </svg>
-                                            List
+                                            Table
                                         </button>
                                     </div>
                                 </div>
@@ -167,11 +167,7 @@
                                         <thead>
                                             <tr>
                                                 <th class="time-col">Time</th>
-                                                {% for day in days %}
-                                                {% if loop.index0 in days_open %}
-                                                <th>{{ day[:3] }}</th>
-                                                {% endif %}
-                                                {% endfor %}
+                                                <!-- Day columns rebuilt by JS with dates -->
                                             </tr>
                                         </thead>
                                         <tbody id="scheduleGridBody">
@@ -184,10 +180,21 @@
                                 </div>
                             </div>
                             
-                            <!-- List View (Simple text list) -->
+                            <!-- Table View (Simple table like manager view) -->
                             <div class="schedule-view schedule-view-table" id="scheduleViewTable">
-                                <div class="employee-shift-list" id="employeeShiftList">
-                                    <!-- Populated by JS -->
+                                <div class="simple-table-wrapper">
+                                    <table class="simple-schedule-table" id="simpleScheduleTable">
+                                        <thead>
+                                            <tr>
+                                                <th class="name-col">Name</th>
+                                                <!-- Day columns rebuilt by JS with dates -->
+                                                <th class="hours-col">Hours</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="simpleScheduleBody">
+                                            <!-- Populated by JS -->
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                             

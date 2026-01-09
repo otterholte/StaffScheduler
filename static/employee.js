@@ -61,25 +61,37 @@ function formatTimeRange(startHour, endHour) {
 }
 
 function getWeekDates(offset = 0) {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - dayOfWeek + (offset * 7));
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
     
-    const dates = [];
+    // Calculate Monday of current week
+    // If today is Sunday (0), go back 6 days to get Monday
+    // Otherwise, go back (dayOfWeek - 1) days
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - daysToMonday + (offset * 7));
+    monday.setHours(0, 0, 0, 0);
+    
+    // Generate all 7 days of the week (Mon-Sun)
+    const weekDates = [];
     for (let i = 0; i < 7; i++) {
-        const date = new Date(startOfWeek);
-        date.setDate(startOfWeek.getDate() + i);
-        dates.push(date);
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        weekDates.push(date);
     }
-    return dates;
+    return weekDates;
 }
 
 function formatDateRange(dates) {
-    const options = { month: 'short', day: 'numeric' };
-    const start = dates[0].toLocaleDateString('en-US', options);
-    const end = dates[6].toLocaleDateString('en-US', { ...options, year: 'numeric' });
-    return `${start} - ${end}`;
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monday = dates[0];
+    const sunday = dates[6];
+    
+    if (monday.getMonth() === sunday.getMonth()) {
+        return `${months[monday.getMonth()]} ${monday.getDate()} - ${sunday.getDate()}, ${sunday.getFullYear()}`;
+    } else {
+        return `${months[monday.getMonth()]} ${monday.getDate()} - ${months[sunday.getMonth()]} ${sunday.getDate()}, ${sunday.getFullYear()}`;
+    }
 }
 
 function showToast(message, type = 'info') {
@@ -213,74 +225,212 @@ function renderScheduleView() {
 }
 
 // ==================== TIMELINE VIEW ====================
+function formatShortDate(date) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[date.getMonth()]} ${date.getDate()}`;
+}
+
 function renderTimelineView() {
-    const grid = document.getElementById('timelineGrid');
-    if (!grid) return;
+    const container = document.getElementById('timelineGrid');
+    if (!container) return;
+    
+    container.innerHTML = '';
     
     const dates = getWeekDates(employeeState.weekOffset);
     const schedule = employeeState.schedule;
     const myId = employeeState.employee.id;
     const showEveryone = employeeState.filterMode === 'everyone';
+    const slotAssignments = schedule?.slot_assignments || {};
     
     // Calculate hours span
     const startHour = employeeState.startHour;
     const endHour = employeeState.endHour;
     const totalHours = endHour - startHour;
     
-    let html = '';
+    // Build header row with hours
+    const headerDiv = document.createElement('div');
+    headerDiv.className = 'timeline-header';
     
-    // Header row with hours
-    html += '<div class="timeline-header">';
-    html += '<div class="timeline-day-label"></div>';
-    for (let h = startHour; h < endHour; h++) {
-        html += `<div class="timeline-hour-label">${formatTime(h)}</div>`;
-    }
-    html += '</div>';
+    // Day column header
+    const dayLabelHeader = document.createElement('div');
+    dayLabelHeader.className = 'timeline-header-day';
+    dayLabelHeader.textContent = 'Day';
+    headerDiv.appendChild(dayLabelHeader);
     
-    // Day rows
-    employeeState.daysOpen.forEach((dayIdx, i) => {
-        const date = dates[dayIdx];
-        const dayName = DAYS_SHORT[dayIdx];
-        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        
-        html += `<div class="timeline-row" data-day="${dayIdx}">`;
-        html += `<div class="timeline-day-label">
-            <span class="day-name">${dayName}</span>
-            <span class="day-date">${dateStr}</span>
-        </div>`;
-        html += '<div class="timeline-day-content">';
-        
-        // Hour slots background
-        for (let h = startHour; h < endHour; h++) {
-            html += `<div class="timeline-hour-slot" data-hour="${h}"></div>`;
-        }
-        
-        // Render shifts for this day
-        if (schedule && schedule.slot_assignments) {
-            const shifts = showEveryone ? getAllShiftsForDay(schedule, dayIdx) : getMyShiftsForDay(schedule, dayIdx);
-            shifts.forEach(shift => {
-                const left = ((shift.start - startHour) / totalHours) * 100;
-                const width = ((shift.end - shift.start) / totalHours) * 100;
-                const role = roleMap[shift.role] || {};
-                const emp = employeeMap[shift.employeeId] || {};
-                const isMine = shift.employeeId === myId;
-                
-                const shiftClass = isMine ? 'shift-block my-shift' : 'shift-block other-shift';
-                const bgColor = role.color || emp.color || '#6366f1';
-                
-                const shortName = emp.name ? (emp.name.length > 6 ? emp.name.substring(0, 5) + '…' : emp.name) : '';
-                
-                html += `<div class="${shiftClass}" style="left: ${left}%; width: ${width}%; background: ${bgColor}" title="${emp.name || ''}\n${role.name || 'Shift'}\n${formatTimeRange(shift.start, shift.end)}">
-                    <span class="shift-name">${shortName}</span>
-                    <span class="shift-time-small">${formatTimeRange(shift.start, shift.end)}</span>
-                </div>`;
-            });
-        }
-        
-        html += '</div></div>';
+    const hoursHeader = document.createElement('div');
+    hoursHeader.className = 'timeline-header-hours';
+    
+    employeeState.hours.forEach(hour => {
+        const hourLabel = document.createElement('div');
+        hourLabel.className = 'timeline-hour-label';
+        hourLabel.textContent = formatTime(hour);
+        hoursHeader.appendChild(hourLabel);
     });
     
-    grid.innerHTML = html;
+    // Add the closing hour label
+    const closingLabel = document.createElement('div');
+    closingLabel.className = 'timeline-hour-label timeline-closing-hour';
+    closingLabel.textContent = formatTime(endHour);
+    hoursHeader.appendChild(closingLabel);
+    
+    headerDiv.appendChild(hoursHeader);
+    container.appendChild(headerDiv);
+    
+    // Build a row for each day
+    employeeState.daysOpen.forEach(dayIdx => {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'timeline-row ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
+        rowDiv.dataset.dayIdx = dayIdx;
+        
+        // Day label with date
+        const dayLabel = document.createElement('div');
+        dayLabel.className = 'timeline-day-label';
+        const dayDate = dates[dayIdx];
+        dayLabel.innerHTML = `
+            <span class="day-name">${employeeState.days[dayIdx].substring(0, 3)}</span>
+            <span class="day-date">${formatShortDate(dayDate)}</span>
+        `;
+        rowDiv.appendChild(dayLabel);
+        
+        // Slots container
+        const slotsDiv = document.createElement('div');
+        slotsDiv.className = 'timeline-slots';
+        slotsDiv.dataset.dayIdx = dayIdx;
+        
+        // Build shift blocks for this day
+        const dayAssignments = {};
+        
+        // Gather all assignments for this day
+        employeeState.hours.forEach(hour => {
+            const key = `${dayIdx},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            assignments.forEach(assignment => {
+                const empId = assignment.employee_id;
+                
+                // Filter by mine/everyone
+                if (!showEveryone && empId !== myId) return;
+                
+                if (!dayAssignments[empId]) {
+                    dayAssignments[empId] = { hours: [], roleId: assignment.role_id };
+                }
+                dayAssignments[empId].hours.push(hour);
+            });
+        });
+        
+        // Convert to shift segments
+        const allShifts = [];
+        Object.entries(dayAssignments).forEach(([empId, data]) => {
+            const emp = employeeMap[empId];
+            if (!emp) return;
+            
+            const hours = data.hours.sort((a, b) => a - b);
+            
+            // Find continuous segments
+            let segStart = hours[0];
+            let prevHour = hours[0];
+            
+            for (let i = 1; i <= hours.length; i++) {
+                const currentHour = hours[i];
+                
+                const isGap = currentHour === undefined || currentHour !== prevHour + 1;
+                
+                if (isGap || i === hours.length) {
+                    allShifts.push({
+                        empId,
+                        emp,
+                        roleId: data.roleId,
+                        startHour: segStart,
+                        endHour: prevHour + 1
+                    });
+                    
+                    if (i < hours.length) {
+                        segStart = currentHour;
+                    }
+                }
+                prevHour = currentHour;
+            }
+        });
+        
+        // Assign shifts to rows (greedy algorithm)
+        const shiftRows = [];
+        allShifts.sort((a, b) => a.startHour - b.startHour);
+        
+        allShifts.forEach(shift => {
+            let placed = false;
+            for (let rowIdx = 0; rowIdx < shiftRows.length; rowIdx++) {
+                const rowShifts = shiftRows[rowIdx];
+                const hasOverlap = rowShifts.some(s => 
+                    shift.startHour < s.endHour && shift.endHour > s.startHour
+                );
+                if (!hasOverlap) {
+                    shift.row = rowIdx;
+                    rowShifts.push(shift);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                shift.row = shiftRows.length;
+                shiftRows.push([shift]);
+            }
+        });
+        
+        // Create row containers and render shifts
+        const numShiftRows = shiftRows.length || 1; // At least 1 empty row
+        
+        for (let rowIdx = 0; rowIdx < numShiftRows; rowIdx++) {
+            const rowContainer = document.createElement('div');
+            rowContainer.className = 'timeline-slots-row';
+            
+            // Add shifts for this row
+            const rowShifts = shiftRows[rowIdx] || [];
+            rowShifts.forEach(shift => {
+                const duration = shift.endHour - shift.startHour;
+                
+                const block = document.createElement('div');
+                block.className = 'timeline-shift-block';
+                
+                const isMine = shift.empId == myId;
+                if (isMine) {
+                    block.classList.add('my-shift');
+                } else {
+                    block.classList.add('other-shift');
+                }
+                
+                // Calculate percentage positions
+                const leftPercent = ((shift.startHour - startHour) / totalHours) * 100;
+                const widthPercent = (duration / totalHours) * 100;
+                block.style.left = `${leftPercent}%`;
+                block.style.width = `${widthPercent}%`;
+                
+                // Color based on role
+                const role = roleMap[shift.roleId];
+                const blockColor = role?.color || shift.emp.color || '#6366f1';
+                block.style.background = blockColor;
+                
+                // Tooltip
+                const roleName = role?.name || 'Staff';
+                block.title = `${shift.emp.name}\nRole: ${roleName}\n${formatTime(shift.startHour)} - ${formatTime(shift.endHour)}`;
+                
+                // Content
+                block.innerHTML = `<span class="shift-name">${shift.emp.name}</span>`;
+                
+                rowContainer.appendChild(block);
+            });
+            
+            slotsDiv.appendChild(rowContainer);
+        }
+        
+        // Ensure at least one empty row if no shifts
+        if (numShiftRows === 0) {
+            const emptyRow = document.createElement('div');
+            emptyRow.className = 'timeline-slots-row';
+            slotsDiv.appendChild(emptyRow);
+        }
+        
+        rowDiv.appendChild(slotsDiv);
+        container.appendChild(rowDiv);
+    });
 }
 
 function getAllShiftsForDay(schedule, dayIdx) {
@@ -389,14 +539,32 @@ function getMyShiftsForDay(schedule, dayIdx) {
 
 // ==================== GRID VIEW ====================
 function renderGridView() {
+    const grid = document.getElementById('scheduleGrid');
     const gridBody = document.getElementById('scheduleGridBody');
     const eventsContainer = document.getElementById('scheduleEvents');
-    if (!gridBody) return;
+    if (!grid || !gridBody) return;
     
     const dates = getWeekDates(employeeState.weekOffset);
     const schedule = employeeState.schedule;
     const myId = employeeState.employee.id;
     const showEveryone = employeeState.filterMode === 'everyone';
+    
+    // Rebuild header with dates
+    const thead = grid.querySelector('thead tr');
+    if (thead) {
+        thead.innerHTML = '<th class="time-col">Time</th>';
+        
+        employeeState.daysOpen.forEach((dayIdx, colIndex) => {
+            const th = document.createElement('th');
+            th.className = 'day-col ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
+            const dayDate = dates[dayIdx];
+            th.innerHTML = `
+                <span class="day-name">${employeeState.days[dayIdx].substring(0, 3)}</span>
+                <span class="day-date">${formatShortDate(dayDate)}</span>
+            `;
+            thead.appendChild(th);
+        });
+    }
     
     // Build grid body with time rows
     let html = '';
@@ -404,21 +572,25 @@ function renderGridView() {
         html += `<tr>`;
         html += `<td class="time-cell">${formatTime(hour)}</td>`;
         
-        employeeState.daysOpen.forEach((dayIdx) => {
-            html += `<td class="slot" data-day="${dayIdx}" data-hour="${hour}"></td>`;
+        employeeState.daysOpen.forEach((dayIdx, colIndex) => {
+            const cellClass = 'slot ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
+            html += `<td class="${cellClass}" data-day="${dayIdx}" data-hour="${hour}"></td>`;
         });
         
         html += `</tr>`;
     }
     gridBody.innerHTML = html;
     
-    // Clear and render shift blocks
+    // Clear and render shift blocks after DOM is updated
     if (eventsContainer) {
         eventsContainer.innerHTML = '';
         
-        if (schedule && schedule.slot_assignments) {
-            renderGridShifts(schedule, eventsContainer, showEveryone);
-        }
+        // Use setTimeout to ensure DOM is rendered before calculating positions
+        setTimeout(() => {
+            if (schedule && schedule.slot_assignments) {
+                renderGridShifts(schedule, eventsContainer, showEveryone);
+            }
+        }, 0);
     }
 }
 
@@ -445,7 +617,8 @@ function renderGridShifts(schedule, container, showEveryone) {
     // Build shift segments
     const shiftSegments = [];
     
-    employeeState.daysOpen.forEach((day, dayIdx) => {
+    // Process each day - use colIdx for column position
+    employeeState.daysOpen.forEach((day, colIdx) => {
         const empHours = {};
         
         employeeState.hours.forEach(hour => {
@@ -485,7 +658,7 @@ function renderGridShifts(schedule, container, showEveryone) {
                         employeeId,
                         roles: segmentRoles,
                         day,
-                        dayIdx,
+                        colIdx, // Use column index for positioning
                         startHour: segmentStart,
                         endHour: prevHour + 1
                     });
@@ -502,38 +675,38 @@ function renderGridShifts(schedule, container, showEveryone) {
         });
     });
     
-    // Assign columns for overlapping shifts
-    const blocksByDay = {};
-    employeeState.daysOpen.forEach((day, idx) => {
-        blocksByDay[idx] = shiftSegments.filter(s => s.dayIdx === idx);
+    // Assign columns for overlapping shifts within each day column
+    const blocksByCol = {};
+    employeeState.daysOpen.forEach((day, colIdx) => {
+        blocksByCol[colIdx] = shiftSegments.filter(s => s.colIdx === colIdx);
     });
     
-    Object.entries(blocksByDay).forEach(([dayIdx, blocks]) => {
-        dayIdx = parseInt(dayIdx);
+    Object.entries(blocksByCol).forEach(([colIdx, blocks]) => {
+        colIdx = parseInt(colIdx);
         blocks.sort((a, b) => a.startHour - b.startHour);
         
         const columns = [];
         blocks.forEach(block => {
             let placed = false;
-            for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-                const hasOverlap = columns[colIdx].some(s => 
+            for (let subColIdx = 0; subColIdx < columns.length; subColIdx++) {
+                const hasOverlap = columns[subColIdx].some(s => 
                     block.startHour < s.endHour && block.endHour > s.startHour
                 );
                 if (!hasOverlap) {
-                    block.column = colIdx;
-                    columns[colIdx].push(block);
+                    block.subColumn = subColIdx;
+                    columns[subColIdx].push(block);
                     placed = true;
                     break;
                 }
             }
             if (!placed) {
-                block.column = columns.length;
+                block.subColumn = columns.length;
                 columns.push([block]);
             }
         });
         
-        const numColumns = columns.length || 1;
-        blocks.forEach(b => b.totalColumns = numColumns);
+        const numSubColumns = columns.length || 1;
+        blocks.forEach(b => b.totalSubColumns = numSubColumns);
     });
     
     // Render shift blocks
@@ -541,12 +714,12 @@ function renderGridShifts(schedule, container, showEveryone) {
         const emp = employeeMap[segment.employeeId];
         if (!emp) return;
         
-        const isMine = segment.employeeId === myId;
+        const isMine = segment.employeeId == myId;
         const roleNames = Array.from(segment.roles)
             .map(roleId => roleMap[roleId]?.name || roleId)
             .join(', ');
         
-        // Get color
+        // Get color from role
         let color = emp.color || '#666';
         if (segment.roles.size > 0) {
             const firstRoleId = Array.from(segment.roles)[0];
@@ -558,93 +731,198 @@ function renderGridShifts(schedule, container, showEveryone) {
         
         const widthPadding = 6;
         const availableWidth = slotWidth - widthPadding;
-        const blockWidth = segment.totalColumns > 1 
-            ? (availableWidth / segment.totalColumns) - 1 
+        const blockWidth = segment.totalSubColumns > 1 
+            ? (availableWidth / segment.totalSubColumns) - 1 
             : availableWidth;
         
         const el = document.createElement('div');
         el.className = isMine ? 'schedule-shift-block my-shift' : 'schedule-shift-block other-shift';
         el.style.backgroundColor = color;
         
-        const leftPos = timeCellWidth + (segment.dayIdx * slotWidth) + (widthPadding / 2) + 
-            (segment.column * (blockWidth + 1));
+        // Use colIdx for column position (not day number)
+        const leftPos = timeCellWidth + (segment.colIdx * slotWidth) + (widthPadding / 2) + 
+            ((segment.subColumn || 0) * (blockWidth + 1));
         el.style.left = `${leftPos}px`;
         el.style.top = `${headerHeight + hourOffset * slotHeight + 2}px`;
         el.style.width = `${blockWidth}px`;
         el.style.height = `${duration * slotHeight - 4}px`;
-        el.style.zIndex = 10 + segment.column;
+        el.style.zIndex = 10 + (segment.subColumn || 0);
         
-        const shortName = emp.name.length > 5 ? emp.name.substring(0, 4) : emp.name;
-        el.innerHTML = `<span class="shift-name">${shortName}</span>`;
-        el.title = `${emp.name}\nRoles: ${roleNames}\n${formatHour(segment.startHour)} - ${formatHour(segment.endHour)}`;
+        el.innerHTML = `<span class="shift-name">${emp.name}</span>`;
+        el.title = `${emp.name}\nRoles: ${roleNames}\n${formatTime(segment.startHour)} - ${formatTime(segment.endHour)}`;
         
         container.appendChild(el);
     });
 }
 
-// ==================== TABLE/LIST VIEW ====================
+// ==================== TABLE VIEW ====================
 function renderTableView() {
-    const listContainer = document.getElementById('employeeShiftList');
-    if (!listContainer) return;
+    const tbody = document.getElementById('simpleScheduleBody');
+    const table = document.getElementById('simpleScheduleTable');
+    if (!tbody || !table) return;
     
     const dates = getWeekDates(employeeState.weekOffset);
     const schedule = employeeState.schedule;
     const myId = employeeState.employee.id;
     const showEveryone = employeeState.filterMode === 'everyone';
+    const slotAssignments = schedule?.slot_assignments || {};
     
-    let html = '';
-    let hasAnyShifts = false;
-    
-    employeeState.daysOpen.forEach((dayIdx) => {
-        const date = dates[dayIdx];
-        const dayName = DAYS_FULL[dayIdx];
-        const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    // Rebuild header with dates
+    const thead = table.querySelector('thead tr');
+    if (thead) {
+        const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
         
-        const shifts = schedule ? (showEveryone ? getAllShiftsForDay(schedule, dayIdx) : getMyShiftsForDay(schedule, dayIdx)) : [];
+        thead.innerHTML = '<th class="name-col">Name</th>';
         
-        // Sort shifts by start time, then by employee name
-        shifts.sort((a, b) => {
-            if (a.start !== b.start) return a.start - b.start;
-            const nameA = employeeMap[a.employeeId]?.name || '';
-            const nameB = employeeMap[b.employeeId]?.name || '';
-            return nameA.localeCompare(nameB);
-        });
-        
-        html += `<div class="shift-list-day">`;
-        html += `<div class="shift-list-day-header">${dayName}, ${dateStr}</div>`;
-        
-        if (shifts.length > 0) {
-            hasAnyShifts = true;
-            shifts.forEach(shift => {
-                const role = roleMap[shift.role] || {};
-                const emp = employeeMap[shift.employeeId] || {};
-                const duration = shift.end - shift.start;
-                const isMine = shift.employeeId === myId;
-                const itemClass = isMine ? 'shift-list-item my-shift' : 'shift-list-item other-shift';
-                
-                html += `<div class="${itemClass}">`;
-                if (showEveryone) {
-                    html += `<span class="shift-list-employee">
-                        <span class="employee-dot" style="background: ${emp.color || '#666'}"></span>
-                        ${emp.name || 'Unknown'}
-                    </span>`;
-                }
-                html += `<span class="shift-list-time">${formatTimeRange(shift.start, shift.end)}</span>
-                    <span class="shift-list-role">
-                        <span class="shift-list-role-dot" style="background: ${role.color || '#6366f1'}"></span>
-                        <span class="shift-list-role-name">${role.name || 'Shift'}</span>
-                    </span>
-                    <span class="shift-list-duration">${duration}h</span>
-                </div>`;
-            });
-        } else {
-            html += `<div class="no-shifts-day">No shifts scheduled</div>`;
+        // Add day columns with dates
+        for (let i = 0; i < 7; i++) {
+            const th = document.createElement('th');
+            th.className = i % 2 === 0 ? 'day-even' : 'day-odd';
+            th.innerHTML = `
+                <span class="day-name">${dayNames[i]}</span>
+                <span class="day-date">${formatShortDate(dates[i])}</span>
+            `;
+            thead.appendChild(th);
         }
         
-        html += `</div>`;
+        // Add hours column
+        const hoursCol = document.createElement('th');
+        hoursCol.className = 'hours-col';
+        hoursCol.textContent = 'Hours';
+        thead.appendChild(hoursCol);
+    }
+    
+    tbody.innerHTML = '';
+    
+    // Build employee schedule data
+    const employeeSchedules = {}; // { empId: { employee, days: { 0: [{start, end}], ... }, totalHours: 0 } }
+    
+    // Initialize for relevant employees
+    const relevantEmployees = showEveryone ? employeeState.allEmployees : [employeeState.employee];
+    relevantEmployees.forEach(emp => {
+        employeeSchedules[emp.id] = {
+            employee: emp,
+            days: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
+            totalHours: 0
+        };
     });
     
-    listContainer.innerHTML = html;
+    // Process slot assignments to build shift segments
+    for (let day = 0; day < 7; day++) {
+        const empHoursToday = {}; // { empId: [hours...] }
+        
+        employeeState.hours.forEach(hour => {
+            const key = `${day},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            
+            assignments.forEach(assignment => {
+                const empId = assignment.employee_id;
+                
+                // Filter by mine/everyone
+                if (!showEveryone && empId !== myId) return;
+                
+                if (!empHoursToday[empId]) {
+                    empHoursToday[empId] = [];
+                }
+                empHoursToday[empId].push(hour);
+            });
+        });
+        
+        // Convert hours to shift segments
+        Object.entries(empHoursToday).forEach(([empId, hours]) => {
+            if (!employeeSchedules[empId]) {
+                // Employee not in our list, add them
+                const emp = employeeMap[empId];
+                if (emp) {
+                    employeeSchedules[empId] = {
+                        employee: emp,
+                        days: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
+                        totalHours: 0
+                    };
+                } else {
+                    return;
+                }
+            }
+            
+            hours.sort((a, b) => a - b);
+            
+            let segStart = hours[0];
+            let prevHour = hours[0];
+            
+            for (let i = 1; i <= hours.length; i++) {
+                const currentHour = hours[i];
+                
+                if (currentHour !== prevHour + 1 || i === hours.length) {
+                    employeeSchedules[empId].days[day].push({
+                        start: segStart,
+                        end: prevHour + 1
+                    });
+                    employeeSchedules[empId].totalHours += (prevHour + 1 - segStart);
+                    
+                    if (i < hours.length) {
+                        segStart = currentHour;
+                    }
+                }
+                prevHour = currentHour;
+            }
+        });
+    }
+    
+    // Get employees with shifts
+    const employeesWithShifts = Object.values(employeeSchedules)
+        .filter(es => es.totalHours > 0)
+        .sort((a, b) => b.totalHours - a.totalHours);
+    
+    // If we have employees with shifts, render them
+    if (employeesWithShifts.length > 0) {
+        employeesWithShifts.forEach(empSchedule => {
+            const emp = empSchedule.employee;
+            const isMine = emp.id === myId || emp.id == myId;
+            const row = document.createElement('tr');
+            row.className = isMine ? 'my-row' : '';
+            
+            // Get role color for this employee
+            const empRoles = emp.roles || [];
+            const firstRoleId = empRoles[0];
+            const roleColor = roleMap[firstRoleId]?.color || emp.color || '#666';
+            
+            let html = `<td class="name-col"><div class="emp-name">
+                <span class="emp-color" style="background: ${roleColor}"></span>
+                <span>${emp.name}</span>
+            </div></td>`;
+            
+            for (let day = 0; day < 7; day++) {
+                const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
+                const shifts = empSchedule.days[day];
+                if (shifts.length === 0) {
+                    html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
+                } else {
+                    const shiftStrs = shifts.map(s => `<span class="shift-block">${formatTime(s.start)}-${formatTime(s.end)}</span>`).join('');
+                    html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
+                }
+            }
+            
+            html += `<td class="total-hours">${empSchedule.totalHours}h</td>`;
+            row.innerHTML = html;
+            tbody.appendChild(row);
+        });
+    } else {
+        // No shifts - show empty table structure with placeholder rows
+        // Add a few empty placeholder rows to maintain table appearance
+        for (let r = 0; r < 3; r++) {
+            const row = document.createElement('tr');
+            row.className = 'placeholder-row';
+            
+            let html = `<td class="name-col"></td>`;
+            for (let day = 0; day < 7; day++) {
+                const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
+                html += `<td class="shift-times ${dayClass}"></td>`;
+            }
+            html += `<td class="total-hours"></td>`;
+            row.innerHTML = html;
+            tbody.appendChild(row);
+        }
+    }
 }
 
 function updateHoursSummary() {
