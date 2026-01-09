@@ -537,6 +537,65 @@ function getMyShiftsForDay(schedule, dayIdx) {
     return shifts;
 }
 
+// Get continuous work periods for a day (merges consecutive hours regardless of role)
+function getMyContinuousShiftsForDay(schedule, dayIdx) {
+    const shifts = [];
+    const myId = employeeState.employee.id;
+    const slotAssignments = schedule?.slot_assignments || {};
+    
+    // Collect all hours and roles this employee works on this day
+    const hoursWorked = [];
+    const hourRoles = {}; // Track roles for each hour
+    
+    employeeState.hours.forEach(hour => {
+        const key = `${dayIdx},${hour}`;
+        const assignments = slotAssignments[key] || [];
+        
+        assignments.forEach(assignment => {
+            if (assignment.employee_id === myId || assignment.employee_id == myId) {
+                if (!hoursWorked.includes(hour)) {
+                    hoursWorked.push(hour);
+                }
+                // Track the role for this hour (use first role found)
+                if (!hourRoles[hour]) {
+                    hourRoles[hour] = assignment.role_id;
+                }
+            }
+        });
+    });
+    
+    if (hoursWorked.length === 0) return shifts;
+    
+    // Sort hours and group into continuous work periods
+    hoursWorked.sort((a, b) => a - b);
+    
+    let segmentStart = hoursWorked[0];
+    let prevHour = hoursWorked[0];
+    let segmentRole = hourRoles[hoursWorked[0]]; // Use first hour's role for the segment
+    
+    for (let i = 1; i <= hoursWorked.length; i++) {
+        const currentHour = hoursWorked[i];
+        
+        // If there's a gap or we're at the end, create a shift
+        if (currentHour !== prevHour + 1 || i === hoursWorked.length) {
+            shifts.push({
+                employeeId: myId,
+                start: segmentStart,
+                end: prevHour + 1,
+                role: segmentRole
+            });
+            
+            if (i < hoursWorked.length) {
+                segmentStart = currentHour;
+                segmentRole = hourRoles[currentHour];
+            }
+        }
+        prevHour = currentHour;
+    }
+    
+    return shifts;
+}
+
 // ==================== GRID VIEW ====================
 function renderGridView() {
     const grid = document.getElementById('scheduleGrid');
@@ -928,19 +987,49 @@ function renderTableView() {
 function updateHoursSummary() {
     const schedule = employeeState.schedule;
     const myId = employeeState.employee.id;
-    const showEveryone = employeeState.filterMode === 'everyone';
+    const slotAssignments = schedule?.slot_assignments || {};
     
     let totalHours = 0;
     let shiftCount = 0;
     
     if (schedule) {
+        // Count shifts by finding continuous work periods (regardless of role)
         employeeState.daysOpen.forEach(dayIdx => {
-            // Always show MY hours in the summary, regardless of filter
-            const shifts = getMyShiftsForDay(schedule, dayIdx);
-            shifts.forEach(shift => {
-                totalHours += (shift.end - shift.start);
-                shiftCount++;
+            // Collect all hours this employee works on this day
+            const hoursWorked = [];
+            
+            employeeState.hours.forEach(hour => {
+                const key = `${dayIdx},${hour}`;
+                const assignments = slotAssignments[key] || [];
+                
+                // Check if employee is assigned to this hour (any role)
+                if (assignments.some(a => a.employee_id === myId || a.employee_id == myId)) {
+                    hoursWorked.push(hour);
+                }
             });
+            
+            if (hoursWorked.length === 0) return;
+            
+            // Sort hours and count continuous work periods
+            hoursWorked.sort((a, b) => a - b);
+            
+            let segmentStart = hoursWorked[0];
+            let prevHour = hoursWorked[0];
+            
+            for (let i = 1; i <= hoursWorked.length; i++) {
+                const currentHour = hoursWorked[i];
+                
+                // If there's a gap or we're at the end, count this as one shift
+                if (currentHour !== prevHour + 1 || i === hoursWorked.length) {
+                    totalHours += (prevHour + 1 - segmentStart);
+                    shiftCount++; // One continuous work period = one shift
+                    
+                    if (i < hoursWorked.length) {
+                        segmentStart = currentHour;
+                    }
+                }
+                prevHour = currentHour;
+            }
         });
     }
     
@@ -967,8 +1056,8 @@ function renderUpcomingShifts() {
         employeeState.daysOpen.forEach(dayIdx => {
             const date = dates[dayIdx];
             if (date >= today) {
-                // Only show MY upcoming shifts
-                const shifts = getMyShiftsForDay(schedule, dayIdx);
+                // Only show MY upcoming shifts - use continuous shifts to merge work periods
+                const shifts = getMyContinuousShiftsForDay(schedule, dayIdx);
                 shifts.forEach(shift => {
                     upcomingShifts.push({
                         ...shift,
