@@ -1796,20 +1796,26 @@ function updateNotificationDropdown() {
     if (pending.length === 0) {
         list.innerHTML = `
             <div class="notification-empty">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <path d="M8 12h8M12 8v8"></path>
-                </svg>
-                <div>No pending requests</div>
+                <p>You have no new notifications</p>
             </div>
         `;
         return;
     }
     
     list.innerHTML = pending.map(req => {
-        const requesterName = req.requester_name || 'Someone';
-        const dayName = employeeState.days[req.shift_day] || `Day ${req.shift_day}`;
-        const timeStr = `${formatTime(req.shift_start)} - ${formatTime(req.shift_end)}`;
+        // Get requester name - look up from allEmployees if needed
+        let requesterName = req.requester_name;
+        if (!requesterName || requesterName === 'Unknown') {
+            const requester = employeeState.allEmployees.find(e => 
+                e.db_id == req.requester_employee_id || e.id == req.requester_employee_id
+            );
+            requesterName = requester ? requester.name : 'A coworker';
+        }
+        
+        // Use correct field names from API (original_day, original_start_hour, original_end_hour)
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const dayName = dayNames[req.original_day] || `Day ${req.original_day}`;
+        const timeStr = `${formatTime(req.original_start_hour)} - ${formatTime(req.original_end_hour)}`;
         
         return `
             <div class="notification-item" onclick="showSwapResponseModal('${req.id}'); hideNotificationDropdown();">

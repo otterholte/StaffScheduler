@@ -1017,16 +1017,13 @@ def get_swap_requests(business_slug, employee_id):
         swap_req = recipient.swap_request
         # Only include if the request is for this business
         if swap_req.business_db_id == db_business.id and swap_req.status == 'pending':
-            # Get requester info
-            requester = None
-            for emp in business.employees:
-                if emp.id == swap_req.requester_employee_id:
-                    requester = emp
-                    break
+            # Get requester info - look up by DB ID
+            requester_db = DBEmployee.query.get(swap_req.requester_employee_id)
+            requester_name = requester_db.name if requester_db else 'Unknown'
             
             incoming.append({
                 **swap_req.to_dict(),
-                'requester_name': requester.name if requester else 'Unknown',
+                'requester_name': requester_name,
                 'my_response': recipient.response,
                 'my_eligibility_type': recipient.eligibility_type
             })

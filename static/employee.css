@@ -188,17 +188,15 @@ body.employee-view {
 }
 
 .notification-empty {
-    padding: 2rem;
+    padding: 1.5rem 1rem;
     text-align: center;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 0.85rem;
 }
 
-.notification-empty svg {
-    width: 40px;
-    height: 40px;
-    margin-bottom: 0.75rem;
-    opacity: 0.5;
+.notification-empty p {
+    margin: 0;
+    opacity: 0.7;
 }
 
 .employee-nav .nav-tab {
