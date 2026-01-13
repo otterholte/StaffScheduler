@@ -611,6 +611,59 @@ class SwapRequestRecipient(db.Model):
         }
 
 
+class PTORequest(db.Model):
+    """PTO / Time-off request from an employee."""
+    __tablename__ = 'pto_requests'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(db.String(20), unique=True, nullable=False, default=generate_uuid)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    employee_id = db.Column(db.String(50), nullable=False)
+    
+    # Date range for PTO (single day or multi-day)
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)  # Same as start_date for single days
+    
+    # Type: 'vacation', 'sick', 'personal', 'other'
+    pto_type = db.Column(db.String(20), default='vacation')
+    
+    # Status: 'pending', 'approved', 'denied', 'cancelled'
+    status = db.Column(db.String(20), default='pending')
+    
+    # Notes
+    employee_note = db.Column(db.Text, nullable=True)
+    manager_note = db.Column(db.Text, nullable=True)  # Reason for denial, etc.
+    
+    # Who reviewed it
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationships
+    business = db.relationship('DBBusiness', backref=db.backref('pto_requests', lazy=True))
+    reviewed_by = db.relationship('User', backref=db.backref('reviewed_pto_requests', lazy=True))
+    
+    def __repr__(self):
+        return f'<PTORequest {self.request_id} from {self.employee_id}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.request_id,
+            'employee_id': self.employee_id,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'pto_type': self.pto_type,
+            'status': self.status,
+            'employee_note': self.employee_note,
+            'manager_note': self.manager_note,
+            'reviewed_by_id': self.reviewed_by_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'reviewed_at': self.reviewed_at.isoformat() if self.reviewed_at else None
+        }
+
+
 def init_db(app):
     """Initialize the database with the Flask app."""
     db.init_app(app)

@@ -850,6 +850,412 @@ def employee_update_availability(employee_id):
     })
 
 
+# ==================== PTO REQUEST ENDPOINTS ====================
+
+@app.route('/api/employee/<business_slug>/<int:employee_id>/pto', methods=['GET'])
+def get_employee_pto_requests(business_slug, employee_id):
+    """Get all PTO requests for an employee."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        # Find the employee to get their string ID
+        from db_service import get_db_business
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        # Find the employee in the database
+        from models import DBEmployee, PTORequest
+        db_employee = DBEmployee.query.filter_by(
+            business_db_id=db_business.id,
+            id=employee_id
+        ).first()
+        
+        if not db_employee:
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        
+        # Get all PTO requests for this employee
+        pto_requests = PTORequest.query.filter_by(
+            business_db_id=db_business.id,
+            employee_id=db_employee.employee_id
+        ).order_by(PTORequest.start_date.desc()).all()
+        
+        return jsonify({
+            'success': True,
+            'pto_requests': [req.to_dict() for req in pto_requests]
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error getting PTO requests: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/employee/<business_slug>/<int:employee_id>/pto', methods=['POST'])
+def create_employee_pto_request(business_slug, employee_id):
+    """Create a new PTO request for an employee."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import DBEmployee, PTORequest
+        from datetime import datetime
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        # Find the employee in the database
+        db_employee = DBEmployee.query.filter_by(
+            business_db_id=db_business.id,
+            id=employee_id
+        ).first()
+        
+        if not db_employee:
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        
+        data = request.json
+        start_date_str = data.get('start_date')
+        end_date_str = data.get('end_date', start_date_str)  # Default to single day
+        pto_type = data.get('pto_type', 'vacation')
+        employee_note = data.get('note', '')
+        
+        if not start_date_str:
+            return jsonify({'success': False, 'error': 'Start date is required'}), 400
+        
+        # Parse dates
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        
+        if end_date < start_date:
+            return jsonify({'success': False, 'error': 'End date cannot be before start date'}), 400
+        
+        # Create the PTO request
+        pto_request = PTORequest(
+            business_db_id=db_business.id,
+            employee_id=db_employee.employee_id,
+            start_date=start_date,
+            end_date=end_date,
+            pto_type=pto_type,
+            employee_note=employee_note,
+            status='pending'
+        )
+        
+        db.session.add(pto_request)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'PTO request submitted',
+            'pto_request': pto_request.to_dict()
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error creating PTO request: {e}")
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/employee/<business_slug>/<int:employee_id>/pto/<request_id>', methods=['DELETE'])
+def cancel_employee_pto_request(business_slug, employee_id, request_id):
+    """Cancel a pending PTO request."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import DBEmployee, PTORequest
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        # Find the employee
+        db_employee = DBEmployee.query.filter_by(
+            business_db_id=db_business.id,
+            id=employee_id
+        ).first()
+        
+        if not db_employee:
+            return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        
+        # Find the PTO request
+        pto_request = PTORequest.query.filter_by(
+            request_id=request_id,
+            business_db_id=db_business.id,
+            employee_id=db_employee.employee_id
+        ).first()
+        
+        if not pto_request:
+            return jsonify({'success': False, 'error': 'PTO request not found'}), 404
+        
+        if pto_request.status != 'pending':
+            return jsonify({'success': False, 'error': 'Can only cancel pending requests'}), 400
+        
+        pto_request.status = 'cancelled'
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'PTO request cancelled'
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error cancelling PTO request: {e}")
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/<business_slug>/pto', methods=['GET'])
+@login_required
+def get_business_pto_requests(business_slug):
+    """Get all PTO requests for a business (manager view)."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import PTORequest, DBEmployee
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        # Get filter parameters
+        status_filter = request.args.get('status')  # 'pending', 'approved', 'denied', etc.
+        employee_id_filter = request.args.get('employee_id')
+        
+        query = PTORequest.query.filter_by(business_db_id=db_business.id)
+        
+        if status_filter:
+            query = query.filter_by(status=status_filter)
+        if employee_id_filter:
+            query = query.filter_by(employee_id=employee_id_filter)
+        
+        pto_requests = query.order_by(PTORequest.created_at.desc()).all()
+        
+        # Enrich with employee names
+        result = []
+        for req in pto_requests:
+            req_dict = req.to_dict()
+            # Find employee name
+            db_emp = DBEmployee.query.filter_by(
+                business_db_id=db_business.id,
+                employee_id=req.employee_id
+            ).first()
+            req_dict['employee_name'] = db_emp.name if db_emp else 'Unknown'
+            req_dict['employee_color'] = db_emp.color if db_emp else '#888888'
+            result.append(req_dict)
+        
+        return jsonify({
+            'success': True,
+            'pto_requests': result
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error getting business PTO requests: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/<business_slug>/pto/pending/count', methods=['GET'])
+@login_required
+def get_pending_pto_count(business_slug):
+    """Get count of pending PTO requests for badge display."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import PTORequest
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        count = PTORequest.query.filter_by(
+            business_db_id=db_business.id,
+            status='pending'
+        ).count()
+        
+        return jsonify({
+            'success': True,
+            'count': count
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/<business_slug>/pto/<request_id>/approve', methods=['PUT'])
+@login_required
+def approve_pto_request(business_slug, request_id):
+    """Approve a PTO request."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import PTORequest
+        from datetime import datetime
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        pto_request = PTORequest.query.filter_by(
+            request_id=request_id,
+            business_db_id=db_business.id
+        ).first()
+        
+        if not pto_request:
+            return jsonify({'success': False, 'error': 'PTO request not found'}), 404
+        
+        if pto_request.status != 'pending':
+            return jsonify({'success': False, 'error': 'Request has already been processed'}), 400
+        
+        pto_request.status = 'approved'
+        pto_request.reviewed_by_id = current_user.id
+        pto_request.reviewed_at = datetime.utcnow()
+        
+        data = request.json or {}
+        if data.get('note'):
+            pto_request.manager_note = data['note']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'PTO request approved',
+            'pto_request': pto_request.to_dict()
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error approving PTO request: {e}")
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/<business_slug>/pto/<request_id>/deny', methods=['PUT'])
+@login_required
+def deny_pto_request(business_slug, request_id):
+    """Deny a PTO request."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import PTORequest
+        from datetime import datetime
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        pto_request = PTORequest.query.filter_by(
+            request_id=request_id,
+            business_db_id=db_business.id
+        ).first()
+        
+        if not pto_request:
+            return jsonify({'success': False, 'error': 'PTO request not found'}), 404
+        
+        if pto_request.status != 'pending':
+            return jsonify({'success': False, 'error': 'Request has already been processed'}), 400
+        
+        pto_request.status = 'denied'
+        pto_request.reviewed_by_id = current_user.id
+        pto_request.reviewed_at = datetime.utcnow()
+        
+        data = request.json or {}
+        if data.get('note'):
+            pto_request.manager_note = data['note']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'PTO request denied',
+            'pto_request': pto_request.to_dict()
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error denying PTO request: {e}")
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/<business_slug>/pto/approved', methods=['GET'])
+def get_approved_pto_for_week(business_slug):
+    """Get approved PTO for a specific week (for schedule display)."""
+    try:
+        business = get_business_by_slug(business_slug)
+        if not business:
+            return jsonify({'success': False, 'error': 'Business not found'}), 404
+        
+        from db_service import get_db_business
+        from models import PTORequest, DBEmployee
+        from datetime import datetime, timedelta
+        
+        db_business = get_db_business(business.id)
+        if not db_business:
+            return jsonify({'success': False, 'error': 'Business not found in database'}), 404
+        
+        # Get week offset from params
+        week_offset = request.args.get('weekOffset', 0, type=int)
+        
+        # Calculate week start (Sunday) and end (Saturday)
+        today = datetime.now().date()
+        days_since_sunday = today.weekday() + 1 if today.weekday() != 6 else 0
+        week_start = today - timedelta(days=days_since_sunday) + timedelta(weeks=week_offset)
+        week_end = week_start + timedelta(days=6)
+        
+        # Get approved PTO that overlaps with this week
+        pto_requests = PTORequest.query.filter(
+            PTORequest.business_db_id == db_business.id,
+            PTORequest.status == 'approved',
+            PTORequest.start_date <= week_end,
+            PTORequest.end_date >= week_start
+        ).all()
+        
+        # Enrich with employee info
+        result = []
+        for req in pto_requests:
+            req_dict = req.to_dict()
+            db_emp = DBEmployee.query.filter_by(
+                business_db_id=db_business.id,
+                employee_id=req.employee_id
+            ).first()
+            req_dict['employee_name'] = db_emp.name if db_emp else 'Unknown'
+            req_dict['employee_color'] = db_emp.color if db_emp else '#888888'
+            req_dict['employee_db_id'] = db_emp.id if db_emp else None
+            result.append(req_dict)
+        
+        return jsonify({
+            'success': True,
+            'week_start': week_start.isoformat(),
+            'week_end': week_end.isoformat(),
+            'approved_pto': result
+        })
+    except Exception as e:
+        import traceback
+        print(f"Error getting approved PTO: {e}")
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ==================== DATABASE MIGRATION ====================
 
 @app.route('/api/admin/migrate-swap-columns')

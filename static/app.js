@@ -81,7 +81,9 @@ const state = {
     // Publish state tracking per week (keyed by week start date string)
     publishedWeeks: {}, // { 'YYYY-MM-DD': { published: true/false, editCount: 0 } }
     currentWeekHasSchedule: false,
-    currentWeekEditCount: 0
+    currentWeekEditCount: 0,
+    // Approved PTO for current week
+    approvedPTO: [] // [{ employee_id, employee_name, start_date, end_date, pto_type }]
 };
 
 // ==================== LOCAL STORAGE PERSISTENCE ====================
@@ -185,6 +187,9 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
         }
     }
     
+    // Load approved PTO for the current week
+    await loadApprovedPTOForWeek();
+    
     // Re-render the schedule view if requested
     if (renderAfterLoad && state.currentTab === 'schedule') {
         if (state.scheduleViewMode === 'timeline') {
@@ -197,6 +202,22 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
                 renderSchedule(state.currentSchedule);
             }
         }
+    }
+}
+
+async function loadApprovedPTOForWeek() {
+    try {
+        const response = await fetch(`/api/${state.business.id}/pto/approved?weekOffset=${state.weekOffset}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            state.approvedPTO = data.approved_pto || [];
+        } else {
+            state.approvedPTO = [];
+        }
+    } catch (error) {
+        console.warn('Could not load approved PTO:', error);
+        state.approvedPTO = [];
     }
 }
 
@@ -3220,6 +3241,63 @@ function renderSimpleTableView(schedule) {
         tbody.appendChild(row);
     }
     
+    // Render PTO rows
+    const weekDates = getWeekDates(state.weekOffset);
+    const ptoByEmployee = {};
+    
+    (state.approvedPTO || []).forEach(pto => {
+        const empKey = pto.employee_id;
+        if (!ptoByEmployee[empKey]) {
+            ptoByEmployee[empKey] = {
+                employee_name: pto.employee_name,
+                employee_color: pto.employee_color,
+                pto_type: pto.pto_type,
+                days: {}
+            };
+        }
+        
+        // Mark which days have PTO
+        for (let day = 0; day < 7; day++) {
+            const dayDate = weekDates[day];
+            const ptoStart = new Date(pto.start_date + 'T00:00:00');
+            const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+            
+            if (dayDate >= ptoStart && dayDate <= ptoEnd) {
+                ptoByEmployee[empKey].days[day] = pto.pto_type;
+            }
+        }
+    });
+    
+    // Render PTO rows
+    Object.entries(ptoByEmployee).forEach(([empId, ptoData]) => {
+        const hasPTODays = Object.keys(ptoData.days).length > 0;
+        if (!hasPTODays) return;
+        
+        const row = document.createElement('tr');
+        row.className = 'pto-row';
+        
+        const emoji = getPTOTypeEmoji(ptoData.pto_type);
+        let html = `<td class="name-col"><div class="emp-name">
+            <span class="emp-color" style="background: ${ptoData.employee_color || '#8b5cf6'}"></span>
+            <span>${ptoData.employee_name}</span>
+        </div></td>`;
+        
+        for (let day = 0; day < 7; day++) {
+            const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
+            if (ptoData.days[day]) {
+                html += `<td class="shift-times ${dayClass}">
+                    <span class="pto-shift">${emoji} ${capitalizeFirst(ptoData.days[day])}</span>
+                </td>`;
+            } else {
+                html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
+            }
+        }
+        
+        html += `<td class="total-hours">PTO</td>`;
+        row.innerHTML = html;
+        tbody.appendChild(row);
+    });
+    
     // Render employee rows
     Object.values(employeeSchedules)
         .filter(es => es.totalHours > 0)
@@ -4223,6 +4301,43 @@ function renderTimelineView(schedule) {
             emptyRow.addEventListener('mousedown', (e) => handleTimelineRowMouseDown(e, dayIdx, slotsDiv));
             
             slotsDiv.appendChild(emptyRow);
+        }
+        
+        // Add PTO blocks for this day
+        const dayDate = weekDates[dayIdx];
+        const dayDateStr = dayDate.toISOString().split('T')[0];
+        
+        const dayPTO = (state.approvedPTO || []).filter(pto => {
+            const ptoStart = new Date(pto.start_date + 'T00:00:00');
+            const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+            return dayDate >= ptoStart && dayDate <= ptoEnd;
+        });
+        
+        if (dayPTO.length > 0) {
+            const ptoRowContainer = document.createElement('div');
+            ptoRowContainer.className = 'timeline-slots-row timeline-pto-row';
+            ptoRowContainer.style.position = 'relative';
+            ptoRowContainer.style.minHeight = '32px';
+            
+            dayPTO.forEach(pto => {
+                const ptoBlock = document.createElement('div');
+                ptoBlock.className = 'timeline-pto-block';
+                ptoBlock.style.left = '0';
+                ptoBlock.style.width = '100%';
+                
+                const emoji = getPTOTypeEmoji(pto.pto_type);
+                const empName = pto.employee_name || 'Employee';
+                
+                ptoBlock.innerHTML = `
+                    <span class="pto-icon">${emoji}</span>
+                    <span class="pto-label">${empName} - ${capitalizeFirst(pto.pto_type)}</span>
+                `;
+                ptoBlock.title = `${empName}: ${capitalizeFirst(pto.pto_type)} (${pto.start_date} - ${pto.end_date})`;
+                
+                ptoRowContainer.appendChild(ptoBlock);
+            });
+            
+            slotsDiv.insertBefore(ptoRowContainer, slotsDiv.firstChild);
         }
         
         rowDiv.appendChild(slotsDiv);
@@ -5887,6 +6002,9 @@ function openAvailabilityEditor(empId) {
     }
     
     openModal('availabilityModal');
+    
+    // Load PTO requests for this employee
+    loadEmployeePTORequests(empId);
 }
 
 function toggleAvailabilitySimple(cell, select) {
@@ -5953,6 +6071,198 @@ async function saveAvailability() {
         }
     } catch (error) {
         showToast('Error saving availability', 'error');
+    }
+}
+
+// ==================== PTO REQUEST MANAGEMENT (Manager View) ====================
+let currentPTOEmployeeId = null;
+
+async function loadEmployeePTORequests(empId) {
+    currentPTOEmployeeId = empId;
+    const container = document.getElementById('managerPTOList');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="pto-loading">Loading requests...</div>';
+    
+    // Find the employee's db_id - we need to find it from the employee data
+    const emp = employeeMap[empId];
+    if (!emp) {
+        container.innerHTML = '<div class="manager-pto-empty">Employee not found</div>';
+        return;
+    }
+    
+    try {
+        // Get PTO requests for this employee
+        const response = await fetch(`/api/${state.business.id}/pto?employee_id=${empId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            renderManagerPTOList(data.pto_requests);
+        } else {
+            container.innerHTML = '<div class="manager-pto-empty">Failed to load requests</div>';
+        }
+    } catch (error) {
+        console.error('Error loading PTO requests:', error);
+        container.innerHTML = '<div class="manager-pto-empty">Failed to load requests</div>';
+    }
+}
+
+function renderManagerPTOList(requests) {
+    const container = document.getElementById('managerPTOList');
+    const badge = document.getElementById('ptoPendingBadge');
+    if (!container) return;
+    
+    // Filter out cancelled requests
+    const visibleRequests = requests.filter(req => req.status !== 'cancelled');
+    const pendingCount = visibleRequests.filter(req => req.status === 'pending').length;
+    
+    // Update badge
+    if (badge) {
+        if (pendingCount > 0) {
+            badge.textContent = pendingCount;
+            badge.style.display = 'inline-flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+    
+    if (visibleRequests.length === 0) {
+        container.innerHTML = `
+            <div class="manager-pto-empty">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="32" height="32">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                </svg>
+                No time off requests
+            </div>
+        `;
+        return;
+    }
+    
+    // Sort: pending first, then by date
+    visibleRequests.sort((a, b) => {
+        if (a.status === 'pending' && b.status !== 'pending') return -1;
+        if (a.status !== 'pending' && b.status === 'pending') return 1;
+        return new Date(b.created_at) - new Date(a.created_at);
+    });
+    
+    let html = '';
+    visibleRequests.forEach(req => {
+        const statusIcon = getPTOStatusIcon(req.status);
+        const typeEmoji = getPTOTypeEmoji(req.pto_type);
+        const dateRange = formatPTODateRange(req.start_date, req.end_date);
+        
+        html += `
+            <div class="manager-pto-item ${req.status}">
+                <div class="manager-pto-icon">${statusIcon}</div>
+                <div class="manager-pto-info">
+                    <div class="manager-pto-dates">${dateRange}</div>
+                    <div class="manager-pto-meta">
+                        <span class="manager-pto-type">${typeEmoji} ${capitalizeFirst(req.pto_type)}</span>
+                        <span class="manager-pto-status ${req.status}">${capitalizeFirst(req.status)}</span>
+                    </div>
+                    ${req.employee_note ? `<div class="manager-pto-note">"${req.employee_note}"</div>` : ''}
+                </div>
+                ${req.status === 'pending' ? `
+                    <div class="manager-pto-actions">
+                        <button class="btn-approve" onclick="approvePTORequest('${req.id}')">Approve</button>
+                        <button class="btn-deny" onclick="denyPTORequest('${req.id}')">Deny</button>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getPTOStatusIcon(status) {
+    switch (status) {
+        case 'pending': return '🟡';
+        case 'approved': return '🟢';
+        case 'denied': return '🔴';
+        case 'cancelled': return '⚪';
+        default: return '⚪';
+    }
+}
+
+function getPTOTypeEmoji(type) {
+    switch (type) {
+        case 'vacation': return '🌴';
+        case 'sick': return '🤒';
+        case 'personal': return '👤';
+        default: return '📋';
+    }
+}
+
+function formatPTODateRange(startDate, endDate) {
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (startDate === endDate) {
+        return `${months[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`;
+    } else if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+        return `${months[start.getMonth()]} ${start.getDate()}-${end.getDate()}, ${start.getFullYear()}`;
+    } else {
+        return `${months[start.getMonth()]} ${start.getDate()} - ${months[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+    }
+}
+
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+async function approvePTORequest(requestId) {
+    try {
+        const response = await fetch(`/api/${state.business.id}/pto/${requestId}/approve`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Time off request approved', 'success');
+            // Reload the PTO list
+            if (currentPTOEmployeeId) {
+                loadEmployeePTORequests(currentPTOEmployeeId);
+            }
+        } else {
+            showToast(data.error || 'Failed to approve request', 'error');
+        }
+    } catch (error) {
+        console.error('Error approving PTO request:', error);
+        showToast('Failed to approve request', 'error');
+    }
+}
+
+async function denyPTORequest(requestId) {
+    const note = prompt('Reason for denial (optional):');
+    
+    try {
+        const response = await fetch(`/api/${state.business.id}/pto/${requestId}/deny`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: note || '' })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Time off request denied', 'success');
+            // Reload the PTO list
+            if (currentPTOEmployeeId) {
+                loadEmployeePTORequests(currentPTOEmployeeId);
+            }
+        } else {
+            showToast(data.error || 'Failed to deny request', 'error');
+        }
+    } catch (error) {
+        console.error('Error denying PTO request:', error);
+        showToast('Failed to deny request', 'error');
     }
 }
 

@@ -217,9 +217,85 @@
                             <span class="save-status" id="saveStatus"></span>
                         </div>
                     </div>
+
+                    <!-- PTO Requests Section -->
+                    <div class="pto-requests-card panel-card">
+                        <div class="pto-header">
+                            <h3 class="card-title">
+                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
+                                </svg>
+                                Time Off Requests
+                            </h3>
+                            <button class="btn btn-sm btn-primary" id="newPtoRequestBtn">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                </svg>
+                                Request Time Off
+                            </button>
+                        </div>
+                        <div class="pto-requests-list" id="ptoRequestsList">
+                            <!-- Populated by JS -->
+                            <div class="pto-empty-state" id="ptoEmptyState">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+                                    <path d="M19 4H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"></path>
+                                    <path d="M16 2v4M8 2v4M3 10h18"></path>
+                                    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
+                                </svg>
+                                <p>No time off requests yet</p>
+                                <span>Click the button above to request time off</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- PTO Request Modal -->
+    <div class="modal-overlay" id="ptoRequestModal" style="display: none;">
+        <div class="modal-content pto-modal">
+            <div class="modal-header">
+                <h2>Request Time Off</h2>
+                <button class="modal-close" id="closePtoModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="pto-form-group">
+                    <label for="ptoStartDate">Start Date *</label>
+                    <input type="date" id="ptoStartDate" required>
+                </div>
+                
+                <div class="pto-form-group">
+                    <label for="ptoEndDate">End Date</label>
+                    <input type="date" id="ptoEndDate">
+                    <span class="form-hint">Leave blank for single day</span>
+                </div>
+                
+                <div class="pto-form-group">
+                    <label for="ptoType">Type</label>
+                    <select id="ptoType">
+                        <option value="vacation">🌴 Vacation</option>
+                        <option value="sick">🤒 Sick</option>
+                        <option value="personal">👤 Personal</option>
+                        <option value="other">📋 Other</option>
+                    </select>
+                </div>
+                
+                <div class="pto-form-group">
+                    <label for="ptoNote">Note (optional)</label>
+                    <textarea id="ptoNote" placeholder="Add any details about your request..." rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelPtoBtn">Cancel</button>
+                <button class="btn btn-primary" id="submitPtoBtn">Submit Request</button>
+            </div>
+        </div>
     </div>
 
     <!-- Pass data to JavaScript -->

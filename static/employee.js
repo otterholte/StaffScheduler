@@ -30,7 +30,9 @@ const employeeState = {
     eligibleStaff: [],
     selectedRecipients: [],
     currentSwapRequest: null,
-    selectedSwapShift: null
+    selectedSwapShift: null,
+    // Approved PTO for schedule display
+    approvedPTO: []
 };
 
 // Build lookup maps
@@ -232,9 +234,28 @@ async function loadScheduleData() {
         }
     }
     
+    // Load approved PTO for the week
+    await loadApprovedPTOForSchedule();
+    
     renderScheduleView();
     updateHoursSummary();
     renderUpcomingShifts();
+}
+
+async function loadApprovedPTOForSchedule() {
+    try {
+        const response = await fetch(`/api/${employeeState.businessSlug}/pto/approved?weekOffset=${employeeState.weekOffset}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            employeeState.approvedPTO = data.approved_pto || [];
+        } else {
+            employeeState.approvedPTO = [];
+        }
+    } catch (error) {
+        console.warn('Could not load approved PTO:', error);
+        employeeState.approvedPTO = [];
+    }
 }
 
 function renderScheduleView() {
@@ -1204,16 +1225,40 @@ function renderUpcomingShifts() {
         });
     }
     
+    // Add upcoming PTO
+    const currentEmpId = employeeState.employee.id;
+    const upcomingPTO = [];
+    
+    (employeeState.approvedPTO || []).forEach(pto => {
+        if (pto.employee_id !== currentEmpId) return;
+        
+        const ptoStart = new Date(pto.start_date + 'T00:00:00');
+        const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+        
+        // Check each day in the week
+        dates.forEach((date, dayIdx) => {
+            if (date >= today && date >= ptoStart && date <= ptoEnd) {
+                upcomingPTO.push({
+                    isPTO: true,
+                    date: date,
+                    dayIdx: dayIdx,
+                    pto_type: pto.pto_type
+                });
+            }
+        });
+    });
+    
     // Sort by date
     upcomingShifts.sort((a, b) => a.date - b.date);
+    upcomingPTO.sort((a, b) => a.date - b.date);
     
-    // Take first 5
+    // Take first 5 shifts
     const displayShifts = upcomingShifts.slice(0, 5);
     
-    // Clear existing shift items
-    listContainer.querySelectorAll('.upcoming-shift-item').forEach(el => el.remove());
+    // Clear existing shift items and PTO items
+    listContainer.querySelectorAll('.upcoming-shift-item, .upcoming-pto-item').forEach(el => el.remove());
     
-    if (displayShifts.length === 0) {
+    if (displayShifts.length === 0 && upcomingPTO.length === 0) {
         if (noShiftsMsg) noShiftsMsg.style.display = 'block';
         return;
     }
@@ -1267,12 +1312,42 @@ function renderUpcomingShifts() {
         </div>`;
     });
     
+    // Add PTO items
+    upcomingPTO.forEach(pto => {
+        const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
+        const typeLabel = capitalizeFirstEmployee(pto.pto_type);
+        
+        html += `<div class="upcoming-pto-item">
+            <div class="pto-date-badge">
+                <span class="day-name">${DAYS_SHORT[pto.dayIdx]}</span>
+                <span class="day-num">${pto.date.getDate()}</span>
+            </div>
+            <div class="pto-details">
+                <div class="pto-title">${emoji} Time Off</div>
+                <div class="pto-subtitle">${typeLabel}</div>
+            </div>
+        </div>`;
+    });
+    
     // Insert before no-shifts message
     if (noShiftsMsg) {
         noShiftsMsg.insertAdjacentHTML('beforebegin', html);
     } else {
         listContainer.innerHTML = html;
     }
+}
+
+function getPTOTypeEmojiEmployee(type) {
+    switch (type) {
+        case 'vacation': return '🌴';
+        case 'sick': return '🤒';
+        case 'personal': return '👤';
+        default: return '📋';
+    }
+}
+
+function capitalizeFirstEmployee(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
 // ==================== AVAILABILITY EDITOR ====================
@@ -2795,6 +2870,248 @@ async function cancelMySwapRequest(requestId) {
     }
 }
 
+// ==================== PTO REQUEST MANAGEMENT ====================
+const ptoState = {
+    requests: []
+};
+
+function initPTORequests() {
+    const ptoRequestsList = document.getElementById('ptoRequestsList');
+    if (!ptoRequestsList) return;
+    
+    // Setup modal controls
+    const newPtoBtn = document.getElementById('newPtoRequestBtn');
+    const ptoModal = document.getElementById('ptoRequestModal');
+    const closePtoModal = document.getElementById('closePtoModal');
+    const cancelPtoBtn = document.getElementById('cancelPtoBtn');
+    const submitPtoBtn = document.getElementById('submitPtoBtn');
+    
+    if (newPtoBtn) {
+        newPtoBtn.addEventListener('click', openPTORequestModal);
+    }
+    if (closePtoModal) {
+        closePtoModal.addEventListener('click', closePTOModal);
+    }
+    if (cancelPtoBtn) {
+        cancelPtoBtn.addEventListener('click', closePTOModal);
+    }
+    if (submitPtoBtn) {
+        submitPtoBtn.addEventListener('click', submitPTORequest);
+    }
+    
+    // Click outside modal to close
+    if (ptoModal) {
+        ptoModal.addEventListener('click', (e) => {
+            if (e.target === ptoModal) {
+                closePTOModal();
+            }
+        });
+    }
+    
+    // Set minimum date to today
+    const startDateInput = document.getElementById('ptoStartDate');
+    const endDateInput = document.getElementById('ptoEndDate');
+    if (startDateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        startDateInput.min = today;
+        startDateInput.addEventListener('change', () => {
+            if (endDateInput) {
+                endDateInput.min = startDateInput.value;
+            }
+        });
+    }
+    
+    // Load existing requests
+    loadPTORequests();
+}
+
+function openPTORequestModal() {
+    const modal = document.getElementById('ptoRequestModal');
+    if (!modal) return;
+    
+    // Reset form
+    document.getElementById('ptoStartDate').value = '';
+    document.getElementById('ptoEndDate').value = '';
+    document.getElementById('ptoType').value = 'vacation';
+    document.getElementById('ptoNote').value = '';
+    
+    modal.style.display = 'flex';
+}
+
+function closePTOModal() {
+    const modal = document.getElementById('ptoRequestModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function loadPTORequests() {
+    try {
+        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${employeeState.employee.db_id}/pto`);
+        const data = await response.json();
+        
+        if (data.success) {
+            ptoState.requests = data.pto_requests;
+            renderPTORequestsList();
+        }
+    } catch (error) {
+        console.error('Error loading PTO requests:', error);
+    }
+}
+
+async function submitPTORequest() {
+    const startDate = document.getElementById('ptoStartDate').value;
+    const endDate = document.getElementById('ptoEndDate').value || startDate;
+    const ptoType = document.getElementById('ptoType').value;
+    const note = document.getElementById('ptoNote').value;
+    
+    if (!startDate) {
+        showToast('Please select a start date', 'error');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${employeeState.employee.db_id}/pto`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                start_date: startDate,
+                end_date: endDate,
+                pto_type: ptoType,
+                note: note
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Time off request submitted', 'success');
+            closePTOModal();
+            loadPTORequests();
+        } else {
+            showToast(data.error || 'Failed to submit request', 'error');
+        }
+    } catch (error) {
+        console.error('Error submitting PTO request:', error);
+        showToast('Failed to submit request', 'error');
+    }
+}
+
+async function cancelPTORequest(requestId) {
+    if (!confirm('Are you sure you want to cancel this time off request?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${employeeState.employee.db_id}/pto/${requestId}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Time off request cancelled', 'success');
+            loadPTORequests();
+        } else {
+            showToast(data.error || 'Failed to cancel request', 'error');
+        }
+    } catch (error) {
+        console.error('Error cancelling PTO request:', error);
+        showToast('Failed to cancel request', 'error');
+    }
+}
+
+function renderPTORequestsList() {
+    const container = document.getElementById('ptoRequestsList');
+    const emptyState = document.getElementById('ptoEmptyState');
+    if (!container) return;
+    
+    // Filter out cancelled requests for cleaner display
+    const visibleRequests = ptoState.requests.filter(req => req.status !== 'cancelled');
+    
+    if (visibleRequests.length === 0) {
+        if (emptyState) emptyState.style.display = 'flex';
+        // Remove any existing request items but keep empty state
+        container.querySelectorAll('.pto-request-item').forEach(el => el.remove());
+        return;
+    }
+    
+    if (emptyState) emptyState.style.display = 'none';
+    
+    // Build HTML
+    let html = '';
+    visibleRequests.forEach(req => {
+        const statusClass = req.status;
+        const statusIcon = getStatusIcon(req.status);
+        const typeEmoji = getPTOTypeEmoji(req.pto_type);
+        const dateRange = formatPTODateRange(req.start_date, req.end_date);
+        
+        html += `
+            <div class="pto-request-item ${statusClass}">
+                <div class="pto-request-icon">${statusIcon}</div>
+                <div class="pto-request-info">
+                    <div class="pto-request-dates">${dateRange}</div>
+                    <div class="pto-request-meta">
+                        <span class="pto-type">${typeEmoji} ${capitalizeFirst(req.pto_type)}</span>
+                        <span class="pto-status-badge ${statusClass}">${capitalizeFirst(req.status)}</span>
+                    </div>
+                    ${req.employee_note ? `<div class="pto-request-note">"${req.employee_note}"</div>` : ''}
+                    ${req.manager_note ? `<div class="pto-manager-note">Manager: "${req.manager_note}"</div>` : ''}
+                </div>
+                ${req.status === 'pending' ? `
+                    <button class="btn btn-sm btn-ghost pto-cancel-btn" onclick="cancelPTORequest('${req.id}')">
+                        Cancel
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    });
+    
+    // Keep empty state element, remove old items, add new
+    container.querySelectorAll('.pto-request-item').forEach(el => el.remove());
+    container.insertAdjacentHTML('beforeend', html);
+}
+
+function getStatusIcon(status) {
+    switch (status) {
+        case 'pending': return '🟡';
+        case 'approved': return '🟢';
+        case 'denied': return '🔴';
+        case 'cancelled': return '⚪';
+        default: return '⚪';
+    }
+}
+
+function getPTOTypeEmoji(type) {
+    switch (type) {
+        case 'vacation': return '🌴';
+        case 'sick': return '🤒';
+        case 'personal': return '👤';
+        default: return '📋';
+    }
+}
+
+function formatPTODateRange(startDate, endDate) {
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T00:00:00');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (startDate === endDate) {
+        // Single day
+        return `${months[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`;
+    } else if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+        // Same month
+        return `${months[start.getMonth()]} ${start.getDate()}-${end.getDate()}, ${start.getFullYear()}`;
+    } else {
+        // Different months
+        return `${months[start.getMonth()]} ${start.getDate()} - ${months[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+    }
+}
+
+function capitalizeFirst(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
     // Determine which page we're on
@@ -2808,5 +3125,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (availabilityTable) {
         initAvailabilityEditor();
+        initPTORequests();
     }
 });
