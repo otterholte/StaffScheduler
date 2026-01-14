@@ -706,13 +706,18 @@ def employee_availability(business_slug, employee_id):
                 availability_data[day] = ranges
         
         print(f"[DEBUG] Rendering template with availability_data keys: {list(availability_data.keys())}")
+        
+        # Build employee_data with db_id for API calls
+        employee_data = employee.to_dict()
+        employee_data['db_id'] = employee_id  # Add database ID for PTO API calls
+        
         return render_template('employee_availability.html',
             business=business,
             business_data=business.to_dict(),
             business_slug=business_slug,
             employee=employee,
             employee_id=employee_id,  # Pass DB ID for URL generation
-            employee_data=employee.to_dict(),
+            employee_data=employee_data,
             roles=business.roles,
             roles_data=[r.to_dict() for r in business.roles],
             days=DAYS_OF_WEEK,

@@ -2303,27 +2303,22 @@ body.employee-view {
 
 /* Date input specific styling */
 .pto-form-group input[type="date"] {
-    padding-right: 3rem;
     cursor: pointer;
-    min-height: 48px;
+    min-height: 44px;
 }
 
-/* Style the calendar icon/button */
+/* Style the calendar icon/button - off-white, right-aligned */
 .pto-form-group input[type="date"]::-webkit-calendar-picker-indicator {
-    background-color: #8b5cf6;
-    padding: 8px;
-    border-radius: 6px;
     cursor: pointer;
-    filter: invert(1);
-    opacity: 1;
-    width: 24px;
-    height: 24px;
-    transition: background-color 0.2s ease, transform 0.2s ease;
+    filter: invert(0.85);
+    opacity: 0.8;
+    width: 18px;
+    height: 18px;
+    transition: opacity 0.2s ease;
 }
 
 .pto-form-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
-    background-color: #7c3aed;
-    transform: scale(1.1);
+    opacity: 1;
 }
 
 /* Dark theme for date picker dropdown (Chromium browsers) */

@@ -5,6 +5,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# =============================================================================
+# LOCAL TEST CREDENTIALS (for development/testing only)
+# =============================================================================
+# Email: ptotest@test.com
+# Username: ptotestuser
+# Password: TestPass123!
+# Business: PTO Test Business (slug: pto-test-business)
+# =============================================================================
+
 
 class Config:
     """Base configuration."""
