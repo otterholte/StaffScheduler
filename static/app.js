@@ -607,6 +607,7 @@ function init() {
     setupSettingsAutoSave();
     initTimelineAddShiftModal();
     initAvailabilityFilters();
+    initPTONotifications();
     
     // Initial render
     renderEmployeesGrid();
@@ -4304,7 +4305,7 @@ function renderTimelineView(schedule) {
         }
         
         // Add PTO blocks for this day
-        const dayDate = weekDates[dayIdx];
+        // dayDate already defined above in this forEach
         const dayDateStr = dayDate.toISOString().split('T')[0];
         
         const dayPTO = (state.approvedPTO || []).filter(pto => {
@@ -6071,6 +6072,222 @@ async function saveAvailability() {
         }
     } catch (error) {
         showToast('Error saving availability', 'error');
+    }
+}
+
+// ==================== PTO NOTIFICATION BELL (Header) ====================
+let ptoNotificationState = {
+    requests: [],
+    isDropdownOpen: false
+};
+
+function initPTONotifications() {
+    const bell = document.getElementById('ptoNotificationBell');
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    
+    if (!bell || !dropdown) return;
+    
+    // Toggle dropdown on bell click
+    bell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePTODropdown();
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
+            closePTODropdown();
+        }
+    });
+    
+    // Close on escape
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closePTODropdown();
+        }
+    });
+    
+    // Load initial PTO requests
+    loadPTONotifications();
+    
+    // Refresh PTO notifications periodically (every 60 seconds)
+    setInterval(loadPTONotifications, 60000);
+}
+
+function togglePTODropdown() {
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    if (!dropdown) return;
+    
+    if (ptoNotificationState.isDropdownOpen) {
+        closePTODropdown();
+    } else {
+        openPTODropdown();
+    }
+}
+
+function openPTODropdown() {
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    if (!dropdown) return;
+    
+    dropdown.classList.add('visible');
+    ptoNotificationState.isDropdownOpen = true;
+    
+    // Reload requests when opening
+    loadPTONotifications();
+}
+
+function closePTODropdown() {
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    if (!dropdown) return;
+    
+    dropdown.classList.remove('visible');
+    ptoNotificationState.isDropdownOpen = false;
+}
+
+async function loadPTONotifications() {
+    const list = document.getElementById('ptoNotificationList');
+    const badge = document.getElementById('ptoNotificationBadge');
+    const bell = document.getElementById('ptoNotificationBell');
+    
+    if (!list || !badge || !bell) return;
+    
+    try {
+        const response = await fetch(`/api/${state.business.id}/pto?status=pending`);
+        const data = await response.json();
+        
+        if (data.success) {
+            ptoNotificationState.requests = data.pto_requests || [];
+            renderPTONotifications();
+        }
+    } catch (error) {
+        console.error('Error loading PTO notifications:', error);
+        list.innerHTML = '<div class="pto-loading">Failed to load</div>';
+    }
+}
+
+function renderPTONotifications() {
+    const list = document.getElementById('ptoNotificationList');
+    const badge = document.getElementById('ptoNotificationBadge');
+    const bell = document.getElementById('ptoNotificationBell');
+    
+    if (!list || !badge || !bell) return;
+    
+    const requests = ptoNotificationState.requests;
+    const pendingCount = requests.length;
+    
+    // Update badge
+    if (pendingCount > 0) {
+        badge.textContent = pendingCount > 99 ? '99+' : pendingCount;
+        bell.classList.add('has-notifications');
+    } else {
+        badge.textContent = '';
+        bell.classList.remove('has-notifications');
+    }
+    
+    // Render list
+    if (requests.length === 0) {
+        list.innerHTML = `
+            <div class="pto-empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 15h8M9 9h.01M15 9h.01"></path>
+                </svg>
+                <p>No pending requests</p>
+            </div>
+        `;
+        return;
+    }
+    
+    list.innerHTML = requests.map(req => {
+        const startDate = new Date(req.start_date).toLocaleDateString('en-US', { 
+            month: 'short', day: 'numeric' 
+        });
+        const endDate = new Date(req.end_date).toLocaleDateString('en-US', { 
+            month: 'short', day: 'numeric', year: 'numeric' 
+        });
+        const dateRange = req.start_date === req.end_date 
+            ? startDate 
+            : `${startDate} - ${endDate}`;
+        
+        const typeEmoji = {
+            'vacation': '🌴',
+            'sick': '🤒',
+            'personal': '👤',
+            'other': '📋'
+        }[req.pto_type] || '📅';
+        
+        const typeName = (req.pto_type || 'other').charAt(0).toUpperCase() + (req.pto_type || 'other').slice(1);
+        
+        return `
+            <div class="pto-notification-item" data-request-id="${req.request_id}">
+                <div class="pto-notification-item-header">
+                    <span class="pto-notification-employee">${req.employee_name || 'Employee'}</span>
+                    <span class="pto-notification-type">${typeEmoji} ${typeName}</span>
+                </div>
+                <div class="pto-notification-dates">${dateRange}</div>
+                <div class="pto-notification-actions">
+                    <button class="pto-approve-btn" onclick="approvePTOFromNotification('${req.request_id}')">
+                        ✓ Approve
+                    </button>
+                    <button class="pto-deny-btn" onclick="denyPTOFromNotification('${req.request_id}')">
+                        ✕ Deny
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function approvePTOFromNotification(requestId) {
+    try {
+        const response = await fetch(`/api/${state.business.id}/pto/${requestId}/approve`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Time off request approved', 'success');
+            loadPTONotifications();
+            // Also reload if we're in the availability modal
+            if (currentPTOEmployeeId) {
+                loadEmployeePTORequests(currentPTOEmployeeId);
+            }
+        } else {
+            showToast(data.error || 'Failed to approve request', 'error');
+        }
+    } catch (error) {
+        console.error('Error approving PTO:', error);
+        showToast('Failed to approve request', 'error');
+    }
+}
+
+async function denyPTOFromNotification(requestId) {
+    const note = prompt('Add a reason for denying (optional):');
+    
+    try {
+        const response = await fetch(`/api/${state.business.id}/pto/${requestId}/deny`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: note || '' })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('Time off request denied', 'success');
+            loadPTONotifications();
+            // Also reload if we're in the availability modal
+            if (currentPTOEmployeeId) {
+                loadEmployeePTORequests(currentPTOEmployeeId);
+            }
+        } else {
+            showToast(data.error || 'Failed to deny request', 'error');
+        }
+    } catch (error) {
+        console.error('Error denying PTO:', error);
+        showToast('Failed to deny request', 'error');
     }
 }
 

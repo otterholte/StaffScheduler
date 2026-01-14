@@ -5176,6 +5176,221 @@ body.demo-mode .main-content {
     margin-top: calc(60px + 36px);
 }
 
+/* ---------- PTO Notification Bell (Manager View) ---------- */
+.pto-notification-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-right: 0.5rem;
+}
+
+.pto-notification-bell {
+    position: relative;
+    background: transparent;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.pto-notification-bell svg {
+    width: 22px;
+    height: 22px;
+    color: var(--text-secondary);
+    transition: color 0.2s ease;
+}
+
+.pto-notification-bell:hover {
+    background: var(--bg-tertiary);
+}
+
+.pto-notification-bell:hover svg {
+    color: var(--text-primary);
+}
+
+.pto-notification-bell.has-notifications svg {
+    color: #f59e0b;
+    animation: ptoBellRing 0.5s ease-in-out;
+}
+
+.pto-notification-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background: #ef4444;
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 700;
+    border-radius: 10px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.pto-notification-badge:not(:empty) {
+    display: flex;
+}
+
+@keyframes ptoBellRing {
+    0%, 100% { transform: rotate(0); }
+    20% { transform: rotate(15deg); }
+    40% { transform: rotate(-15deg); }
+    60% { transform: rotate(10deg); }
+    80% { transform: rotate(-10deg); }
+}
+
+/* PTO Notification Dropdown */
+.pto-notification-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    width: 360px;
+    max-height: 450px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    display: none;
+}
+
+.pto-notification-dropdown.visible {
+    display: block;
+    animation: ptoDropdownFadeIn 0.2s ease;
+}
+
+@keyframes ptoDropdownFadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.pto-notification-header {
+    padding: 1rem;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pto-notification-header::before {
+    content: '📅';
+}
+
+.pto-notification-list {
+    padding: 0.5rem;
+}
+
+.pto-notification-item {
+    padding: 0.875rem;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+    margin-bottom: 0.5rem;
+    transition: background 0.2s ease;
+}
+
+.pto-notification-item:last-child {
+    margin-bottom: 0;
+}
+
+.pto-notification-item:hover {
+    background: var(--bg-hover);
+}
+
+.pto-notification-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.5rem;
+}
+
+.pto-notification-employee {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.pto-notification-type {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    color: var(--text-secondary);
+}
+
+.pto-notification-dates {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.pto-notification-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.pto-notification-actions button {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pto-approve-btn {
+    background: #22c55e;
+    color: white;
+}
+
+.pto-approve-btn:hover {
+    background: #16a34a;
+}
+
+.pto-deny-btn {
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color) !important;
+}
+
+.pto-deny-btn:hover {
+    background: #ef4444;
+    color: white;
+    border-color: #ef4444 !important;
+}
+
+.pto-empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
+.pto-empty-state svg {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+}
+
+.pto-loading {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+}
+
 /* ---------- Toast Notifications ---------- */
 .toast-container {
     position: fixed;
