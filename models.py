@@ -327,6 +327,7 @@ class DBEmployee(db.Model):
         avail_data = self.get_availability_data()
         return {
             'id': self.employee_id,
+            'db_id': self.id,  # Database primary key for API calls
             'name': self.name,
             'email': self.email,
             'phone': self.phone,

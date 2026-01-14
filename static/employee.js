@@ -2935,13 +2935,13 @@ function openPTORequestModal() {
     document.getElementById('ptoType').value = 'vacation';
     document.getElementById('ptoNote').value = '';
     
-    modal.style.display = 'flex';
+    modal.classList.add('active');
 }
 
 function closePTOModal() {
     const modal = document.getElementById('ptoRequestModal');
     if (modal) {
-        modal.style.display = 'none';
+        modal.classList.remove('active');
     }
 }
 

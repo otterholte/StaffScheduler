@@ -1160,11 +1160,15 @@ body.employee-view {
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.5);
-    display: flex;
+    display: none;  /* Hidden by default */
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 1rem;
+}
+
+.modal-overlay.active {
+    display: flex;
 }
 
 .modal-content {
@@ -2288,13 +2292,68 @@ body.employee-view {
 .pto-form-group select,
 .pto-form-group textarea {
     width: 100%;
-    padding: 0.625rem 0.75rem;
+    padding: 0.75rem 1rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
+}
+
+/* Date input specific styling */
+.pto-form-group input[type="date"] {
+    padding-right: 3rem;
+    cursor: pointer;
+    min-height: 48px;
+}
+
+/* Style the calendar icon/button */
+.pto-form-group input[type="date"]::-webkit-calendar-picker-indicator {
+    background-color: #8b5cf6;
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    filter: invert(1);
+    opacity: 1;
+    width: 24px;
+    height: 24px;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.pto-form-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    background-color: #7c3aed;
+    transform: scale(1.1);
+}
+
+/* Dark theme for date picker dropdown (Chromium browsers) */
+.pto-form-group input[type="date"]::-webkit-datetime-edit {
+    color: var(--text-primary);
+    padding: 0.25rem 0;
+}
+
+.pto-form-group input[type="date"]::-webkit-datetime-edit-fields-wrapper {
+    background: transparent;
+}
+
+.pto-form-group input[type="date"]::-webkit-datetime-edit-text,
+.pto-form-group input[type="date"]::-webkit-datetime-edit-month-field,
+.pto-form-group input[type="date"]::-webkit-datetime-edit-day-field,
+.pto-form-group input[type="date"]::-webkit-datetime-edit-year-field {
+    color: var(--text-primary);
+    padding: 0.125rem 0.25rem;
+}
+
+/* Firefox date input styling */
+@-moz-document url-prefix() {
+    .pto-form-group input[type="date"] {
+        color-scheme: dark;
+    }
+}
+
+/* Force dark color scheme for date picker */
+.pto-form-group input[type="date"] {
+    color-scheme: dark;
 }
 
 .pto-form-group input[type="date"]:focus,
