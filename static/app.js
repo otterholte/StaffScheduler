@@ -6219,17 +6219,17 @@ function renderPTONotifications() {
         const typeName = (req.pto_type || 'other').charAt(0).toUpperCase() + (req.pto_type || 'other').slice(1);
         
         return `
-            <div class="pto-notification-item" data-request-id="${req.request_id}">
+            <div class="pto-notification-item" data-request-id="${req.id}">
                 <div class="pto-notification-item-header">
                     <span class="pto-notification-employee">${req.employee_name || 'Employee'}</span>
                     <span class="pto-notification-type">${typeEmoji} ${typeName}</span>
                 </div>
                 <div class="pto-notification-dates">${dateRange}</div>
                 <div class="pto-notification-actions">
-                    <button class="pto-approve-btn" onclick="approvePTOFromNotification('${req.request_id}')">
+                    <button class="pto-approve-btn" onclick="approvePTOFromNotification('${req.id}')">
                         ✓ Approve
                     </button>
-                    <button class="pto-deny-btn" onclick="denyPTOFromNotification('${req.request_id}')">
+                    <button class="pto-deny-btn" onclick="denyPTOFromNotification('${req.id}')">
                         ✕ Deny
                     </button>
                 </div>
