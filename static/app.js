@@ -3403,7 +3403,7 @@ function renderSimpleTableView(schedule) {
         tbody.appendChild(row);
     }
     
-    // Render PTO rows
+    // Build PTO data by employee for this week
     const weekDates = getWeekDates(state.weekOffset);
     const ptoByEmployee = {};
     
@@ -3430,64 +3430,98 @@ function renderSimpleTableView(schedule) {
         }
     });
     
-    // Render PTO rows
-    Object.entries(ptoByEmployee).forEach(([empId, ptoData]) => {
-        const hasPTODays = Object.keys(ptoData.days).length > 0;
-        if (!hasPTODays) return;
+    // Merge employees: those with shifts OR those with PTO this week
+    const allEmployeeIds = new Set([
+        ...Object.keys(employeeSchedules),
+        ...Object.keys(ptoByEmployee)
+    ]);
+    
+    // Build combined employee data for rendering
+    const combinedEmployeeData = [];
+    
+    allEmployeeIds.forEach(empId => {
+        const schedule = employeeSchedules[empId];
+        const pto = ptoByEmployee[empId];
         
+        // Get employee info from schedule or PTO data
+        let emp, totalHours, days;
+        if (schedule) {
+            emp = schedule.employee;
+            totalHours = schedule.totalHours;
+            days = schedule.days;
+        } else {
+            // Employee only has PTO, no scheduled shifts
+            emp = {
+                id: empId,
+                name: pto.employee_name,
+                color: pto.employee_color
+            };
+            totalHours = 0;
+            days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+        }
+        
+        // Count PTO days
+        const ptoDays = pto ? Object.keys(pto.days).length : 0;
+        
+        // Only include if has hours OR has PTO this week
+        if (totalHours > 0 || ptoDays > 0) {
+            combinedEmployeeData.push({
+                emp,
+                totalHours,
+                days,
+                pto: pto || null,
+                ptoDays
+            });
+        }
+    });
+    
+    // Sort: employees with shifts first (by hours desc), then PTO-only employees
+    combinedEmployeeData.sort((a, b) => {
+        // Both have hours - sort by hours
+        if (a.totalHours > 0 && b.totalHours > 0) {
+            return b.totalHours - a.totalHours;
+        }
+        // One has hours, one doesn't - hours first
+        if (a.totalHours > 0) return -1;
+        if (b.totalHours > 0) return 1;
+        // Both have only PTO - sort by name
+        return a.emp.name.localeCompare(b.emp.name);
+    });
+    
+    // Render employee rows (including PTO in same row)
+    combinedEmployeeData.forEach(({ emp, totalHours, days, pto }) => {
         const row = document.createElement('tr');
-        row.className = 'pto-row';
         
-        const emoji = getPTOTypeEmoji(ptoData.pto_type);
         let html = `<td class="name-col"><div class="emp-name">
-            <span class="emp-color" style="background: ${ptoData.employee_color || '#8b5cf6'}"></span>
-            <span>${ptoData.employee_name}</span>
+            <span class="emp-color" style="background: ${emp.color || '#666'}"></span>
+            <span>${emp.name}</span>
         </div></td>`;
         
         for (let day = 0; day < 7; day++) {
             const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
-            if (ptoData.days[day]) {
+            const hasPTO = pto && pto.days[day];
+            const shifts = days[day] || [];
+            
+            if (hasPTO) {
+                // Show PTO badge for this day
+                const emoji = getPTOTypeEmoji(pto.days[day]);
                 html += `<td class="shift-times ${dayClass}">
-                    <span class="pto-shift">${emoji} ${capitalizeFirst(ptoData.days[day])}</span>
+                    <span class="pto-shift">${emoji} ${capitalizeFirst(pto.days[day])}</span>
                 </td>`;
-            } else {
+            } else if (shifts.length === 0) {
                 html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
+            } else {
+                const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
+                html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
             }
         }
         
-        html += `<td class="total-hours">Off</td>`;
+        // Show hours or "Off" for PTO-only employees
+        const hoursDisplay = totalHours > 0 ? `${totalHours}h` : 'Off';
+        html += `<td class="total-hours">${hoursDisplay}</td>`;
         row.innerHTML = html;
         tbody.appendChild(row);
     });
-    
-    // Render employee rows
-    Object.values(employeeSchedules)
-        .filter(es => es.totalHours > 0)
-        .sort((a, b) => b.totalHours - a.totalHours) // Sort by hours descending
-        .forEach(empSchedule => {
-            const emp = empSchedule.employee;
-            const row = document.createElement('tr');
-            
-            let html = `<td class="name-col"><div class="emp-name">
-                <span class="emp-color" style="background: ${emp.color || '#666'}"></span>
-                <span>${emp.name}</span>
-            </div></td>`;
-            
-            for (let day = 0; day < 7; day++) {
-                const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
-                const shifts = empSchedule.days[day];
-                if (shifts.length === 0) {
-                    html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
-                } else {
-                    const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
-                    html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
-                }
-            }
-            
-            html += `<td class="total-hours">${empSchedule.totalHours}h</td>`;
-            row.innerHTML = html;
-            tbody.appendChild(row);
-        });
     
     // If no employees have hours, show a message
     if (tbody.children.length === 0) {
