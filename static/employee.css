@@ -209,6 +209,115 @@ body.employee-view {
     opacity: 0.7;
 }
 
+/* PTO Notification Bell - Employee Portal */
+.pto-notification-wrapper .pto-bell.has-notifications {
+    color: #10b981;
+    animation: bellRing 0.5s ease;
+}
+
+.pto-notification-wrapper .pto-badge {
+    background: #10b981;
+}
+
+.pto-dropdown .notification-header {
+    display: flex;
+    align-items: center;
+}
+
+/* PTO Notification Items - Approved */
+.notification-item.pto-approved {
+    border-left-color: #10b981;
+    background: #1a2e24;
+}
+
+.notification-item.pto-approved:hover {
+    background: #243d30;
+}
+
+.notification-item.pto-approved .pto-status-icon {
+    color: #10b981;
+}
+
+/* PTO Notification Items - Denied */
+.notification-item.pto-denied {
+    border-left-color: #ef4444;
+    background: #2e1a1a;
+}
+
+.notification-item.pto-denied:hover {
+    background: #3d2424;
+}
+
+.notification-item.pto-denied .pto-status-icon {
+    color: #ef4444;
+}
+
+.pto-notification-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.pto-status-icon {
+    flex-shrink: 0;
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.pto-notification-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.pto-notification-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.pto-notification-dates {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.pto-notification-type {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: capitalize;
+}
+
+.pto-view-link {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+    opacity: 0.8;
+}
+
+.pto-view-link:hover {
+    opacity: 1;
+}
+
+/* Unseen notification indicator */
+.notification-item.unseen::before {
+    content: '';
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+}
+
+.notification-item {
+    position: relative;
+}
+
 .employee-nav .nav-tab {
     text-decoration: none;
     display: flex;
@@ -2184,6 +2293,20 @@ body.employee-view {
     border-left-color: #ef4444;
     background: rgba(239, 68, 68, 0.05);
     opacity: 0.7;
+}
+
+/* Highlight effect for scrolled-to request */
+.pto-request-item.pto-highlight {
+    animation: ptoHighlight 3s ease;
+}
+
+@keyframes ptoHighlight {
+    0%, 100% {
+        box-shadow: none;
+    }
+    10%, 90% {
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.5), 0 0 20px rgba(99, 102, 241, 0.3);
+    }
 }
 
 .pto-request-icon {

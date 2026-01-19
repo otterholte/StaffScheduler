@@ -130,6 +130,7 @@ async function initScheduleView() {
     updateWeekDisplay();
     await loadScheduleData(); // This now fetches from API and handles rendering
     initSwapFeature();
+    initPTONotifications();
 }
 
 function setupViewToggle() {
@@ -3047,7 +3048,7 @@ function renderPTORequestsList() {
         const dateRange = formatPTODateRange(req.start_date, req.end_date);
         
         html += `
-            <div class="pto-request-item ${statusClass}">
+            <div class="pto-request-item ${statusClass}" id="pto-request-${req.id}">
                 <div class="pto-request-icon">${statusIcon}</div>
                 <div class="pto-request-info">
                     <div class="pto-request-dates">${dateRange}</div>
@@ -3070,6 +3071,30 @@ function renderPTORequestsList() {
     // Keep empty state element, remove old items, add new
     container.querySelectorAll('.pto-request-item').forEach(el => el.remove());
     container.insertAdjacentHTML('beforeend', html);
+    
+    // Check if we need to scroll to a specific request (from notification click)
+    scrollToPTORequestFromHash();
+}
+
+function scrollToPTORequestFromHash() {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#pto-request-')) {
+        const element = document.querySelector(hash);
+        if (element) {
+            // Wait a moment for the page to settle
+            setTimeout(() => {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Add highlight effect
+                element.classList.add('pto-highlight');
+                setTimeout(() => {
+                    element.classList.remove('pto-highlight');
+                }, 3000);
+            }, 300);
+            
+            // Clear the hash so refreshing doesn't re-scroll
+            history.replaceState(null, '', window.location.pathname);
+        }
+    }
 }
 
 function getStatusIcon(status) {
@@ -3112,6 +3137,182 @@ function capitalizeFirst(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+// ==================== PTO NOTIFICATIONS (EMPLOYEE PORTAL) ====================
+
+// Track PTO requests the employee has seen
+const seenPTOUpdates = new Set(JSON.parse(localStorage.getItem('seenPTOUpdates') || '[]'));
+
+function initPTONotifications() {
+    const bell = document.getElementById('ptoNotificationBell');
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    
+    if (!bell || !dropdown) return;
+    
+    // Toggle dropdown on bell click
+    bell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('visible');
+        
+        // Close swap dropdown if open
+        const swapDropdown = document.getElementById('notificationDropdown');
+        if (swapDropdown) swapDropdown.classList.remove('visible');
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
+            dropdown.classList.remove('visible');
+        }
+    });
+    
+    // Load PTO notifications
+    loadPTONotifications();
+}
+
+async function loadPTONotifications() {
+    try {
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
+        const response = await fetch(`/api/employee/${employeeState.businessSlug}/${empId}/pto`);
+        const data = await response.json();
+        
+        if (data.success) {
+            // Filter for approved or denied requests (decisions made)
+            const decidedRequests = (data.pto_requests || []).filter(req => 
+                req.status === 'approved' || req.status === 'denied'
+            );
+            
+            // Count unseen updates
+            const unseenCount = decidedRequests.filter(req => !seenPTOUpdates.has(req.id)).length;
+            
+            updatePTONotificationBadge(unseenCount);
+            renderPTONotificationDropdown(decidedRequests);
+        }
+    } catch (error) {
+        console.warn('Could not load PTO notifications:', error);
+    }
+}
+
+function updatePTONotificationBadge(count) {
+    const bell = document.getElementById('ptoNotificationBell');
+    const badge = document.getElementById('ptoNotificationBadge');
+    
+    if (!bell || !badge) return;
+    
+    if (count > 0) {
+        bell.classList.add('has-notifications');
+        badge.textContent = count;
+    } else {
+        bell.classList.remove('has-notifications');
+        badge.textContent = '';
+    }
+}
+
+function renderPTONotificationDropdown(requests) {
+    const list = document.getElementById('ptoNotificationList');
+    if (!list) return;
+    
+    if (requests.length === 0) {
+        list.innerHTML = `
+            <div class="notification-empty">
+                <p>No time off updates</p>
+            </div>
+        `;
+        return;
+    }
+    
+    list.innerHTML = requests.map(req => {
+        const isApproved = req.status === 'approved';
+        const statusClass = isApproved ? 'pto-approved' : 'pto-denied';
+        const statusIcon = isApproved ? '✓' : '✕';
+        const statusText = isApproved ? 'Approved' : 'Denied';
+        const isUnseen = !seenPTOUpdates.has(req.id);
+        
+        // Format dates
+        const startDate = new Date(req.start_date + 'T00:00:00');
+        const endDate = new Date(req.end_date + 'T00:00:00');
+        const dateRange = formatPTODateRange(startDate, endDate);
+        
+        // PTO type
+        const typeEmoji = getPTOTypeEmoji(req.pto_type);
+        const typeName = capitalizeFirst(req.pto_type || 'time off');
+        
+        return `
+            <div class="notification-item ${statusClass}${isUnseen ? ' unseen' : ''}" 
+                 data-request-id="${req.id}"
+                 onclick="handlePTONotificationClick('${req.id}')">
+                <div class="pto-notification-content">
+                    <span class="pto-status-icon">${statusIcon}</span>
+                    <div class="pto-notification-text">
+                        <div class="pto-notification-title">${statusText}</div>
+                        <div class="pto-notification-dates">${dateRange}</div>
+                        <div class="pto-notification-type">${typeEmoji} ${typeName}</div>
+                        <div class="pto-view-link">
+                            View details →
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getPTOTypeEmoji(type) {
+    const emojis = {
+        'vacation': '🏖️',
+        'sick': '🤒',
+        'personal': '👤',
+        'other': '📅'
+    };
+    return emojis[type] || '📅';
+}
+
+function formatPTODateRange(start, end) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (start.getTime() === end.getTime()) {
+        return `${months[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`;
+    } else if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+        return `${months[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`;
+    } else {
+        return `${months[start.getMonth()]} ${start.getDate()} - ${months[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+    }
+}
+
+function handlePTONotificationClick(requestId) {
+    // Mark as seen
+    seenPTOUpdates.add(requestId);
+    localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
+    
+    // Update badge count
+    const badge = document.getElementById('ptoNotificationBadge');
+    if (badge && badge.textContent) {
+        const currentCount = parseInt(badge.textContent) || 0;
+        if (currentCount > 0) {
+            updatePTONotificationBadge(currentCount - 1);
+        }
+    }
+    
+    // Close dropdown
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    if (dropdown) dropdown.classList.remove('visible');
+    
+    // Check if we're already on the availability page
+    const availabilityTable = document.getElementById('availabilityTable');
+    if (availabilityTable) {
+        // We're on availability page - just scroll to the request
+        const element = document.getElementById(`pto-request-${requestId}`);
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            element.classList.add('pto-highlight');
+            setTimeout(() => element.classList.remove('pto-highlight'), 3000);
+        }
+    } else {
+        // Navigate to availability page with the request ID as a hash
+        const availabilityUrl = `/employee/${employeeState.businessSlug}/${employeeState.employee.db_id || employeeState.employee.id}/availability#pto-request-${requestId}`;
+        window.location.href = availabilityUrl;
+    }
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
     // Determine which page we're on
@@ -3126,5 +3327,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (availabilityTable) {
         initAvailabilityEditor();
         initPTORequests();
+        initPTONotifications(); // Also show PTO notifications on availability page
     }
 });
