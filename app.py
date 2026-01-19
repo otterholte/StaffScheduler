@@ -1575,9 +1575,20 @@ def get_eligible_employees_for_swap(business, requester_id, shift_day, shift_sta
         
         return shifts
     
+    # Handle requester_id which could be a DB id (int) or model id (string)
+    requester_model_id = None
+    if isinstance(requester_id, int) or (isinstance(requester_id, str) and requester_id.isdigit()):
+        # It's a DB id - look up the model id
+        db_emp = DBEmployee.query.get(int(requester_id))
+        if db_emp:
+            requester_model_id = db_emp.employee_id
+    else:
+        requester_model_id = requester_id
+    
     for emp in business.employees:
-        if emp.id == requester_id:
-            continue  # Skip the requester
+        # Skip the requester (check both model id and potential db id match)
+        if emp.id == requester_model_id or str(emp.id) == str(requester_id):
+            continue
         
         # Check 1: Employee has the required role (if specified)
         if shift_role and shift_role not in emp.roles:

@@ -510,8 +510,50 @@ function renderTimelineView() {
             slotsDiv.appendChild(rowContainer);
         }
         
-        // Ensure at least one empty row if no shifts
-        if (numShiftRows === 0) {
+        // Check for PTO on this day
+        const dayDate = dates[dayIdx];
+        const dayPTOList = (employeeState.approvedPTO || []).filter(pto => {
+            // Filter by mine/everyone
+            if (!showEveryone && pto.employee_id !== myId) return false;
+            
+            const ptoStart = new Date(pto.start_date + 'T00:00:00');
+            const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+            return dayDate >= ptoStart && dayDate <= ptoEnd;
+        });
+        
+        // Add PTO blocks if any
+        if (dayPTOList.length > 0) {
+            const ptoRow = document.createElement('div');
+            ptoRow.className = 'timeline-slots-row timeline-pto-row';
+            
+            dayPTOList.forEach(pto => {
+                const ptoBlock = document.createElement('div');
+                ptoBlock.className = 'timeline-pto-block';
+                const isMine = pto.employee_id === myId;
+                if (isMine) {
+                    ptoBlock.classList.add('my-pto');
+                } else {
+                    ptoBlock.classList.add('other-pto');
+                }
+                
+                ptoBlock.style.left = '0';
+                ptoBlock.style.width = '100%';
+                
+                const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
+                const typeLabel = capitalizeFirstEmployee(pto.pto_type);
+                const nameLabel = isMine ? '' : ` - ${pto.employee_name}`;
+                
+                ptoBlock.innerHTML = `<span class="pto-content">${emoji} ${typeLabel}${nameLabel}</span>`;
+                ptoBlock.title = `${isMine ? 'Your' : pto.employee_name + "'s"} Time Off: ${typeLabel}`;
+                
+                ptoRow.appendChild(ptoBlock);
+            });
+            
+            slotsDiv.appendChild(ptoRow);
+        }
+        
+        // Ensure at least one empty row if no shifts and no PTO
+        if (numShiftRows === 0 && dayPTOList.length === 0) {
             const emptyRow = document.createElement('div');
             emptyRow.className = 'timeline-slots-row';
             slotsDiv.appendChild(emptyRow);
@@ -773,8 +815,68 @@ function renderGridView() {
             if (schedule && schedule.slot_assignments) {
                 renderGridShifts(schedule, eventsContainer, showEveryone);
             }
+            // Also render PTO blocks
+            renderGridPTO(eventsContainer, dates, showEveryone);
         }, 0);
     }
+}
+
+function renderGridPTO(container, dates, showEveryone) {
+    const myId = employeeState.employee.id;
+    
+    // Get grid dimensions
+    const grid = document.getElementById('scheduleGrid');
+    const firstSlot = grid?.querySelector('.slot');
+    const headerRow = grid?.querySelector('thead tr');
+    const timeCell = grid?.querySelector('.time-cell');
+    
+    if (!firstSlot || !grid) return;
+    
+    const hSpacing = 8;
+    const vSpacing = 3;
+    const slotWidth = firstSlot.offsetWidth + hSpacing;
+    const slotHeight = firstSlot.offsetHeight + vSpacing;
+    const headerHeight = headerRow?.offsetHeight || 35;
+    const timeCellWidth = (timeCell?.offsetWidth || 50) + hSpacing;
+    const totalRows = employeeState.endHour - employeeState.startHour;
+    
+    // Check each day column for PTO
+    employeeState.daysOpen.forEach((dayIdx, colIdx) => {
+        const dayDate = dates[dayIdx];
+        
+        const dayPTOList = (employeeState.approvedPTO || []).filter(pto => {
+            if (!showEveryone && pto.employee_id !== myId) return false;
+            
+            const ptoStart = new Date(pto.start_date + 'T00:00:00');
+            const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+            return dayDate >= ptoStart && dayDate <= ptoEnd;
+        });
+        
+        dayPTOList.forEach((pto, ptoIdx) => {
+            const isMine = pto.employee_id === myId;
+            const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
+            const typeLabel = capitalizeFirstEmployee(pto.pto_type);
+            const nameLabel = isMine ? '' : ` - ${pto.employee_name}`;
+            
+            const ptoBlock = document.createElement('div');
+            ptoBlock.className = `grid-pto-block ${isMine ? 'my-pto' : 'other-pto'}`;
+            
+            const widthPadding = 6;
+            const leftPos = timeCellWidth + (colIdx * slotWidth) + (widthPadding / 2);
+            const blockWidth = slotWidth - widthPadding;
+            
+            ptoBlock.style.left = `${leftPos}px`;
+            ptoBlock.style.top = `${headerHeight + 2}px`;
+            ptoBlock.style.width = `${blockWidth}px`;
+            ptoBlock.style.height = `${totalRows * slotHeight - 4}px`;
+            ptoBlock.style.zIndex = 5; // Below shifts
+            
+            ptoBlock.innerHTML = `<span class="pto-content">${emoji} ${typeLabel}${nameLabel}</span>`;
+            ptoBlock.title = `${isMine ? 'Your' : pto.employee_name + "'s"} Time Off: ${typeLabel}`;
+            
+            container.appendChild(ptoBlock);
+        });
+    });
 }
 
 function renderGridShifts(schedule, container, showEveryone) {
