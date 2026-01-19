@@ -3227,12 +3227,10 @@ function renderPTONotificationDropdown(requests) {
         const statusText = isApproved ? 'Approved' : 'Denied';
         const isUnseen = !seenPTOUpdates.has(req.id);
         
-        // Format dates
-        const startDate = new Date(req.start_date + 'T00:00:00');
-        const endDate = new Date(req.end_date + 'T00:00:00');
-        const dateRange = formatPTODateRange(startDate, endDate);
+        // Format dates - use existing function with string dates
+        const dateRange = formatPTODateRange(req.start_date, req.end_date);
         
-        // PTO type
+        // PTO type - use existing function
         const typeEmoji = getPTOTypeEmoji(req.pto_type);
         const typeName = capitalizeFirst(req.pto_type || 'time off');
         
@@ -3256,32 +3254,16 @@ function renderPTONotificationDropdown(requests) {
     }).join('');
 }
 
-function getPTOTypeEmoji(type) {
-    const emojis = {
-        'vacation': '🏖️',
-        'sick': '🤒',
-        'personal': '👤',
-        'other': '📅'
-    };
-    return emojis[type] || '📅';
-}
-
-function formatPTODateRange(start, end) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    if (start.getTime() === end.getTime()) {
-        return `${months[start.getMonth()]} ${start.getDate()}, ${start.getFullYear()}`;
-    } else if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
-        return `${months[start.getMonth()]} ${start.getDate()} - ${end.getDate()}, ${start.getFullYear()}`;
-    } else {
-        return `${months[start.getMonth()]} ${start.getDate()} - ${months[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
-    }
-}
-
 function handlePTONotificationClick(requestId) {
     // Mark as seen
     seenPTOUpdates.add(requestId);
     localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
+    
+    // Remove the notification item from the dropdown immediately
+    const notificationItem = document.querySelector(`.notification-item[data-request-id="${requestId}"]`);
+    if (notificationItem) {
+        notificationItem.remove();
+    }
     
     // Update badge count
     const badge = document.getElementById('ptoNotificationBadge');
@@ -3290,6 +3272,17 @@ function handlePTONotificationClick(requestId) {
         if (currentCount > 0) {
             updatePTONotificationBadge(currentCount - 1);
         }
+    }
+    
+    // Check if dropdown is now empty
+    const list = document.getElementById('ptoNotificationList');
+    const remainingItems = list ? list.querySelectorAll('.notification-item').length : 0;
+    if (remainingItems === 0 && list) {
+        list.innerHTML = `
+            <div class="notification-empty">
+                <p>No time off updates</p>
+            </div>
+        `;
     }
     
     // Close dropdown
