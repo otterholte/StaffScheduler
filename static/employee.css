@@ -164,21 +164,21 @@ body.employee-view {
     transition: background 0.15s ease;
     border-left: 3px solid #f59e0b;
     margin-bottom: 0.5rem;
-    background: rgba(245, 158, 11, 0.08);
+    background: #2a2a1e;
 }
 
 .notification-item:hover {
-    background: rgba(245, 158, 11, 0.15);
+    background: #3d3a28;
 }
 
 /* Counter offer styling - purple accent */
 .notification-item.counter-offer {
     border-left-color: #8b5cf6;
-    background: rgba(139, 92, 246, 0.1);
+    background: #272238;
 }
 
 .notification-item.counter-offer:hover {
-    background: rgba(139, 92, 246, 0.18);
+    background: #352e4a;
 }
 
 .notification-item:last-child {

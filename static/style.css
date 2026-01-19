@@ -5256,12 +5256,16 @@ body.demo-mode .main-content {
     width: 360px;
     max-height: 450px;
     overflow-y: auto;
-    background: var(--bg-secondary);
+    background: #1e1e32;
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     z-index: 1000;
     display: none;
+}
+
+body[data-theme="light"] .pto-notification-dropdown {
+    background: #ffffff;
 }
 
 .pto-notification-dropdown.visible {
@@ -5295,9 +5299,13 @@ body.demo-mode .main-content {
 .pto-notification-item {
     padding: 0.875rem;
     border-radius: 8px;
-    background: var(--bg-tertiary);
+    background: #28283c;
     margin-bottom: 0.5rem;
     transition: background 0.2s ease;
+}
+
+body[data-theme="light"] .pto-notification-item {
+    background: #f0f0f8;
 }
 
 .pto-notification-item:last-child {
@@ -5305,7 +5313,11 @@ body.demo-mode .main-content {
 }
 
 .pto-notification-item:hover {
-    background: var(--bg-hover);
+    background: #3c3c50;
+}
+
+body[data-theme="light"] .pto-notification-item:hover {
+    background: #e8e8f0;
 }
 
 .pto-notification-item-header {
