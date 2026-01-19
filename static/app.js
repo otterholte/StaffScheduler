@@ -6242,7 +6242,8 @@ async function approvePTOFromNotification(requestId) {
     try {
         const response = await fetch(`/api/${state.business.id}/pto/${requestId}/approve`, {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
         });
         
         const data = await response.json();
