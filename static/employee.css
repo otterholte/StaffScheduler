@@ -2430,18 +2430,10 @@ body.employee-view {
     min-height: 44px;
 }
 
-/* Style the calendar icon/button - white, right-aligned */
-.pto-form-group input[type="date"]::-webkit-calendar-picker-indicator {
+/* Style the calendar icon - white only in PTO modal */
+#ptoRequestModal input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) !important;
     cursor: pointer;
-    filter: invert(1) brightness(2);
-    opacity: 0.9;
-    width: 18px;
-    height: 18px;
-    transition: opacity 0.2s ease;
-}
-
-.pto-form-group input[type="date"]::-webkit-calendar-picker-indicator:hover {
-    opacity: 1;
 }
 
 /* Dark theme for date picker dropdown (Chromium browsers) */
