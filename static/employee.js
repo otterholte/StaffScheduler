@@ -3217,7 +3217,10 @@ function renderPTONotificationDropdown(requests) {
     const list = document.getElementById('ptoNotificationList');
     if (!list) return;
     
-    if (requests.length === 0) {
+    // Filter out already-seen notifications
+    const unseenRequests = requests.filter(req => !seenPTOUpdates.has(req.id));
+    
+    if (unseenRequests.length === 0) {
         list.innerHTML = `
             <div class="notification-empty">
                 <p>No time off updates</p>
@@ -3226,12 +3229,11 @@ function renderPTONotificationDropdown(requests) {
         return;
     }
     
-    list.innerHTML = requests.map(req => {
+    list.innerHTML = unseenRequests.map(req => {
         const isApproved = req.status === 'approved';
         const statusClass = isApproved ? 'pto-approved' : 'pto-denied';
         const statusIcon = isApproved ? '✓' : '✕';
         const statusText = isApproved ? 'Approved' : 'Denied';
-        const isUnseen = !seenPTOUpdates.has(req.id);
         
         // Format dates - use existing function with string dates
         const dateRange = formatPTODateRange(req.start_date, req.end_date);
@@ -3241,7 +3243,7 @@ function renderPTONotificationDropdown(requests) {
         const typeName = capitalizeFirst(req.pto_type || 'time off');
         
         return `
-            <div class="notification-item ${statusClass}${isUnseen ? ' unseen' : ''}" 
+            <div class="notification-item ${statusClass}" 
                  data-request-id="${req.id}"
                  onclick="handlePTONotificationClick('${req.id}')">
                 <div class="pto-notification-content">
