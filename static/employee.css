@@ -2441,6 +2441,12 @@ body.employee-view {
     cursor: pointer;
 }
 
+/* Dark theme for date picker dropdown */
+#ptoStartDate,
+#ptoEndDate {
+    color-scheme: dark;
+}
+
 /* Dark theme for date picker dropdown (Chromium browsers) */
 .pto-form-group input[type="date"]::-webkit-datetime-edit {
     color: var(--text-primary);
