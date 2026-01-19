@@ -2426,6 +2426,67 @@ def delete_business(business_id):
 
 # ==================== SCHEDULE API ====================
 
+def _apply_approved_time_off(business, week_start: date, week_end: date):
+    """Apply approved time off requests to employees for schedule generation.
+    
+    This ensures employees with approved time off are not scheduled during those days.
+    
+    Args:
+        business: The business scenario with employees
+        week_start: Start date of the week being scheduled (Monday)
+        week_end: End date of the week being scheduled (Sunday)
+    """
+    from db_service import get_db_business
+    from models import PTORequest
+    from scheduler.models import TimeSlot
+    
+    db_business = get_db_business(business.id)
+    if not db_business:
+        print(f"[TIME_OFF] No DB business found for {business.id}, skipping time off application", flush=True)
+        return
+    
+    # Get all approved time off requests that overlap with this week
+    approved_requests = PTORequest.query.filter(
+        PTORequest.business_db_id == db_business.id,
+        PTORequest.status == 'approved',
+        PTORequest.start_date <= week_end,
+        PTORequest.end_date >= week_start
+    ).all()
+    
+    if not approved_requests:
+        print(f"[TIME_OFF] No approved time off requests for week {week_start} to {week_end}", flush=True)
+        return
+    
+    print(f"[TIME_OFF] Found {len(approved_requests)} approved time off requests", flush=True)
+    
+    # Build a mapping of employee_id to their time off days within this week
+    employee_time_off = {}
+    for req in approved_requests:
+        emp_id = req.employee_id
+        if emp_id not in employee_time_off:
+            employee_time_off[emp_id] = set()
+        
+        # Calculate which days in the week are covered by this request
+        current_date = max(req.start_date, week_start)
+        request_end = min(req.end_date, week_end)
+        
+        while current_date <= request_end:
+            # Convert date to day-of-week (0=Monday, 6=Sunday)
+            day_of_week = current_date.weekday()
+            employee_time_off[emp_id].add(day_of_week)
+            current_date += timedelta(days=1)
+    
+    # Apply time off to each employee in the business
+    for emp in business.employees:
+        if emp.id in employee_time_off:
+            time_off_days = employee_time_off[emp.id]
+            print(f"[TIME_OFF] Blocking {emp.name} ({emp.id}) on days: {time_off_days}", flush=True)
+            
+            for day in time_off_days:
+                # Block all hours for the day (the solver uses 0-23 range, but we block operating hours)
+                emp.add_time_off(day)  # This blocks all hours for that day
+
+
 def get_week_start(offset: int = 0) -> date:
     """Get the Monday of the week with the given offset from current week."""
     today = date.today()
@@ -2465,6 +2526,15 @@ def generate_schedule():
     
     print(f"[GENERATE] Starting schedule generation for business: {business.id} ({business.name})", flush=True)
     print(f"[GENERATE] Employees: {len(business.employees)}, Roles: {len(business.roles)}", flush=True)
+    
+    # Apply approved time off requests to employees before scheduling
+    try:
+        week_start = get_week_start(week_offset)
+        week_end = week_start + timedelta(days=6)
+        _apply_approved_time_off(business, week_start, week_end)
+        print(f"[GENERATE] Applied approved time off for week {week_start} to {week_end}", flush=True)
+    except Exception as e:
+        print(f"[GENERATE] Warning: Could not apply time off requests: {e}", flush=True)
     
     try:
         # Apply policies if provided
@@ -2541,6 +2611,7 @@ def find_alternative():
     data = request.json or {}
     policies = data.get('policies', None)
     business_id = data.get('businessId', None)
+    week_offset = data.get('weekOffset', 0)
     
     # If businessId is provided, use that business (fixes multi-worker issue)
     if business_id:
@@ -2556,6 +2627,14 @@ def find_alternative():
             }), 404
     else:
         business = get_current_business()
+    
+    # Apply approved time off requests to employees before scheduling
+    try:
+        week_start = get_week_start(week_offset)
+        week_end = week_start + timedelta(days=6)
+        _apply_approved_time_off(business, week_start, week_end)
+    except Exception as e:
+        print(f"[ALTERNATIVE] Warning: Could not apply time off requests: {e}", flush=True)
     
     solver = get_solver(policies)
     

@@ -219,6 +219,167 @@ async function loadApprovedPTOForWeek() {
         console.warn('Could not load approved PTO:', error);
         state.approvedPTO = [];
     }
+    
+    // Render the time off card
+    renderTimeOffCard();
+}
+
+function renderTimeOffCard() {
+    console.log('[TimeOffCard] renderTimeOffCard called');
+    console.log('[TimeOffCard] state.approvedPTO:', state.approvedPTO);
+    
+    const card = document.getElementById('timeOffCard');
+    const staffList = document.getElementById('timeOffStaffList');
+    const titleText = document.getElementById('timeOffTitleText');
+    const titleIcon = document.getElementById('timeOffIcon');
+    const countBadge = document.getElementById('timeOffCount');
+    const hint = document.getElementById('timeOffHint');
+    const toggle = document.getElementById('timeOffToggle');
+    const header = document.getElementById('timeOffCardHeader');
+    
+    console.log('[TimeOffCard] Elements found:', { card: !!card, staffList: !!staffList, titleText: !!titleText });
+    
+    if (!card || !staffList) {
+        console.warn('[TimeOffCard] Required elements not found, aborting render');
+        return;
+    }
+    
+    // Get unique employees with time off this week
+    const weekDates = getWeekDates(state.weekOffset);
+    const timeOffByEmployee = {};
+    
+    (state.approvedPTO || []).forEach(pto => {
+        const empId = pto.employee_id;
+        const ptoStart = new Date(pto.start_date + 'T00:00:00');
+        const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+        
+        // Check if any day in the week overlaps with this PTO
+        let daysOff = [];
+        weekDates.forEach((date, idx) => {
+            if (date >= ptoStart && date <= ptoEnd) {
+                daysOff.push(idx);
+            }
+        });
+        
+        if (daysOff.length > 0) {
+            if (!timeOffByEmployee[empId]) {
+                timeOffByEmployee[empId] = {
+                    employee_name: pto.employee_name,
+                    employee_color: pto.employee_color,
+                    pto_type: pto.pto_type,
+                    days: daysOff,
+                    start_date: pto.start_date,
+                    end_date: pto.end_date
+                };
+            }
+        }
+    });
+    
+    const staffOffCount = Object.keys(timeOffByEmployee).length;
+    console.log('[TimeOffCard] Staff off count:', staffOffCount, 'timeOffByEmployee:', timeOffByEmployee);
+    
+    // Handle empty state
+    if (staffOffCount === 0) {
+        console.log('[TimeOffCard] No staff off, showing empty state');
+        card.classList.add('empty');
+        card.classList.remove('collapsed');
+        titleIcon.textContent = '✓';
+        titleText.textContent = 'Full Team Available';
+        countBadge.style.display = 'none';
+        staffList.innerHTML = `
+            <div class="time-off-empty-message">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                <span>All staff members are available this week</span>
+            </div>
+        `;
+        if (hint) hint.style.display = 'none';
+        return;
+    }
+    
+    // Show time off
+    card.classList.remove('empty');
+    titleIcon.textContent = '🌴';
+    titleText.textContent = 'Time Off This Week';
+    countBadge.textContent = staffOffCount;
+    countBadge.style.display = 'inline-block';
+    if (hint) hint.style.display = 'flex';
+    
+    // Build staff pills
+    let html = '';
+    Object.values(timeOffByEmployee).forEach(staff => {
+        const initials = getInitials(staff.employee_name);
+        const color = staff.employee_color || '#8b5cf6';
+        const emoji = getTimeOffTypeEmoji(staff.pto_type);
+        const dateRange = formatTimeOffDateRange(staff.start_date, staff.end_date, staff.days);
+        
+        html += `
+            <div class="time-off-staff-pill">
+                <div class="time-off-staff-avatar" style="background: ${color}">${initials}</div>
+                <div class="time-off-staff-info">
+                    <div class="time-off-staff-name">${staff.employee_name}</div>
+                    <div class="time-off-staff-dates">
+                        <span class="time-off-staff-type">${emoji}</span>
+                        <span>${dateRange}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    staffList.innerHTML = html;
+    
+    // Setup toggle functionality
+    if (header && !header.hasAttribute('data-listener-attached')) {
+        header.setAttribute('data-listener-attached', 'true');
+        header.addEventListener('click', () => {
+            card.classList.toggle('collapsed');
+        });
+    }
+}
+
+function getInitials(name) {
+    if (!name) return '??';
+    const parts = name.split(' ').filter(p => p.length > 0);
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return parts[0].substring(0, 2).toUpperCase();
+}
+
+function getTimeOffTypeEmoji(type) {
+    switch (type) {
+        case 'vacation': return '🌴';
+        case 'sick': return '🤒';
+        case 'personal': return '👤';
+        default: return '📋';
+    }
+}
+
+function formatTimeOffDateRange(startDate, endDate, daysInWeek) {
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    if (daysInWeek.length === 1) {
+        return dayNames[daysInWeek[0]];
+    }
+    
+    // Check if consecutive
+    let isConsecutive = true;
+    for (let i = 1; i < daysInWeek.length; i++) {
+        if (daysInWeek[i] !== daysInWeek[i-1] + 1) {
+            isConsecutive = false;
+            break;
+        }
+    }
+    
+    if (isConsecutive) {
+        return `${dayNames[daysInWeek[0]]}-${dayNames[daysInWeek[daysInWeek.length - 1]]}`;
+    }
+    
+    // Non-consecutive, list them
+    return daysInWeek.map(d => dayNames[d]).join(', ');
 }
 
 // ==================== TIMELINE DRAG STATE ====================
@@ -2299,7 +2460,7 @@ async function findAlternative() {
         const response = await fetch('/api/alternative', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies, businessId: state.business.id }),
+            body: JSON.stringify({ policies, businessId: state.business.id, weekOffset: state.weekOffset }),
             signal: controller.signal
         });
         
@@ -3294,7 +3455,7 @@ function renderSimpleTableView(schedule) {
             }
         }
         
-        html += `<td class="total-hours">PTO</td>`;
+        html += `<td class="total-hours">Off</td>`;
         row.innerHTML = html;
         tbody.appendChild(row);
     });
