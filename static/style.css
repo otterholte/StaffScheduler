@@ -3351,7 +3351,8 @@ a[data-tooltip] {
     transform: translateX(-50%);
     padding: 0.5rem 0.75rem;
     background: #1e293b;
-    max-width: 250px;
+    max-width: 320px;
+    min-width: 200px;
     white-space: normal;
     text-align: center;
     border: 1px solid #334155;
