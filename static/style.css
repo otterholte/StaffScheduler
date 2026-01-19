@@ -3414,7 +3414,7 @@ a[data-tooltip] {
     bottom: auto;
     top: 50%;
     left: calc(100% + 8px);
-    transform: translateY(-50%) translateX(-20%);
+    transform: translateY(-50%);
 }
 
 [data-tooltip-pos="right"]::after {
