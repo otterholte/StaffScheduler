@@ -7680,13 +7680,13 @@ async function handleRoleSubmit(e) {
     try {
         let response;
         if (isNew) {
-            response = await fetch('/api/settings/roles', {
+            response = await fetch(`/api/${state.business.id}/settings/roles`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(roleData)
             });
         } else {
-            response = await fetch(`/api/settings/roles/${roleId}`, {
+            response = await fetch(`/api/${state.business.id}/settings/roles/${roleId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(roleData)
@@ -7730,7 +7730,7 @@ function confirmDeleteRole(roleId) {
 
 async function deleteRole(roleId) {
     try {
-        const response = await fetch(`/api/settings/roles/${roleId}`, {
+        const response = await fetch(`/api/${state.business.id}/settings/roles/${roleId}`, {
             method: 'DELETE'
         });
         
@@ -7845,32 +7845,34 @@ function setupKeyboardShortcuts() {
 
 // ==================== UTILITIES ====================
 
-// Maximally distinct color palette - avoids reds (reserved for "needs coverage" indicators)
+// Maximally distinct color palette
+// Avoids: reds (reserved for "needs coverage" indicators)
+// Avoids: purples near #8b5cf6 (reserved for time-off display)
 const DISTINCT_COLORS = [
     '#2a9d8f', // Teal
     '#e9c46a', // Yellow/Gold
     '#264653', // Dark Blue-Gray
     '#f4a261', // Orange
-    '#7209b7', // Purple
     '#3a86ff', // Bright Blue
     '#06d6a0', // Mint Green
     '#118ab2', // Ocean Blue
     '#ffd166', // Sunny Yellow
     '#073b4c', // Navy
-    '#8338ec', // Violet
     '#4ecdc4', // Turquoise
     '#ffe66d', // Lemon
     '#95e1d3', // Seafoam
-    '#aa96da', // Lavender
     '#a8d8ea', // Sky Blue
     '#ffc93c', // Amber
-    '#6a0572', // Deep Purple
     '#1eb980', // Emerald
     '#00b4d8', // Cyan
     '#90be6d', // Olive Green
     '#577590', // Steel Blue
     '#43aa8b', // Sea Green
     '#f9844a', // Tangerine
+    '#10b981', // Emerald Green
+    '#0ea5e9', // Sky Blue
+    '#14b8a6', // Teal
+    '#f59e0b', // Amber
 ];
 
 function getRandomColor() {

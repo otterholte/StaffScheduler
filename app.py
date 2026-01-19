@@ -3396,11 +3396,13 @@ def update_settings():
     })
 
 
-@app.route('/api/settings/roles', methods=['GET'])
+@app.route('/api/<business_slug>/settings/roles', methods=['GET'])
 @login_required
-def get_roles():
+def get_roles(business_slug):
     """Get all roles for current business."""
-    business = get_current_business()
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
     
     return jsonify({
         'success': True,
@@ -3408,12 +3410,14 @@ def get_roles():
     })
 
 
-@app.route('/api/settings/roles', methods=['POST'])
+@app.route('/api/<business_slug>/settings/roles', methods=['POST'])
 @login_required
-def add_role():
+def add_role(business_slug):
     """Add a new role to the current business."""
     global _solver
-    business = get_current_business()
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
     data = request.json
     
     # Generate unique ID
@@ -3428,6 +3432,10 @@ def add_role():
     business.roles.append(role)
     _solver = None
     
+    # Sync to database
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
+    
     return jsonify({
         'success': True,
         'role': role.to_dict(),
@@ -3435,12 +3443,14 @@ def add_role():
     })
 
 
-@app.route('/api/settings/roles/<role_id>', methods=['PUT'])
+@app.route('/api/<business_slug>/settings/roles/<role_id>', methods=['PUT'])
 @login_required
-def update_role(role_id):
+def update_role(business_slug, role_id):
     """Update an existing role."""
     global _solver
-    business = get_current_business()
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
     data = request.json
     
     # Find role
@@ -3464,6 +3474,10 @@ def update_role(role_id):
     
     _solver = None
     
+    # Sync to database
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
+    
     return jsonify({
         'success': True,
         'role': role.to_dict(),
@@ -3471,12 +3485,14 @@ def update_role(role_id):
     })
 
 
-@app.route('/api/settings/roles/<role_id>', methods=['DELETE'])
+@app.route('/api/<business_slug>/settings/roles/<role_id>', methods=['DELETE'])
 @login_required
-def delete_role(role_id):
+def delete_role(business_slug, role_id):
     """Delete a role from the current business."""
     global _solver
-    business = get_current_business()
+    business = get_business_by_slug(business_slug)
+    if not business:
+        return jsonify({'success': False, 'message': 'Business not found'}), 404
     
     # Find and remove role
     role = None
@@ -3497,6 +3513,10 @@ def delete_role(role_id):
             emp.roles.remove(role_id)
     
     _solver = None
+    
+    # Sync to database
+    if current_user.is_authenticated:
+        sync_business_to_db(business.id, current_user.id, business_obj=business)
     
     return jsonify({
         'success': True,

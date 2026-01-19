@@ -911,9 +911,10 @@ def create_user_business(user_id: int, company_name: str, owner_name: str = None
             pass
     
     # Default roles for a new business
+    # Note: Avoid purple (#8b5cf6) as it's reserved for time-off display
     roles = [
         Role(id="staff", name="Staff", color="#3b82f6"),  # Blue
-        Role(id="manager", name="Manager", color="#8b5cf6")  # Purple
+        Role(id="manager", name="Manager", color="#10b981")  # Emerald Green
     ]
     
     # Create the owner as the first employee/manager
