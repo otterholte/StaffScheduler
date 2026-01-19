@@ -1103,14 +1103,14 @@ def get_pending_pto_count(business_slug):
 @app.route('/api/<business_slug>/pto/<request_id>/approve', methods=['PUT'])
 @login_required
 def approve_pto_request(business_slug, request_id):
-    """Approve a PTO request."""
+    """Approve a PTO request and remove any conflicting scheduled shifts."""
     try:
         business = get_business_by_slug(business_slug)
         if not business:
             return jsonify({'success': False, 'error': 'Business not found'}), 404
         
         from db_service import get_db_business
-        from models import PTORequest
+        from models import PTORequest, DBSchedule, DBShiftAssignment
         from datetime import datetime
         
         db_business = get_db_business(business.id)
@@ -1128,6 +1128,61 @@ def approve_pto_request(business_slug, request_id):
         if pto_request.status != 'pending':
             return jsonify({'success': False, 'error': 'Request has already been processed'}), 400
         
+        # Find and remove conflicting shifts from any schedules
+        affected_shifts = []
+        
+        # Get the date range for the time off
+        pto_start = pto_request.start_date
+        pto_end = pto_request.end_date
+        employee_id = pto_request.employee_id
+        
+        # Find schedules that overlap with this time off period
+        # We need to check schedules where the week overlaps with the PTO dates
+        schedules = DBSchedule.query.filter_by(business_db_id=db_business.id).all()
+        
+        for schedule in schedules:
+            week_start = schedule.week_start_date
+            week_end = week_start + timedelta(days=6)
+            
+            # Check if this schedule's week overlaps with the PTO
+            if week_start <= pto_end and week_end >= pto_start:
+                # Find shift assignments for this employee in this schedule
+                shifts_to_remove = DBShiftAssignment.query.filter_by(
+                    schedule_id=schedule.id,
+                    employee_id=employee_id
+                ).all()
+                
+                for shift in shifts_to_remove:
+                    # Convert shift day (0-6) to actual date
+                    shift_date = week_start + timedelta(days=shift.day)
+                    
+                    # Check if this shift falls within the PTO dates
+                    if pto_start <= shift_date <= pto_end:
+                        affected_shifts.append({
+                            'week_id': schedule.week_id,
+                            'day': shift.day,
+                            'date': shift_date.isoformat(),
+                            'start_hour': shift.start_hour,
+                            'end_hour': shift.end_hour,
+                            'role_id': shift.role_id
+                        })
+                        
+                        # Remove the shift from the schedule
+                        db.session.delete(shift)
+                
+                # If we removed shifts, update the schedule JSON as well
+                if affected_shifts:
+                    schedule_data = schedule.get_schedule_data()
+                    if 'assignments' in schedule_data:
+                        # Filter out assignments for this employee on affected days
+                        affected_days = {s['day'] for s in affected_shifts if s['week_id'] == schedule.week_id}
+                        schedule_data['assignments'] = [
+                            a for a in schedule_data['assignments']
+                            if not (a.get('employee_id') == employee_id and a.get('day') in affected_days)
+                        ]
+                        schedule.set_schedule_data(schedule_data)
+        
+        # Approve the request
         pto_request.status = 'approved'
         pto_request.reviewed_by_id = current_user.id
         pto_request.reviewed_at = datetime.utcnow()
@@ -1138,10 +1193,24 @@ def approve_pto_request(business_slug, request_id):
         
         db.session.commit()
         
+        # Get employee name for the response
+        employee_name = employee_id
+        for emp in business.employees:
+            if emp.id == employee_id:
+                employee_name = emp.name
+                break
+        
+        # Build response message
+        message = 'Time off request approved'
+        if affected_shifts:
+            message = f'Time off approved. {len(affected_shifts)} scheduled shift(s) for {employee_name} have been removed and marked as open.'
+        
         return jsonify({
             'success': True,
-            'message': 'PTO request approved',
-            'pto_request': pto_request.to_dict()
+            'message': message,
+            'pto_request': pto_request.to_dict(),
+            'affected_shifts': affected_shifts,
+            'shifts_removed': len(affected_shifts)
         })
     except Exception as e:
         import traceback
@@ -2633,10 +2702,35 @@ def find_alternative():
         week_start = get_week_start(week_offset)
         week_end = week_start + timedelta(days=6)
         _apply_approved_time_off(business, week_start, week_end)
+        print(f"[ALTERNATIVE] Applied approved time off for week {week_start} to {week_end}", flush=True)
     except Exception as e:
         print(f"[ALTERNATIVE] Warning: Could not apply time off requests: {e}", flush=True)
     
-    solver = get_solver(policies)
+    # Apply policies if provided
+    if policies:
+        _current_policies['min_shift_length'] = policies.get('min_shift_length', _current_policies['min_shift_length'])
+        _current_policies['max_hours_per_day'] = policies.get('max_hours_per_day', _current_policies['max_hours_per_day'])
+        _current_policies['max_splits'] = policies.get('max_splits', _current_policies['max_splits'])
+        _current_policies['max_split_shifts_per_week'] = policies.get('max_split_shifts_per_week', _current_policies['max_split_shifts_per_week'])
+        _current_policies['scheduling_strategy'] = policies.get('scheduling_strategy', _current_policies['scheduling_strategy'])
+        _current_policies['max_days_ft'] = policies.get('max_days_ft', _current_policies['max_days_ft'])
+        _current_policies['max_days_ft_mode'] = policies.get('max_days_ft_mode', _current_policies['max_days_ft_mode'])
+        _current_policies['max_days_pt'] = policies.get('max_days_pt', _current_policies['max_days_pt'])
+        _current_policies['max_days_pt_mode'] = policies.get('max_days_pt_mode', _current_policies['max_days_pt_mode'])
+    
+    # Always create a fresh solver to ensure time-off is respected
+    solver = AdvancedScheduleSolver(
+        business=business,
+        min_shift_hours=_current_policies['min_shift_length'],
+        max_hours_per_day=_current_policies['max_hours_per_day'],
+        max_splits_per_day=_current_policies['max_splits'],
+        max_split_shifts_per_week=_current_policies['max_split_shifts_per_week'],
+        scheduling_strategy=_current_policies['scheduling_strategy'],
+        max_days_ft=_current_policies['max_days_ft'],
+        max_days_ft_mode=_current_policies['max_days_ft_mode'],
+        max_days_pt=_current_policies['max_days_pt'],
+        max_days_pt_mode=_current_policies['max_days_pt_mode']
+    )
     
     # Find alternative
     schedule = solver.solve(find_alternative=True, time_limit_seconds=60.0)

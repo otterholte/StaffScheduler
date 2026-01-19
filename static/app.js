@@ -6410,8 +6410,19 @@ async function approvePTOFromNotification(requestId) {
         const data = await response.json();
         
         if (data.success) {
-            showToast('Time off request approved', 'success');
+            // Show appropriate message based on whether shifts were removed
+            if (data.shifts_removed && data.shifts_removed > 0) {
+                showToast(`Time off approved. ${data.shifts_removed} shift(s) removed from schedule.`, 'warning');
+            } else {
+                showToast('Time off request approved', 'success');
+            }
+            
             loadPTONotifications();
+            
+            // Reload the schedule to show updated data (shifts removed, time off visible)
+            await loadApprovedPTOForWeek();
+            await loadScheduleData(true);
+            
             // Also reload if we're in the availability modal
             if (currentPTOEmployeeId) {
                 loadEmployeePTORequests(currentPTOEmployeeId);
@@ -6604,11 +6615,21 @@ async function approvePTORequest(requestId) {
         const data = await response.json();
         
         if (data.success) {
-            showToast('Time off request approved', 'success');
+            // Show appropriate message based on whether shifts were removed
+            if (data.shifts_removed && data.shifts_removed > 0) {
+                showToast(`Time off approved. ${data.shifts_removed} shift(s) removed from schedule.`, 'warning');
+            } else {
+                showToast('Time off request approved', 'success');
+            }
+            
             // Reload the PTO list
             if (currentPTOEmployeeId) {
                 loadEmployeePTORequests(currentPTOEmployeeId);
             }
+            
+            // Reload the schedule to show updated data
+            await loadApprovedPTOForWeek();
+            await loadScheduleData(true);
         } else {
             showToast(data.error || 'Failed to approve request', 'error');
         }
