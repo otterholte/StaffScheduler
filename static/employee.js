@@ -510,8 +510,7 @@ function renderTimelineView() {
             slotsDiv.appendChild(rowContainer);
         }
         
-        // Check for PTO on this day
-        const dayDate = dates[dayIdx];
+        // Check for PTO on this day (dayDate already declared above)
         const dayPTOList = (employeeState.approvedPTO || []).filter(pto => {
             // Filter by mine/everyone
             if (!showEveryone && pto.employee_id !== myId) return false;
