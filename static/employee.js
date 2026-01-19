@@ -158,6 +158,7 @@ function setupFilterToggle() {
             employeeState.filterMode = btn.dataset.filter;
             renderScheduleView();
             updateHoursSummary();
+            renderUpcomingShifts(); // Also update upcoming list based on filter
         });
     });
 }
@@ -1081,16 +1082,95 @@ function renderTableView() {
         });
     }
     
-    // Get employees with shifts
-    const employeesWithShifts = Object.values(employeeSchedules)
-        .filter(es => es.totalHours > 0)
-        .sort((a, b) => b.totalHours - a.totalHours);
+    // Build PTO data by employee for this week
+    const ptoByEmployee = {};
+    (employeeState.approvedPTO || []).forEach(pto => {
+        const empKey = pto.employee_id;
+        
+        // Filter by mine/everyone
+        if (!showEveryone && empKey !== myId) return;
+        
+        if (!ptoByEmployee[empKey]) {
+            ptoByEmployee[empKey] = {
+                employee_name: pto.employee_name,
+                employee_color: pto.employee_color,
+                pto_type: pto.pto_type,
+                days: {}
+            };
+        }
+        
+        // Mark which days have PTO
+        const ptoStart = new Date(pto.start_date + 'T00:00:00');
+        const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+        
+        for (let day = 0; day < 7; day++) {
+            const dayDate = dates[day];
+            if (dayDate >= ptoStart && dayDate <= ptoEnd) {
+                ptoByEmployee[empKey].days[day] = pto.pto_type;
+            }
+        }
+    });
     
-    // If we have employees with shifts, render them
-    if (employeesWithShifts.length > 0) {
-        employeesWithShifts.forEach(empSchedule => {
-            const emp = empSchedule.employee;
-            const isMine = emp.id === myId || emp.id == myId;
+    // Merge employees: those with shifts OR those with PTO this week
+    const allEmployeeIds = new Set([
+        ...Object.keys(employeeSchedules),
+        ...Object.keys(ptoByEmployee)
+    ]);
+    
+    // Build combined employee data for rendering
+    const combinedEmployeeData = [];
+    
+    allEmployeeIds.forEach(empId => {
+        const schedule = employeeSchedules[empId];
+        const pto = ptoByEmployee[empId];
+        
+        let emp, totalHours, days;
+        if (schedule) {
+            emp = schedule.employee;
+            totalHours = schedule.totalHours;
+            days = schedule.days;
+        } else {
+            // Employee only has PTO, no scheduled shifts
+            emp = employeeMap[empId] || {
+                id: empId,
+                name: pto.employee_name,
+                color: pto.employee_color
+            };
+            totalHours = 0;
+            days = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] };
+        }
+        
+        const ptoDays = pto ? Object.keys(pto.days).length : 0;
+        
+        if (totalHours > 0 || ptoDays > 0) {
+            combinedEmployeeData.push({
+                emp,
+                totalHours,
+                days,
+                pto: pto || null,
+                ptoDays,
+                isMine: empId === myId || empId == myId
+            });
+        }
+    });
+    
+    // Sort: my row first, then by hours, then PTO-only
+    combinedEmployeeData.sort((a, b) => {
+        // My row always first
+        if (a.isMine && !b.isMine) return -1;
+        if (!a.isMine && b.isMine) return 1;
+        // Both have hours - sort by hours
+        if (a.totalHours > 0 && b.totalHours > 0) return b.totalHours - a.totalHours;
+        // One has hours, one doesn't
+        if (a.totalHours > 0) return -1;
+        if (b.totalHours > 0) return 1;
+        // Both PTO only - sort by name
+        return a.emp.name.localeCompare(b.emp.name);
+    });
+    
+    // Render employee rows (including PTO in same row)
+    if (combinedEmployeeData.length > 0) {
+        combinedEmployeeData.forEach(({ emp, totalHours, days, pto, isMine }) => {
             const row = document.createElement('tr');
             row.className = isMine ? 'my-row' : '';
             
@@ -1106,8 +1186,16 @@ function renderTableView() {
             
             for (let day = 0; day < 7; day++) {
                 const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
-                const shifts = empSchedule.days[day];
-                if (shifts.length === 0) {
+                const hasPTO = pto && pto.days[day];
+                const shifts = days[day] || [];
+                
+                if (hasPTO) {
+                    // Show PTO badge for this day
+                    const emoji = getPTOTypeEmojiEmployee(pto.days[day]);
+                    html += `<td class="shift-times ${dayClass}">
+                        <span class="table-pto-cell"><span class="pto-emoji">${emoji}</span>${capitalizeFirstEmployee(pto.days[day])}</span>
+                    </td>`;
+                } else if (shifts.length === 0) {
                     html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
                 } else {
                     const shiftStrs = shifts.map(s => {
@@ -1118,13 +1206,13 @@ function renderTableView() {
                 }
             }
             
-            html += `<td class="total-hours">${empSchedule.totalHours}h</td>`;
+            const hoursDisplay = totalHours > 0 ? `${totalHours}h` : 'Off';
+            html += `<td class="total-hours">${hoursDisplay}</td>`;
             row.innerHTML = html;
             tbody.appendChild(row);
         });
     } else {
         // No shifts - show empty table structure with placeholder rows
-        // Add a few empty placeholder rows to maintain table appearance
         for (let r = 0; r < 3; r++) {
             const row = document.createElement('tr');
             row.className = 'placeholder-row';
@@ -1207,31 +1295,37 @@ function renderUpcomingShifts() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const upcomingShifts = [];
+    const currentEmpId = employeeState.employee.id;
+    const showEveryone = employeeState.filterMode === 'everyone';
     
+    // Combined list of shifts and PTO, all sorted together by date
+    const upcomingItems = [];
+    
+    // Add MY shifts
     if (schedule) {
         employeeState.daysOpen.forEach(dayIdx => {
             const date = dates[dayIdx];
             if (date >= today) {
-                // Only show MY upcoming shifts - use continuous shifts to merge work periods
                 const shifts = getMyContinuousShiftsForDay(schedule, dayIdx);
                 shifts.forEach(shift => {
-                    upcomingShifts.push({
+                    upcomingItems.push({
+                        type: 'shift',
                         ...shift,
                         date: date,
-                        dayIdx: dayIdx
+                        dayIdx: dayIdx,
+                        isMyItem: true
                     });
                 });
             }
         });
     }
     
-    // Add upcoming PTO
-    const currentEmpId = employeeState.employee.id;
-    const upcomingPTO = [];
-    
+    // Add PTO (my own, or everyone's if showEveryone)
     (employeeState.approvedPTO || []).forEach(pto => {
-        if (pto.employee_id !== currentEmpId) return;
+        const isMyPTO = pto.employee_id === currentEmpId;
+        
+        // Skip other people's PTO if not in "everyone" mode
+        if (!isMyPTO && !showEveryone) return;
         
         const ptoStart = new Date(pto.start_date + 'T00:00:00');
         const ptoEnd = new Date(pto.end_date + 'T00:00:00');
@@ -1239,27 +1333,38 @@ function renderUpcomingShifts() {
         // Check each day in the week
         dates.forEach((date, dayIdx) => {
             if (date >= today && date >= ptoStart && date <= ptoEnd) {
-                upcomingPTO.push({
-                    isPTO: true,
+                upcomingItems.push({
+                    type: 'pto',
                     date: date,
                     dayIdx: dayIdx,
-                    pto_type: pto.pto_type
+                    pto_type: pto.pto_type,
+                    employee_id: pto.employee_id,
+                    employee_name: pto.employee_name,
+                    employee_color: pto.employee_color,
+                    isMyItem: isMyPTO
                 });
             }
         });
     });
     
-    // Sort by date
-    upcomingShifts.sort((a, b) => a.date - b.date);
-    upcomingPTO.sort((a, b) => a.date - b.date);
+    // Sort ALL items by date (shifts and PTO together)
+    upcomingItems.sort((a, b) => {
+        const dateDiff = a.date - b.date;
+        if (dateDiff !== 0) return dateDiff;
+        // If same date, put shifts before PTO
+        if (a.type !== b.type) return a.type === 'shift' ? -1 : 1;
+        // If both shifts on same day, sort by start time
+        if (a.type === 'shift' && b.type === 'shift') return a.start - b.start;
+        return 0;
+    });
     
-    // Take first 5 shifts
-    const displayShifts = upcomingShifts.slice(0, 5);
+    // Take first 7 items (increased to show more context)
+    const displayItems = upcomingItems.slice(0, 7);
     
-    // Clear existing shift items and PTO items
+    // Clear existing items
     listContainer.querySelectorAll('.upcoming-shift-item, .upcoming-pto-item').forEach(el => el.remove());
     
-    if (displayShifts.length === 0 && upcomingPTO.length === 0) {
+    if (displayItems.length === 0) {
         if (noShiftsMsg) noShiftsMsg.style.display = 'block';
         return;
     }
@@ -1267,67 +1372,69 @@ function renderUpcomingShifts() {
     if (noShiftsMsg) noShiftsMsg.style.display = 'none';
     
     let html = '';
-    displayShifts.forEach((shift, idx) => {
-        const role = roleMap[shift.role] || {};
-        const duration = shift.end - shift.start;
-        
-        // Create a unique shift identifier for the swap button
-        const shiftData = JSON.stringify({
-            dayIdx: shift.dayIdx,
-            start: shift.start,
-            end: shift.end,
-            role: shift.role
-        }).replace(/"/g, '&quot;');
-        
-        // Check if shift was obtained via swap
-        const swapBadge = shift.viaSwap 
-            ? `<span class="swap-badge" title="Obtained via shift swap from ${employeeMap[shift.swappedFrom]?.name || 'another employee'}">🔄 Swapped</span>` 
-            : '';
-        
-        // Add data attributes for click handler
-        const dataAttrs = `data-day="${shift.dayIdx}" data-start="${shift.start}" data-end="${shift.end}" data-role="${shift.role}" data-via-swap="${shift.viaSwap || ''}" data-swapped-from="${shift.swappedFrom || ''}"`;
-        
-        html += `<div class="upcoming-shift-item ${shift.viaSwap ? 'via-swap' : ''}" ${dataAttrs}>
-            <div class="shift-date-badge">
-                <span class="day-name">${DAYS_SHORT[shift.dayIdx]}</span>
-                <span class="day-num">${shift.date.getDate()}</span>
-            </div>
-            <div class="shift-details shift-clickable" title="Click to view details">
-                <div class="shift-time">${formatTimeRange(shift.start, shift.end)} ${swapBadge}</div>
-                <div class="shift-role">
-                    <span class="shift-role-dot" style="background: ${role.color || '#6366f1'}"></span>
-                    ${role.name || 'Shift'}
+    displayItems.forEach(item => {
+        if (item.type === 'shift') {
+            const role = roleMap[item.role] || {};
+            const duration = item.end - item.start;
+            
+            // Create a unique shift identifier for the swap button
+            const shiftData = JSON.stringify({
+                dayIdx: item.dayIdx,
+                start: item.start,
+                end: item.end,
+                role: item.role
+            }).replace(/"/g, '&quot;');
+            
+            // Check if shift was obtained via swap
+            const swapBadge = item.viaSwap 
+                ? `<span class="swap-badge" title="Obtained via shift swap from ${employeeMap[item.swappedFrom]?.name || 'another employee'}">🔄 Swapped</span>` 
+                : '';
+            
+            // Add data attributes for click handler
+            const dataAttrs = `data-day="${item.dayIdx}" data-start="${item.start}" data-end="${item.end}" data-role="${item.role}" data-via-swap="${item.viaSwap || ''}" data-swapped-from="${item.swappedFrom || ''}"`;
+            
+            html += `<div class="upcoming-shift-item ${item.viaSwap ? 'via-swap' : ''}" ${dataAttrs}>
+                <div class="shift-date-badge">
+                    <span class="day-name">${DAYS_SHORT[item.dayIdx]}</span>
+                    <span class="day-num">${item.date.getDate()}</span>
                 </div>
-            </div>
-            <div class="shift-actions">
-                <div class="shift-duration">${duration}h</div>
-                <button class="shift-swap-btn" title="Request to swap this shift" onclick='showSwapModal(${shiftData})'>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="17 1 21 5 17 9"></polyline>
-                        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-                        <polyline points="7 23 3 19 7 15"></polyline>
-                        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>`;
-    });
-    
-    // Add PTO items
-    upcomingPTO.forEach(pto => {
-        const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
-        const typeLabel = capitalizeFirstEmployee(pto.pto_type);
-        
-        html += `<div class="upcoming-pto-item">
-            <div class="pto-date-badge">
-                <span class="day-name">${DAYS_SHORT[pto.dayIdx]}</span>
-                <span class="day-num">${pto.date.getDate()}</span>
-            </div>
-            <div class="pto-details">
-                <div class="pto-title">${emoji} Time Off</div>
-                <div class="pto-subtitle">${typeLabel}</div>
-            </div>
-        </div>`;
+                <div class="shift-details shift-clickable" title="Click to view details">
+                    <div class="shift-time">${formatTimeRange(item.start, item.end)} ${swapBadge}</div>
+                    <div class="shift-role">
+                        <span class="shift-role-dot" style="background: ${role.color || '#6366f1'}"></span>
+                        ${role.name || 'Shift'}
+                    </div>
+                </div>
+                <div class="shift-actions">
+                    <div class="shift-duration">${duration}h</div>
+                    <button class="shift-swap-btn" title="Request to swap this shift" onclick='showSwapModal(${shiftData})'>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="17 1 21 5 17 9"></polyline>
+                            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                            <polyline points="7 23 3 19 7 15"></polyline>
+                            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>`;
+        } else {
+            // PTO item
+            const emoji = getPTOTypeEmojiEmployee(item.pto_type);
+            const typeLabel = capitalizeFirstEmployee(item.pto_type);
+            const isOtherPerson = !item.isMyItem;
+            const personLabel = isOtherPerson ? item.employee_name : '';
+            
+            html += `<div class="upcoming-pto-item ${isOtherPerson ? 'other-pto' : ''}">
+                <div class="pto-date-badge" style="${isOtherPerson ? `background: ${item.employee_color || '#8b5cf6'}` : ''}">
+                    <span class="day-name">${DAYS_SHORT[item.dayIdx]}</span>
+                    <span class="day-num">${item.date.getDate()}</span>
+                </div>
+                <div class="pto-details">
+                    <div class="pto-title">${emoji} Time Off${isOtherPerson ? ` - ${personLabel}` : ''}</div>
+                    <div class="pto-subtitle">${typeLabel}</div>
+                </div>
+            </div>`;
+        }
     });
     
     // Insert before no-shifts message

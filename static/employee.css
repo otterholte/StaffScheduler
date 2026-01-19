@@ -2612,6 +2612,16 @@ body.employee-view {
     color: #a78bfa;
 }
 
+/* Other people's PTO in upcoming list */
+.upcoming-pto-item.other-pto {
+    opacity: 0.7;
+    border-style: dashed;
+}
+
+.upcoming-pto-item.other-pto .pto-title {
+    font-size: 0.9rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .pto-header {
