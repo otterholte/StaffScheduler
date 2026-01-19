@@ -3151,11 +3151,17 @@ function initPTONotifications() {
     // Toggle dropdown on bell click
     bell.addEventListener('click', (e) => {
         e.stopPropagation();
+        const wasHidden = !dropdown.classList.contains('visible');
         dropdown.classList.toggle('visible');
         
         // Close swap dropdown if open
         const swapDropdown = document.getElementById('notificationDropdown');
         if (swapDropdown) swapDropdown.classList.remove('visible');
+        
+        // If opening the dropdown, mark all notifications as seen
+        if (wasHidden) {
+            markAllPTONotificationsAsSeen();
+        }
     });
     
     // Close dropdown when clicking outside
@@ -3252,6 +3258,24 @@ function renderPTONotificationDropdown(requests) {
             </div>
         `;
     }).join('');
+}
+
+function markAllPTONotificationsAsSeen() {
+    // Get all notification items and mark them as seen
+    const notificationItems = document.querySelectorAll('#ptoNotificationList .notification-item');
+    notificationItems.forEach(item => {
+        const requestId = item.dataset.requestId;
+        if (requestId) {
+            seenPTOUpdates.add(requestId);
+            item.classList.remove('unseen');
+        }
+    });
+    
+    // Save to localStorage
+    localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
+    
+    // Clear the badge
+    updatePTONotificationBadge(0);
 }
 
 function handlePTONotificationClick(requestId) {
