@@ -177,6 +177,7 @@ function setupFilterToggle() {
             renderScheduleView();
             updateHoursSummary();
             renderUpcomingShifts(); // Also update upcoming list based on filter
+            renderScheduleLegend(); // Update legend when filter changes (for employee mode)
         });
     });
 }
@@ -191,8 +192,52 @@ function setupColorModeToggle() {
             btn.classList.add('active');
             employeeState.colorMode = btn.dataset.color;
             renderScheduleView(); // Re-render with new color mode
+            renderScheduleLegend(); // Update legend to match color mode
         });
     });
+}
+
+// Render schedule legend based on current color mode
+function renderScheduleLegend() {
+    const legend = document.getElementById('scheduleLegend');
+    const legendTitle = document.querySelector('.legend-title');
+    if (!legend) return;
+    
+    legend.innerHTML = '';
+    
+    if (employeeState.colorMode === 'employee') {
+        // Show employees with their colors
+        if (legendTitle) legendTitle.textContent = 'Staff';
+        
+        // Get relevant employees - mine or everyone
+        const showEveryone = employeeState.filterMode === 'everyone';
+        const employees = showEveryone 
+            ? employeeState.allEmployees 
+            : [employeeState.employee];
+        
+        employees.forEach(emp => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.innerHTML = `
+                <span class="legend-color" style="background: ${emp.color || '#666'}"></span>
+                <span class="legend-label">${emp.name}</span>
+            `;
+            legend.appendChild(item);
+        });
+    } else {
+        // Show roles with their colors (default)
+        if (legendTitle) legendTitle.textContent = 'Roles';
+        
+        employeeState.roles.forEach(role => {
+            const item = document.createElement('div');
+            item.className = 'legend-item';
+            item.innerHTML = `
+                <span class="legend-color" style="background: ${role.color || '#666'}"></span>
+                <span class="legend-label">${role.name}</span>
+            `;
+            legend.appendChild(item);
+        });
+    }
 }
 
 function setupWeekNavigation() {
@@ -272,6 +317,7 @@ async function loadScheduleData() {
     await loadApprovedPTOForSchedule();
     
     renderScheduleView();
+    renderScheduleLegend();
     updateHoursSummary();
     renderUpcomingShifts();
 }
@@ -323,9 +369,13 @@ function formatShortDate(date) {
 
 function renderTimelineView() {
     const container = document.getElementById('timelineGrid');
-    if (!container) return;
+    if (!container) {
+        console.error('[Timeline] Container #timelineGrid not found');
+        return;
+    }
     
     container.innerHTML = '';
+    console.log('[Timeline] Rendering with daysOpen:', employeeState.daysOpen, 'hours:', employeeState.hours);
     
     const dates = getWeekDates(employeeState.weekOffset);
     const schedule = employeeState.schedule;
