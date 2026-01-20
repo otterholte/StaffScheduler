@@ -2460,7 +2460,7 @@ function renderUnifiedNotificationList() {
             type: 'pto',
             id: pto.id,
             title: `Time Off ${pto.status === 'approved' ? 'Approved' : 'Denied'}`,
-            subtitle: `${capitalizeFirstEmployee(pto.pto_type)} • ${formatDateRange(pto.start_date, pto.end_date)}`,
+            subtitle: `${capitalizeFirstEmployee(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
             status: pto.status,
             date: new Date(pto.updated_at || pto.created_at),
             seen: seenPTOUpdates.has(pto.id)
@@ -2534,7 +2534,7 @@ function renderUnifiedNotificationList() {
     });
 }
 
-function formatDateRange(start, end) {
+function formatPTODateRange(start, end) {
     const startDate = new Date(start + 'T00:00:00');
     const endDate = new Date(end + 'T00:00:00');
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2549,13 +2549,39 @@ async function handleSwapFromNotification(swapId, action) {
     const swap = employeeState.swapRequests.incoming.find(r => r.id === swapId);
     if (!swap) return;
     
-    // Use the existing swap handling logic
-    employeeState.currentSwapRequest = swap;
+    // For swap-only requests, need to open the modal to select a shift
+    if (action === 'accept' && swap.my_eligibility_type === 'swap_only') {
+        employeeState.currentSwapRequest = swap;
+        showSwapResponseModal(swap);
+        document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+        return;
+    }
     
-    if (action === 'accept') {
-        await acceptSwapRequest();
-    } else {
-        await declineSwapRequest();
+    // Direct accept/decline via API
+    try {
+        const empId = employeeState.employee.db_id || employeeState.employee.id;
+        const response = await fetch(
+            `/api/employee/${employeeState.businessSlug}/${empId}/swap-request/${swapId}/respond`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ response: action === 'accept' ? 'accept' : 'decline' })
+            }
+        );
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast(action === 'accept' ? 'Swap request accepted!' : 'Swap request declined', action === 'accept' ? 'success' : 'info');
+            // Reload swap requests
+            await loadSwapRequests();
+            updateUnifiedNotificationBadge();
+        } else {
+            showToast(data.error || 'Failed to respond to swap request', 'error');
+        }
+    } catch (error) {
+        console.error('Error responding to swap:', error);
+        showToast('Failed to respond to swap request', 'error');
     }
     
     // Close dropdown
