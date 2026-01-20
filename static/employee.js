@@ -153,12 +153,10 @@ async function initScheduleView() {
 
 function setupViewToggle() {
     const viewToggle = document.getElementById('viewToggle');
-    console.log('[ViewToggle] Found viewToggle:', !!viewToggle);
     if (!viewToggle) return;
     
     viewToggle.querySelectorAll('.view-toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            console.log('[ViewToggle] Switching to view:', btn.dataset.view);
             viewToggle.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             employeeState.viewMode = btn.dataset.view;
@@ -371,13 +369,9 @@ function formatShortDate(date) {
 
 function renderTimelineView() {
     const container = document.getElementById('timelineGrid');
-    if (!container) {
-        console.error('[Timeline] Container #timelineGrid not found');
-        return;
-    }
+    if (!container) return;
     
     container.innerHTML = '';
-    console.log('[Timeline] Rendering with daysOpen:', employeeState.daysOpen, 'hours:', employeeState.hours);
     
     const dates = getWeekDates(employeeState.weekOffset);
     const schedule = employeeState.schedule;
@@ -559,6 +553,7 @@ function renderTimelineView() {
                 block.style.background = blockColor;
                 
                 // Tooltip
+                const role = roleMap[shift.roleId];
                 const roleName = role?.name || 'Staff';
                 let tooltipText = `${shift.emp.name}\nRole: ${roleName}\n${formatTime(shift.startHour)} - ${formatTime(shift.endHour)}`;
                 
@@ -2395,10 +2390,8 @@ function hideNotificationDropdown() {
 
 function initNotificationBell() {
     const bell = document.getElementById('swapNotificationBell');
-    console.log('[SwapBell] Found bell element:', !!bell);
     if (bell) {
         bell.addEventListener('click', (e) => {
-            console.log('[SwapBell] Bell clicked');
             e.stopPropagation();
             toggleNotificationDropdown();
         });
@@ -3616,17 +3609,13 @@ function initPTONotifications() {
     const bell = document.getElementById('ptoNotificationBell');
     const dropdown = document.getElementById('ptoNotificationDropdown');
     
-    console.log('[PTOBell] Found bell:', !!bell, 'dropdown:', !!dropdown);
-    
     if (!bell || !dropdown) return;
     
     // Toggle dropdown on bell click
     bell.addEventListener('click', (e) => {
-        console.log('[PTOBell] Bell clicked');
         e.stopPropagation();
         const wasHidden = !dropdown.classList.contains('visible');
         dropdown.classList.toggle('visible');
-        console.log('[PTOBell] Dropdown visible:', dropdown.classList.contains('visible'));
         
         // Close swap dropdown if open
         const swapDropdown = document.getElementById('notificationDropdown');
