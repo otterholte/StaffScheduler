@@ -4261,8 +4261,51 @@ function handlePTONotificationClick(requestId) {
     }
 }
 
+// ==================== HAMBURGER MENU ====================
+function initHamburgerMenu() {
+    const hamburgerBtn = document.getElementById('hamburgerMenuBtn');
+    const slideMenu = document.getElementById('slideMenu');
+    const slideOverlay = document.getElementById('slideMenuOverlay');
+    const closeBtn = document.getElementById('slideMenuClose');
+    
+    if (!hamburgerBtn || !slideMenu) return;
+    
+    // Open menu
+    hamburgerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        slideMenu.classList.add('visible');
+        slideOverlay.classList.add('visible');
+        document.body.style.overflow = 'hidden';
+    });
+    
+    // Close menu
+    function closeMenu() {
+        slideMenu.classList.remove('visible');
+        slideOverlay.classList.remove('visible');
+        document.body.style.overflow = '';
+    }
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeMenu);
+    }
+    
+    if (slideOverlay) {
+        slideOverlay.addEventListener('click', closeMenu);
+    }
+    
+    // Close on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && slideMenu.classList.contains('visible')) {
+            closeMenu();
+        }
+    });
+}
+
 // ==================== INITIALIZATION ====================
 document.addEventListener('DOMContentLoaded', () => {
+    // Initialize hamburger menu on all employee pages
+    initHamburgerMenu();
+    
     // Determine which page we're on
     const scheduleView = document.getElementById('scheduleViewTimeline');
     const availabilityTable = document.getElementById('availabilityTable');

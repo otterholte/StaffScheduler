@@ -52,7 +52,7 @@
                     </a>
                 </nav>
             </div>
-            <div class="header-right">
+            <div class="header-right header-right-compact">
                 <!-- Unified Notification Bell -->
                 <div class="notification-bell-wrapper">
                     <button class="notification-bell" id="unifiedNotificationBell" title="Notifications">
@@ -75,12 +75,49 @@
                     </div>
                 </div>
                 
-                <div class="employee-user-badge">
-                    <div class="user-avatar" style="background: {{ employee.color }}">
-                        {{ employee.name[0]|upper }}
+                <!-- Hamburger Menu Button -->
+                <button class="hamburger-menu-btn" id="hamburgerMenuBtn" title="Menu">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <!-- Slide-out Menu Panel -->
+            <div class="slide-menu-overlay" id="slideMenuOverlay"></div>
+            <div class="slide-menu" id="slideMenu">
+                <div class="slide-menu-header">
+                    <div class="slide-menu-user">
+                        <div class="user-avatar" style="background: {{ employee.color }}">
+                            {{ employee.name[0]|upper }}
+                        </div>
+                        <div class="slide-menu-user-info">
+                            <span class="user-name">{{ employee.name }}</span>
+                            <span class="business-name">{{ business.name }}</span>
+                        </div>
                     </div>
-                    <span class="user-name">{{ employee.name }}</span>
+                    <button class="slide-menu-close" id="slideMenuClose">&times;</button>
                 </div>
+                <nav class="slide-menu-nav">
+                    <a href="{{ url_for('employee_schedule', business_slug=business_slug, employee_id=employee_id) }}" class="slide-menu-item active">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="16" y1="2" x2="16" y2="6"></line>
+                            <line x1="8" y1="2" x2="8" y2="6"></line>
+                            <line x1="3" y1="10" x2="21" y2="10"></line>
+                        </svg>
+                        <span>My Schedule</span>
+                    </a>
+                    <a href="{{ url_for('employee_availability', business_slug=business_slug, employee_id=employee_id) }}" class="slide-menu-item">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>My Availability</span>
+                    </a>
+                </nav>
             </div>
         </header>
 
