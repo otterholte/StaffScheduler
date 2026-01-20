@@ -169,6 +169,7 @@ body.menu-open {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    margin-left: auto;
 }
 
 .hamburger-menu-btn {
@@ -233,6 +234,8 @@ body.menu-open {
     flex-direction: column;
     box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
     visibility: hidden; /* Prevent interaction when hidden */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .slide-menu.visible {
@@ -241,13 +244,17 @@ body.menu-open {
 }
 
 .slide-menu-header {
+    position: sticky;
+    top: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 1.5rem 1.25rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: #252540;
+    z-index: 1;
 }
+
 
 .slide-menu-user {
     display: flex;
@@ -297,6 +304,9 @@ body.menu-open {
     font-size: 1.5rem;
     cursor: pointer;
     transition: all 0.2s ease;
+    position: absolute;
+    top: 14px;
+    right: 14px;
 }
 
 .slide-menu-close:hover {
