@@ -462,6 +462,22 @@ body.employee-view {
     height: 16px;
 }
 
+/* Color Mode Toggle - adds separator margin */
+.color-mode-toggle {
+    margin-left: 8px;
+    position: relative;
+}
+
+.color-mode-toggle::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 4px;
+    bottom: 4px;
+    width: 1px;
+    background: var(--border-color);
+}
+
 /* ==================== MY HOURS SUMMARY ==================== */
 .employee-hours-summary {
     margin-top: 1.5rem;
@@ -891,13 +907,13 @@ body.employee-view {
     z-index: 20 !important;
 }
 
-/* Dim other employees' shifts in the full view */
+/* Dim other employees' shifts slightly in the full view */
 .employee-view .timeline-shift-block.other-shift {
-    opacity: 0.5;
+    opacity: 0.85;
 }
 
 .employee-view .timeline-shift-block.other-shift:hover {
-    opacity: 0.8;
+    opacity: 1;
 }
 
 /* ==================== EMPLOYEE GRID VIEW ==================== */
@@ -1013,13 +1029,13 @@ body.employee-view {
     z-index: 20 !important;
 }
 
-/* Dim other shifts in grid view */
+/* Dim other shifts slightly in grid view */
 .employee-view .schedule-shift-block.other-shift {
-    opacity: 0.5;
+    opacity: 0.85;
 }
 
 .employee-view .schedule-shift-block.other-shift:hover {
-    opacity: 0.8;
+    opacity: 1;
 }
 
 /* Employee Table View */

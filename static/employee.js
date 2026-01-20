@@ -20,6 +20,7 @@ const employeeState = {
     weekOffset: 0,
     viewMode: 'timeline', // 'timeline', 'grid', or 'table'
     filterMode: 'mine', // 'mine' or 'everyone'
+    colorMode: 'role', // 'role' or 'employee' - how to color-code shifts
     // Availability editing state
     isSelecting: false,
     selectionStart: null,
@@ -45,6 +46,22 @@ employeeState.allEmployees.forEach(emp => {
 employeeState.roles.forEach(role => {
     roleMap[role.id] = role;
 });
+
+// Helper to get shift color based on color mode
+function getShiftColor(employeeId, roleIds) {
+    const emp = employeeMap[employeeId];
+    if (employeeState.colorMode === 'employee') {
+        // Color by employee
+        return emp?.color || '#666';
+    } else {
+        // Color by role (default)
+        if (roleIds && roleIds.size > 0) {
+            const firstRoleId = Array.from(roleIds)[0];
+            return roleMap[firstRoleId]?.color || emp?.color || '#666';
+        }
+        return emp?.color || '#666';
+    }
+}
 
 // ==================== UTILITIES ====================
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -126,6 +143,7 @@ function showToast(message, type = 'info') {
 async function initScheduleView() {
     setupViewToggle();
     setupFilterToggle();
+    setupColorModeToggle();
     setupWeekNavigation();
     updateWeekDisplay();
     await loadScheduleData(); // This now fetches from API and handles rendering
@@ -159,6 +177,20 @@ function setupFilterToggle() {
             renderScheduleView();
             updateHoursSummary();
             renderUpcomingShifts(); // Also update upcoming list based on filter
+        });
+    });
+}
+
+function setupColorModeToggle() {
+    const colorModeToggle = document.getElementById('colorModeToggle');
+    if (!colorModeToggle) return;
+    
+    colorModeToggle.querySelectorAll('.filter-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            colorModeToggle.querySelectorAll('.filter-toggle-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            employeeState.colorMode = btn.dataset.color;
+            renderScheduleView(); // Re-render with new color mode
         });
     });
 }
@@ -469,9 +501,9 @@ function renderTimelineView() {
                 block.style.left = `${leftPercent}%`;
                 block.style.width = `${widthPercent}%`;
                 
-                // Color based on role
-                const role = roleMap[shift.roleId];
-                const blockColor = role?.color || shift.emp.color || '#6366f1';
+                // Color based on color mode setting
+                const roleSet = new Set([shift.roleId]);
+                const blockColor = getShiftColor(shift.empId, roleSet);
                 block.style.background = blockColor;
                 
                 // Tooltip
@@ -1007,11 +1039,7 @@ function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
                 .map(roleId => roleMap[roleId]?.name || roleId)
                 .join(', ');
             
-            let color = emp.color || '#666';
-            if (block.roles.size > 0) {
-                const firstRoleId = Array.from(block.roles)[0];
-                color = roleMap[firstRoleId]?.color || emp.color || '#666';
-            }
+            const color = getShiftColor(block.employeeId, block.roles);
             
             const hourOffset = block.startHour - employeeState.hours[0];
             const duration = block.endHour - block.startHour;
@@ -1190,12 +1218,8 @@ function renderGridShifts(schedule, container, showEveryone) {
             .map(roleId => roleMap[roleId]?.name || roleId)
             .join(', ');
         
-        // Get color from role
-        let color = emp.color || '#666';
-        if (segment.roles.size > 0) {
-            const firstRoleId = Array.from(segment.roles)[0];
-            color = roleMap[firstRoleId]?.color || emp.color || '#666';
-        }
+        // Get color based on color mode setting
+        const color = getShiftColor(segment.employeeId, segment.roles);
         
         const hourOffset = segment.startHour - employeeState.hours[0];
         const duration = segment.endHour - segment.startHour;
@@ -1455,13 +1479,13 @@ function renderTableView() {
             const row = document.createElement('tr');
             row.className = isMine ? 'my-row' : '';
             
-            // Get role color for this employee
+            // Get color based on color mode setting
             const empRoles = emp.roles || [];
-            const firstRoleId = empRoles[0];
-            const roleColor = roleMap[firstRoleId]?.color || emp.color || '#666';
+            const roleSet = empRoles.length > 0 ? new Set([empRoles[0]]) : new Set();
+            const displayColor = getShiftColor(emp.id, roleSet);
             
             let html = `<td class="name-col"><div class="emp-name">
-                <span class="emp-color" style="background: ${roleColor}"></span>
+                <span class="emp-color" style="background: ${displayColor}"></span>
                 <span>${emp.name}</span>
             </div></td>`;
             
