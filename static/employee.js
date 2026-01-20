@@ -3,6 +3,22 @@
  * Handles schedule viewing and availability editing for individual employees
  */
 
+// ==================== URL PARAMS ====================
+function getInitialViewMode() {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get('view');
+    if (view && ['timeline', 'grid', 'table'].includes(view)) {
+        return view;
+    }
+    return 'table'; // Default to table view for employees
+}
+
+function updateURLView(viewMode) {
+    const url = new URL(window.location);
+    url.searchParams.set('view', viewMode);
+    window.history.replaceState({}, '', url);
+}
+
 // ==================== STATE ====================
 const employeeState = {
     business: EMPLOYEE_DATA.business,
@@ -18,7 +34,7 @@ const employeeState = {
     schedule: EMPLOYEE_DATA.schedule || null,
     availability: EMPLOYEE_DATA.availability || {},
     weekOffset: 0,
-    viewMode: 'timeline', // 'timeline', 'grid', or 'table'
+    viewMode: getInitialViewMode(), // 'timeline', 'grid', or 'table'
     filterMode: 'mine', // 'mine' or 'everyone'
     colorMode: 'role', // 'role' or 'employee' - how to color-code shifts
     // Availability editing state
@@ -157,11 +173,17 @@ function setupViewToggle() {
     const viewToggle = document.getElementById('viewToggle');
     if (!viewToggle) return;
     
+    // Set initial active state based on URL/default
+    viewToggle.querySelectorAll('.view-toggle-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === employeeState.viewMode);
+    });
+    
     viewToggle.querySelectorAll('.view-toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             viewToggle.querySelectorAll('.view-toggle-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             employeeState.viewMode = btn.dataset.view;
+            updateURLView(btn.dataset.view); // Update URL
             renderScheduleView();
         });
     });
@@ -2390,20 +2412,6 @@ function initUnifiedNotificationBell() {
         dropdown.classList.toggle('visible');
     });
     
-    // Tab switching
-    dropdown.querySelectorAll('.notification-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            // Update tab active state
-            dropdown.querySelectorAll('.notification-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            
-            // Update content visibility
-            dropdown.querySelectorAll('.notification-tab-content').forEach(c => c.classList.remove('active'));
-            const targetContent = document.getElementById(tab.dataset.tab === 'timeoff' ? 'timeoffTabContent' : 'swapsTabContent');
-            if (targetContent) targetContent.classList.add('active');
-        });
-    });
-    
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
         if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
@@ -2414,8 +2422,6 @@ function initUnifiedNotificationBell() {
 
 function updateUnifiedNotificationBadge() {
     const badge = document.getElementById('unifiedNotificationBadge');
-    const ptoTabBadge = document.getElementById('ptoTabBadge');
-    const swapTabBadge = document.getElementById('swapTabBadge');
     
     // Get PTO count
     const ptoCount = (employeeState.ptoNotifications || []).filter(req => !seenPTOUpdates.has(req.id)).length;
@@ -2436,13 +2442,124 @@ function updateUnifiedNotificationBadge() {
         }
     }
     
-    // Update tab badges
-    if (ptoTabBadge) {
-        ptoTabBadge.textContent = ptoCount > 0 ? ptoCount : '';
+    // Also render the unified list
+    renderUnifiedNotificationList();
+}
+
+function renderUnifiedNotificationList() {
+    const list = document.getElementById('unifiedNotificationList');
+    if (!list) return;
+    
+    list.innerHTML = '';
+    
+    const notifications = [];
+    
+    // Add PTO notifications
+    (employeeState.ptoNotifications || []).forEach(pto => {
+        notifications.push({
+            type: 'pto',
+            id: pto.id,
+            title: `Time Off ${pto.status === 'approved' ? 'Approved' : 'Denied'}`,
+            subtitle: `${capitalizeFirstEmployee(pto.pto_type)} • ${formatDateRange(pto.start_date, pto.end_date)}`,
+            status: pto.status,
+            date: new Date(pto.updated_at || pto.created_at),
+            seen: seenPTOUpdates.has(pto.id)
+        });
+    });
+    
+    // Add swap notifications (pending incoming requests)
+    employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').forEach(swap => {
+        const requesterName = swap.requester_name || 'Someone';
+        notifications.push({
+            type: 'swap',
+            id: swap.id,
+            title: `Shift Swap Request`,
+            subtitle: `${requesterName} wants to swap shifts`,
+            date: new Date(swap.created_at),
+            swap: swap,
+            seen: false
+        });
+    });
+    
+    // Sort by date (newest first)
+    notifications.sort((a, b) => b.date - a.date);
+    
+    if (notifications.length === 0) {
+        list.innerHTML = '<div class="empty-notifications">No notifications</div>';
+        return;
     }
-    if (swapTabBadge) {
-        swapTabBadge.textContent = swapCount > 0 ? swapCount : '';
+    
+    notifications.forEach(notif => {
+        const item = document.createElement('div');
+        item.className = 'unified-notification-item';
+        if (!notif.seen) item.classList.add('unread');
+        
+        if (notif.type === 'pto') {
+            const statusIcon = notif.status === 'approved' ? '✓' : '✗';
+            const statusColor = notif.status === 'approved' ? 'color: #10b981' : 'color: #ef4444';
+            item.innerHTML = `
+                <div class="notif-icon pto-icon">📅</div>
+                <div class="notif-content">
+                    <div class="notif-title">${notif.title} <span style="${statusColor}">${statusIcon}</span></div>
+                    <div class="notif-subtitle">${notif.subtitle}</div>
+                </div>
+            `;
+        } else if (notif.type === 'swap') {
+            item.innerHTML = `
+                <div class="notif-icon swap-icon">🔄</div>
+                <div class="notif-content">
+                    <div class="notif-title">${notif.title}</div>
+                    <div class="notif-subtitle">${notif.subtitle}</div>
+                    <div class="notif-actions">
+                        <button class="notif-btn accept" data-swap-id="${notif.id}">Accept</button>
+                        <button class="notif-btn decline" data-swap-id="${notif.id}">Decline</button>
+                    </div>
+                </div>
+            `;
+            
+            // Add event listeners after adding to DOM
+            setTimeout(() => {
+                item.querySelector('.notif-btn.accept')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleSwapFromNotification(notif.id, 'accept');
+                });
+                item.querySelector('.notif-btn.decline')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    handleSwapFromNotification(notif.id, 'decline');
+                });
+            }, 0);
+        }
+        
+        list.appendChild(item);
+    });
+}
+
+function formatDateRange(start, end) {
+    const startDate = new Date(start + 'T00:00:00');
+    const endDate = new Date(end + 'T00:00:00');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    if (start === end) {
+        return `${months[startDate.getMonth()]} ${startDate.getDate()}`;
     }
+    return `${months[startDate.getMonth()]} ${startDate.getDate()} - ${months[endDate.getMonth()]} ${endDate.getDate()}`;
+}
+
+async function handleSwapFromNotification(swapId, action) {
+    const swap = employeeState.swapRequests.incoming.find(r => r.id === swapId);
+    if (!swap) return;
+    
+    // Use the existing swap handling logic
+    employeeState.currentSwapRequest = swap;
+    
+    if (action === 'accept') {
+        await acceptSwapRequest();
+    } else {
+        await declineSwapRequest();
+    }
+    
+    // Close dropdown
+    document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
 }
 
 function initNotificationBell() {
