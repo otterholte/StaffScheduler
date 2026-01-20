@@ -294,20 +294,24 @@ body.employee-view {
 
 /* PTO Delete Button */
 .pto-delete-btn {
-    background: transparent;
-    border: none;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     padding: 0.5rem;
     cursor: pointer;
-    border-radius: 6px;
-    color: var(--text-tertiary);
+    border-radius: 8px;
+    color: #94a3b8;
     transition: all 0.2s ease;
     flex-shrink: 0;
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .pto-delete-btn:hover {
-    background: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
 }
 
 .pto-delete-btn svg {
@@ -429,17 +433,18 @@ body.employee-view {
 /* PTO Block Popover */
 .pto-popover {
     position: absolute;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+    background: #1e1e2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 1rem;
     min-width: 220px;
     max-width: 280px;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
     z-index: 1500;
     opacity: 0;
     transform: translateY(-5px);
     transition: all 0.2s ease;
+    backdrop-filter: none;
 }
 
 .pto-popover.visible {
@@ -478,9 +483,9 @@ body.employee-view {
     align-items: center;
     gap: 0.5rem;
     font-size: 0.85rem;
-    color: var(--text-secondary);
+    color: #cbd5e1;
     padding: 0.5rem 0.75rem;
-    background: var(--bg-secondary);
+    background: #2a2a3e;
     border-radius: 6px;
     margin-bottom: 0.75rem;
 }
