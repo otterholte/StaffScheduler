@@ -641,6 +641,7 @@ function renderTimelineView() {
                 
                 ptoBlock.style.left = '0';
                 ptoBlock.style.width = '100%';
+                ptoBlock.style.cursor = 'pointer';
                 
                 const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
                 const typeLabel = capitalizeFirstEmployee(pto.pto_type);
@@ -648,6 +649,9 @@ function renderTimelineView() {
                 
                 ptoBlock.innerHTML = `<span class="pto-content">${emoji} ${typeLabel}${nameLabel}</span>`;
                 ptoBlock.title = `${isMine ? 'Your' : pto.employee_name + "'s"} Time Off: ${typeLabel}`;
+                
+                // Add click handler for PTO popover
+                ptoBlock.addEventListener('click', (e) => showPTOPopover(e, pto, isMine));
                 
                 ptoRow.appendChild(ptoBlock);
             });
@@ -1031,7 +1035,10 @@ function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
                     day: dayIdx,
                     colIdx,
                     startHour: employeeState.startHour, // Full day
-                    endHour: employeeState.endHour
+                    endHour: employeeState.endHour,
+                    startDate: pto.start_date,
+                    endDate: pto.end_date,
+                    ptoId: pto.id
                 });
             }
         });
@@ -1093,12 +1100,24 @@ function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
             ptoBlock.style.width = `${blockWidth}px`;
             ptoBlock.style.height = `${totalRows * slotHeight - 4}px`;
             ptoBlock.style.zIndex = 10;
+            ptoBlock.style.cursor = 'pointer';
             
             ptoBlock.innerHTML = `
                 <span class="pto-name">${name}</span>
                 <span class="pto-type">${emoji} ${typeLabel}</span>
             `;
             ptoBlock.title = `${name}'s Time Off: ${typeLabel}`;
+            
+            // Add click handler for PTO popover
+            const ptoData = {
+                employee_id: block.employeeId,
+                employee_name: block.employeeName,
+                pto_type: block.ptoType,
+                start_date: block.startDate,
+                end_date: block.endDate,
+                id: block.ptoId
+            };
+            ptoBlock.addEventListener('click', (e) => showPTOPopover(e, ptoData, isMine));
             
             container.appendChild(ptoBlock);
         } else {
@@ -2576,6 +2595,105 @@ function markPTOAsSeen(ptoId) {
     localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
 }
 
+// PTO Block Popover
+function showPTOPopover(e, pto, isMine) {
+    e.stopPropagation();
+    
+    // Hide any existing popover
+    hidePTOPopover();
+    
+    // Create popover
+    const popover = document.createElement('div');
+    popover.id = 'ptoPopover';
+    popover.className = 'pto-popover';
+    
+    const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
+    const typeLabel = capitalizeFirstEmployee(pto.pto_type);
+    const name = isMine ? 'You' : (pto.employee_name || 'Unknown');
+    const dateRange = formatPTODateRange(pto.start_date, pto.end_date);
+    
+    popover.innerHTML = `
+        <div class="pto-popover-header">
+            <span class="pto-popover-emoji">${emoji}</span>
+            <div class="pto-popover-title">
+                <strong>${typeLabel}</strong>
+                <span class="pto-popover-name">${name}</span>
+            </div>
+        </div>
+        <div class="pto-popover-dates">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+            ${dateRange}
+        </div>
+        ${isMine && pto.id ? `
+            <div class="pto-popover-actions">
+                <button class="btn btn-sm btn-danger-outline" onclick="cancelPTOFromPopover('${pto.id}', '${pto.pto_type}', '${dateRange}')">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    Cancel Request
+                </button>
+            </div>
+        ` : ''}
+    `;
+    
+    document.body.appendChild(popover);
+    
+    // Position the popover
+    const rect = e.target.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    
+    let top = rect.bottom + window.scrollY + 8;
+    let left = rect.left + window.scrollX + (rect.width / 2) - (popoverRect.width / 2);
+    
+    // Keep within viewport
+    if (left < 10) left = 10;
+    if (left + popoverRect.width > window.innerWidth - 10) {
+        left = window.innerWidth - popoverRect.width - 10;
+    }
+    if (top + popoverRect.height > window.innerHeight + window.scrollY - 10) {
+        top = rect.top + window.scrollY - popoverRect.height - 8;
+    }
+    
+    popover.style.top = `${top}px`;
+    popover.style.left = `${left}px`;
+    
+    // Show with animation
+    requestAnimationFrame(() => {
+        popover.classList.add('visible');
+    });
+    
+    // Close on click outside
+    setTimeout(() => {
+        document.addEventListener('click', hidePTOPopoverOnClickOutside);
+    }, 0);
+}
+
+function hidePTOPopover() {
+    const popover = document.getElementById('ptoPopover');
+    if (popover) {
+        popover.remove();
+    }
+    document.removeEventListener('click', hidePTOPopoverOnClickOutside);
+}
+
+function hidePTOPopoverOnClickOutside(e) {
+    const popover = document.getElementById('ptoPopover');
+    if (popover && !popover.contains(e.target)) {
+        hidePTOPopover();
+    }
+}
+
+function cancelPTOFromPopover(ptoId, ptoType, dateRange) {
+    hidePTOPopover();
+    showCancelPTOConfirm(ptoId, ptoType, dateRange);
+}
+
 function scrollToAndHighlightPTO(pto) {
     if (!pto) return;
     
@@ -3748,10 +3866,57 @@ async function submitPTORequest() {
     }
 }
 
-async function cancelPTORequest(requestId) {
-    if (!confirm('Are you sure you want to cancel this time off request?')) {
-        return;
+// Store pending cancel request
+let pendingCancelPTO = null;
+
+function showCancelPTOConfirm(requestId, ptoType, dateRange) {
+    pendingCancelPTO = requestId;
+    
+    // Create or get the confirmation popup
+    let popup = document.getElementById('cancelPTOPopup');
+    if (!popup) {
+        popup = document.createElement('div');
+        popup.id = 'cancelPTOPopup';
+        popup.className = 'cancel-pto-popup';
+        popup.innerHTML = `
+            <div class="cancel-pto-popup-content">
+                <div class="cancel-pto-popup-header">
+                    <span class="cancel-pto-icon">🗑️</span>
+                    <h3>Cancel Time Off?</h3>
+                </div>
+                <p class="cancel-pto-message">
+                    Are you sure you want to cancel this <strong id="cancelPTOType"></strong> request for <strong id="cancelPTODates"></strong>?
+                </p>
+                <div class="cancel-pto-actions">
+                    <button class="btn btn-ghost" onclick="hideCancelPTOPopup()">Keep It</button>
+                    <button class="btn btn-danger" onclick="confirmCancelPTO()">Cancel Request</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(popup);
     }
+    
+    // Update the message
+    document.getElementById('cancelPTOType').textContent = ptoType;
+    document.getElementById('cancelPTODates').textContent = dateRange;
+    
+    // Show the popup
+    popup.classList.add('visible');
+}
+
+function hideCancelPTOPopup() {
+    const popup = document.getElementById('cancelPTOPopup');
+    if (popup) {
+        popup.classList.remove('visible');
+    }
+    pendingCancelPTO = null;
+}
+
+async function confirmCancelPTO() {
+    if (!pendingCancelPTO) return;
+    
+    const requestId = pendingCancelPTO;
+    hideCancelPTOPopup();
     
     try {
         const response = await fetch(`/api/employee/${employeeState.businessSlug}/${employeeState.employee.db_id}/pto/${requestId}`, {
@@ -3763,6 +3928,10 @@ async function cancelPTORequest(requestId) {
         if (data.success) {
             showToast('Time off request cancelled', 'success');
             loadPTORequests();
+            // Also refresh schedule if on schedule page
+            if (typeof loadScheduleData === 'function') {
+                loadScheduleData();
+            }
         } else {
             showToast(data.error || 'Failed to cancel request', 'error');
         }
@@ -3770,6 +3939,11 @@ async function cancelPTORequest(requestId) {
         console.error('Error cancelling PTO request:', error);
         showToast('Failed to cancel request', 'error');
     }
+}
+
+// Keep old function for backwards compatibility
+async function cancelPTORequest(requestId) {
+    showCancelPTOConfirm(requestId, 'time off', 'these dates');
 }
 
 function renderPTORequestsList() {
@@ -3796,6 +3970,7 @@ function renderPTORequestsList() {
         const statusIcon = getStatusIcon(req.status);
         const typeEmoji = getPTOTypeEmoji(req.pto_type);
         const dateRange = formatPTODateRange(req.start_date, req.end_date);
+        const canCancel = req.status === 'pending' || req.status === 'approved';
         
         html += `
             <div class="pto-request-item ${statusClass}" id="pto-request-${req.id}">
@@ -3809,9 +3984,12 @@ function renderPTORequestsList() {
                     ${req.employee_note ? `<div class="pto-request-note">"${req.employee_note}"</div>` : ''}
                     ${req.manager_note ? `<div class="pto-manager-note">Manager: "${req.manager_note}"</div>` : ''}
                 </div>
-                ${req.status === 'pending' ? `
-                    <button class="btn btn-sm btn-ghost pto-cancel-btn" onclick="cancelPTORequest('${req.id}')">
-                        Cancel
+                ${canCancel ? `
+                    <button class="pto-delete-btn" onclick="showCancelPTOConfirm('${req.id}', '${req.pto_type}', '${dateRange}')" title="Cancel request">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        </svg>
                     </button>
                 ` : ''}
             </div>

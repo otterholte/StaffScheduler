@@ -292,6 +292,230 @@ body.employee-view {
     border-left: 3px solid var(--employee-accent);
 }
 
+/* PTO Delete Button */
+.pto-delete-btn {
+    background: transparent;
+    border: none;
+    padding: 0.5rem;
+    cursor: pointer;
+    border-radius: 6px;
+    color: var(--text-tertiary);
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.pto-delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.pto-delete-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Cancel PTO Confirmation Popup */
+.cancel-pto-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+}
+
+.cancel-pto-popup.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.cancel-pto-popup-content {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    transform: scale(0.95);
+    transition: transform 0.2s ease;
+}
+
+.cancel-pto-popup.visible .cancel-pto-popup-content {
+    transform: scale(1);
+}
+
+.cancel-pto-popup-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.cancel-pto-icon {
+    font-size: 1.5rem;
+}
+
+.cancel-pto-popup-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+
+.cancel-pto-message {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+}
+
+.cancel-pto-message strong {
+    color: var(--text-primary);
+}
+
+.cancel-pto-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.cancel-pto-actions .btn-ghost {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s ease;
+}
+
+.cancel-pto-actions .btn-ghost:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.cancel-pto-actions .btn-danger {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.cancel-pto-actions .btn-danger:hover {
+    background: #dc2626;
+}
+
+/* Ensure PTO request items have proper layout for delete button */
+.pto-request-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+/* PTO Block Popover */
+.pto-popover {
+    position: absolute;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 1rem;
+    min-width: 220px;
+    max-width: 280px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    z-index: 1500;
+    opacity: 0;
+    transform: translateY(-5px);
+    transition: all 0.2s ease;
+}
+
+.pto-popover.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.pto-popover-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.pto-popover-emoji {
+    font-size: 1.5rem;
+}
+
+.pto-popover-title {
+    display: flex;
+    flex-direction: column;
+}
+
+.pto-popover-title strong {
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.pto-popover-name {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.pto-popover-dates {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+}
+
+.pto-popover-dates svg {
+    color: #a78bfa;
+}
+
+.pto-popover-actions {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.pto-popover-actions .btn-danger-outline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    justify-content: center;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #f87171;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.pto-popover-actions .btn-danger-outline:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
 .notification-list {
     padding: 0.5rem;
 }
