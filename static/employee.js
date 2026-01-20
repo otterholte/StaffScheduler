@@ -851,18 +851,26 @@ function renderGridPTO(container, dates, showEveryone) {
             return dayDate >= ptoStart && dayDate <= ptoEnd;
         });
         
+        const numPTOBlocks = dayPTOList.length;
+        const widthPadding = 6;
+        const availableWidth = slotWidth - widthPadding;
+        
         dayPTOList.forEach((pto, ptoIdx) => {
             const isMine = pto.employee_id === myId;
             const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
             const typeLabel = capitalizeFirstEmployee(pto.pto_type);
-            const nameLabel = isMine ? '' : ` - ${pto.employee_name}`;
+            // Always show name for clarity
+            const name = pto.employee_name || 'Unknown';
             
             const ptoBlock = document.createElement('div');
             ptoBlock.className = `grid-pto-block ${isMine ? 'my-pto' : 'other-pto'}`;
             
-            const widthPadding = 6;
-            const leftPos = timeCellWidth + (colIdx * slotWidth) + (widthPadding / 2);
-            const blockWidth = slotWidth - widthPadding;
+            // Split width evenly among PTO blocks on same day
+            const blockWidth = numPTOBlocks > 1 
+                ? (availableWidth / numPTOBlocks) - 1 
+                : availableWidth;
+            const leftPos = timeCellWidth + (colIdx * slotWidth) + (widthPadding / 2) + 
+                (ptoIdx * (blockWidth + 1));
             
             ptoBlock.style.left = `${leftPos}px`;
             ptoBlock.style.top = `${headerHeight + 2}px`;
@@ -870,8 +878,9 @@ function renderGridPTO(container, dates, showEveryone) {
             ptoBlock.style.height = `${totalRows * slotHeight - 4}px`;
             ptoBlock.style.zIndex = 5; // Below shifts
             
-            ptoBlock.innerHTML = `<span class="pto-content">${emoji} ${typeLabel}${nameLabel}</span>`;
-            ptoBlock.title = `${isMine ? 'Your' : pto.employee_name + "'s"} Time Off: ${typeLabel}`;
+            // Show name + type vertically
+            ptoBlock.innerHTML = `<span class="pto-content">${name}<br>${emoji} ${typeLabel}</span>`;
+            ptoBlock.title = `${name}'s Time Off: ${typeLabel}`;
             
             container.appendChild(ptoBlock);
         });
@@ -2561,35 +2570,39 @@ function positionPopover(targetEl, popover) {
     const popoverRect = popover.getBoundingClientRect();
     const arrow = popover.querySelector('.popover-arrow');
     
-    // Calculate initial position (below target)
-    let top = targetRect.bottom + 10;
-    let left = targetRect.left + (targetRect.width / 2) - 140; // Center popover
+    // Get scroll position to convert viewport coords to document coords
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
+    
+    // Calculate initial position (below target) - use document-relative coords
+    let top = targetRect.bottom + scrollTop + 10;
+    let left = targetRect.left + scrollLeft + (targetRect.width / 2) - 140; // Center popover
     
     // Check if popover would go off the right edge
     const viewportWidth = window.innerWidth;
-    if (left + 280 > viewportWidth - 20) {
-        left = viewportWidth - 280 - 20;
+    if (left + 280 > viewportWidth + scrollLeft - 20) {
+        left = viewportWidth + scrollLeft - 280 - 20;
     }
     
     // Check if popover would go off the left edge
-    if (left < 20) {
-        left = 20;
+    if (left < scrollLeft + 20) {
+        left = scrollLeft + 20;
     }
     
-    // Check if popover would go off the bottom
+    // Check if popover would go off the bottom of viewport
     const viewportHeight = window.innerHeight;
     const popoverHeight = 280; // Approximate height
     
-    if (top + popoverHeight > viewportHeight - 20) {
+    if (targetRect.bottom + popoverHeight > viewportHeight - 20) {
         // Position above instead
-        top = targetRect.top - popoverHeight - 10;
+        top = targetRect.top + scrollTop - popoverHeight - 10;
         popover.classList.add('arrow-bottom');
     } else {
         popover.classList.remove('arrow-bottom');
     }
     
     // Position arrow relative to target center
-    const arrowLeft = targetRect.left + (targetRect.width / 2) - left - 6;
+    const arrowLeft = targetRect.left + scrollLeft + (targetRect.width / 2) - left - 6;
     arrow.style.left = `${Math.max(16, Math.min(arrowLeft, 260))}px`;
     
     // Apply position

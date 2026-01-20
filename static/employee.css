@@ -1947,7 +1947,7 @@ body.employee-view {
 
 /* ==================== SHIFT DETAILS POPOVER ==================== */
 .shift-popover {
-    position: fixed;
+    position: absolute;
     z-index: 2000;
     opacity: 0;
     visibility: hidden;
@@ -2669,23 +2669,28 @@ body.employee-view {
     align-items: center;
     justify-content: center;
     color: #c4b5fd;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-weight: 500;
     writing-mode: vertical-rl;
     text-orientation: mixed;
+    overflow: hidden;
 }
 
 .grid-pto-block.my-pto {
     background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(109, 40, 217, 0.2) 100%);
     border-color: rgba(139, 92, 246, 0.6);
+    border-width: 2px;
 }
 
 .grid-pto-block.other-pto {
-    opacity: 0.5;
+    opacity: 0.7;
 }
 
 .grid-pto-block .pto-content {
     transform: rotate(180deg);
+    text-align: center;
+    line-height: 1.4;
+    padding: 0.5rem 0.25rem;
 }
 
 /* Responsive */
