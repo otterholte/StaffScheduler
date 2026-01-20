@@ -2771,23 +2771,23 @@ body.menu-open {
     /* === NOTIFICATIONS - Slide up panel (auto height) === */
     .notification-dropdown {
         position: fixed;
-        top: auto;
+        top: 64px;
         left: 0;
         right: 0;
-        bottom: 0;
         width: 100vw;
         max-width: 100vw;
-        max-height: 70vh;
-        border-radius: 16px 16px 0 0;
-        z-index: 9999;
-        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+        height: 33vh;
+        max-height: 33vh;
+        border-radius: 0 0 16px 16px;
+        z-index: 10001;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
         background: #1a1a2e;
         display: flex;
         flex-direction: column;
-        transform: translateY(100%);
+        transform: translateY(-10px);
         opacity: 0;
         visibility: hidden;
-        transition: transform 0.3s ease, opacity 0.2s ease;
+        transition: transform 0.2s ease, opacity 0.2s ease;
     }
     
     .notification-dropdown.visible {
