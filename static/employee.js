@@ -4321,6 +4321,16 @@ function initHamburgerMenu() {
     if (slideOverlay) {
         slideOverlay.addEventListener('click', closeMenu);
     }
+
+    // Close if clicking anywhere outside the menu
+    document.addEventListener('click', (e) => {
+        if (slideMenu.classList.contains('visible')) {
+            const clickedInside = slideMenu.contains(e.target) || hamburgerBtn.contains(e.target);
+            if (!clickedInside) {
+                closeMenu();
+            }
+        }
+    });
     
     // Close on escape key
     document.addEventListener('keydown', (e) => {

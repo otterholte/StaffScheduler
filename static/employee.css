@@ -19,6 +19,7 @@ body.menu-open {
 .employee-header {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
     justify-content: space-between;
+    --app-header-height: 64px;
 }
 
 .employee-header .header-right {
@@ -254,7 +255,7 @@ body.menu-open {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.5rem 1.25rem;
+    padding: 1.75rem 1.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: #252540;
     z-index: 1;
@@ -330,13 +331,14 @@ body.menu-open {
     display: flex;
     align-items: center;
     gap: 1rem;
-    padding: 1rem 1.5rem;
+    padding: 1.25rem 1.75rem;
     color: #cbd5e1;
     text-decoration: none;
     transition: all 0.2s ease;
     border-left: 4px solid transparent;
-    margin: 0.25rem 0.75rem;
+    margin: 0.4rem 0.75rem;
     border-radius: 8px;
+    min-height: 56px;
 }
 
 .slide-menu-item:hover {
@@ -351,14 +353,14 @@ body.menu-open {
 }
 
 .slide-menu-item svg {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     stroke: currentColor;
 }
 
 .slide-menu-item span {
-    font-size: 1rem;
+    font-size: 1.05rem;
     font-weight: 500;
 }
 
@@ -2771,7 +2773,7 @@ body.menu-open {
     /* === NOTIFICATIONS - Slide up panel (auto height) === */
     .notification-dropdown {
         position: fixed;
-        top: 64px;
+        top: var(--app-header-height, 64px);
         left: 0;
         right: 0;
         width: 100vw;
