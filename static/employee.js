@@ -852,25 +852,28 @@ function renderGridPTO(container, dates, showEveryone) {
         });
         
         const numPTOBlocks = dayPTOList.length;
+        if (numPTOBlocks === 0) return;
+        
         const widthPadding = 6;
         const availableWidth = slotWidth - widthPadding;
+        
+        // Split PTO blocks evenly across the column
+        const blockWidth = numPTOBlocks > 1 
+            ? Math.floor((availableWidth - (numPTOBlocks - 1) * 2) / numPTOBlocks)
+            : availableWidth;
         
         dayPTOList.forEach((pto, ptoIdx) => {
             const isMine = pto.employee_id === myId;
             const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
             const typeLabel = capitalizeFirstEmployee(pto.pto_type);
-            // Always show name for clarity
             const name = pto.employee_name || 'Unknown';
             
             const ptoBlock = document.createElement('div');
             ptoBlock.className = `grid-pto-block ${isMine ? 'my-pto' : 'other-pto'}`;
             
-            // Split width evenly among PTO blocks on same day
-            const blockWidth = numPTOBlocks > 1 
-                ? (availableWidth / numPTOBlocks) - 1 
-                : availableWidth;
+            // Position each PTO block side by side
             const leftPos = timeCellWidth + (colIdx * slotWidth) + (widthPadding / 2) + 
-                (ptoIdx * (blockWidth + 1));
+                (ptoIdx * (blockWidth + 2));
             
             ptoBlock.style.left = `${leftPos}px`;
             ptoBlock.style.top = `${headerHeight + 2}px`;
@@ -878,8 +881,11 @@ function renderGridPTO(container, dates, showEveryone) {
             ptoBlock.style.height = `${totalRows * slotHeight - 4}px`;
             ptoBlock.style.zIndex = 5; // Below shifts
             
-            // Show name + type vertically
-            ptoBlock.innerHTML = `<span class="pto-content">${name}<br>${emoji} ${typeLabel}</span>`;
+            // Show name and type horizontally (readable)
+            ptoBlock.innerHTML = `
+                <span class="pto-name">${name}</span>
+                <span class="pto-type">${emoji} ${typeLabel}</span>
+            `;
             ptoBlock.title = `${name}'s Time Off: ${typeLabel}`;
             
             container.appendChild(ptoBlock);
