@@ -9,6 +9,12 @@ body.employee-view {
     --employee-accent-hover: #059669;
 }
 
+body.menu-open {
+    position: fixed;
+    overflow: hidden;
+    width: 100%;
+}
+
 /* ==================== EMPLOYEE HEADER ==================== */
 .employee-header {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, transparent 50%);

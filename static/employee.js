@@ -4110,8 +4110,32 @@ function capitalizeFirst(str) {
 const seenPTOUpdates = new Set(JSON.parse(localStorage.getItem('seenPTOUpdates') || '[]'));
 
 function initPTONotifications() {
-    // Load PTO notifications (unified bell handles the dropdown now)
+    // Load PTO notifications
     loadPTONotifications();
+    
+    const bell = document.getElementById('ptoNotificationBell');
+    const dropdown = document.getElementById('ptoNotificationDropdown');
+    const closeBtn = document.getElementById('closePTONotificationsMobile');
+    
+    if (bell && dropdown) {
+        bell.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('visible');
+        });
+        
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdown.classList.remove('visible');
+            });
+        }
+        
+        document.addEventListener('click', (e) => {
+            if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
+                dropdown.classList.remove('visible');
+            }
+        });
+    }
 }
 
 async function loadPTONotifications() {
@@ -4267,22 +4291,27 @@ function initHamburgerMenu() {
     const slideMenu = document.getElementById('slideMenu');
     const slideOverlay = document.getElementById('slideMenuOverlay');
     const closeBtn = document.getElementById('slideMenuClose');
+    let scrollY = 0;
     
     if (!hamburgerBtn || !slideMenu) return;
     
     // Open menu
     hamburgerBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        scrollY = window.scrollY || window.pageYOffset || 0;
         slideMenu.classList.add('visible');
         slideOverlay.classList.add('visible');
-        document.body.style.overflow = 'hidden';
+        document.body.classList.add('menu-open');
+        document.body.style.top = `-${scrollY}px`;
     });
     
     // Close menu
     function closeMenu() {
         slideMenu.classList.remove('visible');
         slideOverlay.classList.remove('visible');
-        document.body.style.overflow = '';
+        document.body.classList.remove('menu-open');
+        document.body.style.top = '';
+        window.scrollTo(0, scrollY);
     }
     
     if (closeBtn) {
