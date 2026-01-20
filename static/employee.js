@@ -2454,8 +2454,13 @@ function renderUnifiedNotificationList() {
     
     const notifications = [];
     
-    // Add PTO notifications
+    // Add PTO notifications (only unseen ones)
     (employeeState.ptoNotifications || []).forEach(pto => {
+        // Skip if already seen
+        if (seenPTOUpdates.has(pto.id) || seenPTOUpdates.has(String(pto.id))) {
+            return;
+        }
+        
         notifications.push({
             type: 'pto',
             id: pto.id,
@@ -2463,7 +2468,6 @@ function renderUnifiedNotificationList() {
             subtitle: `${capitalizeFirstEmployee(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
             status: pto.status,
             date: new Date(pto.updated_at || pto.created_at),
-            seen: seenPTOUpdates.has(pto.id),
             pto: pto // Store full PTO data for navigation
         });
     });
@@ -2493,7 +2497,6 @@ function renderUnifiedNotificationList() {
     notifications.forEach(notif => {
         const item = document.createElement('div');
         item.className = 'unified-notification-item';
-        if (!notif.seen) item.classList.add('unread');
         
         if (notif.type === 'pto') {
             const statusIcon = notif.status === 'approved' ? '✓' : '✗';
@@ -2564,7 +2567,12 @@ function formatPTODateRange(start, end) {
 }
 
 function markPTOAsSeen(ptoId) {
+    // Add both string and number versions to be safe
     seenPTOUpdates.add(ptoId);
+    seenPTOUpdates.add(String(ptoId));
+    if (typeof ptoId === 'string') {
+        seenPTOUpdates.add(parseInt(ptoId, 10));
+    }
     localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
 }
 
@@ -2600,36 +2608,37 @@ function scrollToAndHighlightPTO(pto) {
 function highlightPTOElement(pto) {
     // Wait a moment for render
     setTimeout(() => {
-        // Try to find PTO elements in the current view
-        let ptoElement = null;
+        // Look for the PTO item in the Upcoming Shifts section
+        const upcomingItems = document.querySelectorAll('.upcoming-pto-item');
+        let targetElement = null;
         
-        // Look for PTO blocks in grid view
-        ptoElement = document.querySelector('.grid-pto-block.my-pto');
+        // Find the matching PTO item by checking the content
+        upcomingItems.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            if (text.includes(pto.pto_type.toLowerCase())) {
+                targetElement = item;
+            }
+        });
         
-        // Or timeline view
-        if (!ptoElement) {
-            ptoElement = document.querySelector('.timeline-pto-block.my-pto');
+        // Fallback: just use the first upcoming PTO item
+        if (!targetElement && upcomingItems.length > 0) {
+            targetElement = upcomingItems[0];
         }
         
-        // Or table view - look for PTO cells
-        if (!ptoElement) {
-            ptoElement = document.querySelector('.table-pto-cell');
-        }
-        
-        if (ptoElement) {
+        if (targetElement) {
             // Scroll into view
-            ptoElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
             // Add highlight animation
-            ptoElement.classList.add('highlight-pulse');
+            targetElement.classList.add('highlight-pulse');
             setTimeout(() => {
-                ptoElement.classList.remove('highlight-pulse');
-            }, 2000);
+                targetElement.classList.remove('highlight-pulse');
+            }, 2500);
         } else {
-            // Scroll to schedule section at least
-            const scheduleSection = document.querySelector('.schedule-panel');
-            if (scheduleSection) {
-                scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Scroll to upcoming shifts section at least
+            const upcomingSection = document.querySelector('.upcoming-shifts-card');
+            if (upcomingSection) {
+                upcomingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }
         }
         
