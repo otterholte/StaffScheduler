@@ -2485,10 +2485,45 @@ body.menu-open {
 @media (max-width: 768px) {
     .app-header {
         padding: 0 0.75rem;
+        height: 96px; /* 1.5x header height */
     }
 
     .employee-header .header-left {
         min-width: 0;
+    }
+
+    .employee-header {
+        --app-header-height: 96px;
+    }
+
+    /* Scale logo for mobile header (1.5x) */
+    .employee-header .logo-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .employee-header .logo-text {
+        font-size: 1.65rem;
+    }
+
+    /* Scale header icons (1.5x) */
+    .notification-bell {
+        padding: 0.75rem;
+    }
+
+    .notification-bell svg {
+        width: 33px;
+        height: 33px;
+    }
+
+    .hamburger-menu-btn {
+        width: 60px;
+        height: 60px;
+    }
+
+    .hamburger-menu-btn svg {
+        width: 30px;
+        height: 30px;
     }
 
     .employee-header .header-center {
@@ -2773,7 +2808,7 @@ body.menu-open {
     /* === NOTIFICATIONS - Slide up panel (auto height) === */
     .notification-dropdown {
         position: fixed;
-        top: var(--app-header-height, 64px);
+        top: 96px;
         left: 0;
         right: 0;
         width: 100vw;
@@ -2866,6 +2901,52 @@ body.menu-open {
     
     .legend-item {
         font-size: 0.75rem;
+    }
+    
+    /* === MOBILE MENU SCALE (1.5x) === */
+    .slide-menu {
+        width: 360px;
+        max-width: 90vw;
+    }
+
+    .slide-menu-header {
+        padding: 2.25rem 1.75rem;
+    }
+
+    .slide-menu-user .user-avatar {
+        width: 66px;
+        height: 66px;
+        font-size: 1.5rem;
+    }
+
+    .slide-menu-user-info .user-name {
+        font-size: 1.2rem;
+    }
+
+    .slide-menu-user-info .business-name {
+        font-size: 0.95rem;
+    }
+
+    .slide-menu-close {
+        width: 54px;
+        height: 54px;
+        font-size: 2.25rem;
+        top: 18px;
+        right: 18px;
+    }
+
+    .slide-menu-item {
+        padding: 1.5rem 2rem;
+        min-height: 84px;
+    }
+
+    .slide-menu-item svg {
+        width: 36px;
+        height: 36px;
+    }
+
+    .slide-menu-item span {
+        font-size: 1.2rem;
     }
     
     /* === POPOVERS - Bottom sheet on mobile === */
