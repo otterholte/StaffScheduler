@@ -619,10 +619,10 @@ function renderTimelineView() {
                 
                 const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
                 const typeLabel = capitalizeFirstEmployee(pto.pto_type);
-                const nameLabel = isMine ? '' : ` - ${pto.employee_name}`;
+                const name = pto.employee_name || employeeState.employee.name;
                 
-                ptoBlock.innerHTML = `<span class="pto-content">${emoji} ${typeLabel}${nameLabel}</span>`;
-                ptoBlock.title = `${isMine ? 'Your' : pto.employee_name + "'s"} Time Off: ${typeLabel}`;
+                ptoBlock.innerHTML = `<span class="pto-content">${name} - ${emoji} ${typeLabel}</span>`;
+                ptoBlock.title = `${name}'s Time Off: ${typeLabel}`;
                 
                 // Add click handler for PTO popover
                 ptoBlock.addEventListener('click', (e) => showPTOPopover(e, pto, isMine));
