@@ -18,6 +18,11 @@ body.menu-open {
 /* ==================== EMPLOYEE HEADER ==================== */
 .employee-header {
     background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, transparent 50%);
+    justify-content: space-between;
+}
+
+.employee-header .header-right {
+    margin-left: auto;
 }
 
 .employee-header .header-left {
@@ -2476,6 +2481,23 @@ body.menu-open {
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
+    .app-header {
+        padding: 0 0.75rem;
+    }
+
+    .employee-header .header-left {
+        min-width: 0;
+    }
+
+    .employee-header .header-center {
+        display: none;
+    }
+
+    .employee-header .header-right,
+    .header-right-compact {
+        margin-left: auto;
+        justify-content: flex-end;
+    }
     /* === HEADER === */
     .employee-header .header-left {
         flex-direction: column;
@@ -2759,14 +2781,19 @@ body.menu-open {
         border-radius: 16px 16px 0 0;
         z-index: 9999;
         box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+        background: #1a1a2e;
+        display: flex;
+        flex-direction: column;
         transform: translateY(100%);
-        transition: transform 0.3s ease;
+        opacity: 0;
+        visibility: hidden;
+        transition: transform 0.3s ease, opacity 0.2s ease;
     }
     
     .notification-dropdown.visible {
-        display: flex;
-        flex-direction: column;
         transform: translateY(0);
+        opacity: 1;
+        visibility: visible;
     }
     
     .notification-dropdown-header {
