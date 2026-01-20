@@ -811,25 +811,24 @@ function renderGridView() {
         
         // Use setTimeout to ensure DOM is rendered before calculating positions
         setTimeout(() => {
-            if (schedule && schedule.slot_assignments) {
-                renderGridShifts(schedule, eventsContainer, showEveryone);
-            }
-            // Also render PTO blocks
-            renderGridPTO(eventsContainer, dates, showEveryone);
+            // Render shifts and PTO together so they can be properly positioned
+            renderGridShiftsAndPTO(schedule, eventsContainer, dates, showEveryone);
         }, 0);
     }
 }
 
-function renderGridPTO(container, dates, showEveryone) {
+function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
     const myId = employeeState.employee.id;
+    const slotAssignments = schedule?.slot_assignments || {};
     
     // Get grid dimensions
+    const wrapper = document.getElementById('scheduleGridWrapper');
     const grid = document.getElementById('scheduleGrid');
     const firstSlot = grid?.querySelector('.slot');
     const headerRow = grid?.querySelector('thead tr');
     const timeCell = grid?.querySelector('.time-cell');
     
-    if (!firstSlot || !grid) return;
+    if (!firstSlot || !wrapper) return;
     
     const hSpacing = 8;
     const vSpacing = 3;
@@ -839,49 +838,158 @@ function renderGridPTO(container, dates, showEveryone) {
     const timeCellWidth = (timeCell?.offsetWidth || 50) + hSpacing;
     const totalRows = employeeState.endHour - employeeState.startHour;
     
-    // Check each day column for PTO
+    // Build all blocks (shifts + PTO) per day column
+    const allBlocksByCol = {};
+    employeeState.daysOpen.forEach((day, colIdx) => {
+        allBlocksByCol[colIdx] = [];
+    });
+    
+    // 1. Collect shift segments
+    employeeState.daysOpen.forEach((day, colIdx) => {
+        const empHours = {};
+        
+        employeeState.hours.forEach(hour => {
+            const key = `${day},${hour}`;
+            const assignments = slotAssignments[key] || [];
+            
+            assignments.forEach(assignment => {
+                const empId = assignment.employee_id;
+                if (!showEveryone && empId !== myId) return;
+                
+                if (!empHours[empId]) {
+                    empHours[empId] = { hours: new Map(), viaSwap: false, swappedFrom: null };
+                }
+                if (!empHours[empId].hours.has(hour)) {
+                    empHours[empId].hours.set(hour, new Set());
+                }
+                empHours[empId].hours.get(hour).add(assignment.role_id);
+                if (assignment.via_swap) {
+                    empHours[empId].viaSwap = true;
+                    empHours[empId].swappedFrom = assignment.swapped_from;
+                }
+            });
+        });
+        
+        // Convert to segments
+        Object.entries(empHours).forEach(([employeeId, data]) => {
+            const hoursList = Array.from(data.hours.keys()).sort((a, b) => a - b);
+            if (hoursList.length === 0) return;
+            
+            let segmentStart = hoursList[0];
+            let prevHour = hoursList[0];
+            let segmentRoles = new Set(data.hours.get(hoursList[0]));
+            
+            for (let i = 1; i <= hoursList.length; i++) {
+                const currentHour = hoursList[i];
+                
+                if (currentHour !== prevHour + 1 || i === hoursList.length) {
+                    allBlocksByCol[colIdx].push({
+                        type: 'shift',
+                        employeeId,
+                        roles: segmentRoles,
+                        day,
+                        colIdx,
+                        startHour: segmentStart,
+                        endHour: prevHour + 1,
+                        viaSwap: data.viaSwap,
+                        swappedFrom: data.swappedFrom
+                    });
+                    
+                    if (i < hoursList.length) {
+                        segmentStart = currentHour;
+                        segmentRoles = new Set(data.hours.get(currentHour));
+                    }
+                } else {
+                    data.hours.get(currentHour).forEach(r => segmentRoles.add(r));
+                }
+                prevHour = currentHour;
+            }
+        });
+    });
+    
+    // 2. Collect PTO blocks (treat them as full-day "shifts" for column assignment)
     employeeState.daysOpen.forEach((dayIdx, colIdx) => {
         const dayDate = dates[dayIdx];
         
-        const dayPTOList = (employeeState.approvedPTO || []).filter(pto => {
-            if (!showEveryone && pto.employee_id !== myId) return false;
+        (employeeState.approvedPTO || []).forEach(pto => {
+            if (!showEveryone && pto.employee_id !== myId) return;
             
             const ptoStart = new Date(pto.start_date + 'T00:00:00');
             const ptoEnd = new Date(pto.end_date + 'T00:00:00');
-            return dayDate >= ptoStart && dayDate <= ptoEnd;
+            
+            if (dayDate >= ptoStart && dayDate <= ptoEnd) {
+                allBlocksByCol[colIdx].push({
+                    type: 'pto',
+                    employeeId: pto.employee_id,
+                    employeeName: pto.employee_name,
+                    employeeColor: pto.employee_color,
+                    ptoType: pto.pto_type,
+                    day: dayIdx,
+                    colIdx,
+                    startHour: employeeState.startHour, // Full day
+                    endHour: employeeState.endHour
+                });
+            }
+        });
+    });
+    
+    // 3. Assign sub-columns for overlapping blocks (shifts AND PTO together)
+    Object.entries(allBlocksByCol).forEach(([colIdx, blocks]) => {
+        colIdx = parseInt(colIdx);
+        blocks.sort((a, b) => a.startHour - b.startHour);
+        
+        const columns = [];
+        blocks.forEach(block => {
+            let placed = false;
+            for (let subColIdx = 0; subColIdx < columns.length; subColIdx++) {
+                const hasOverlap = columns[subColIdx].some(s => 
+                    block.startHour < s.endHour && block.endHour > s.startHour
+                );
+                if (!hasOverlap) {
+                    block.subColumn = subColIdx;
+                    columns[subColIdx].push(block);
+                    placed = true;
+                    break;
+                }
+            }
+            if (!placed) {
+                block.subColumn = columns.length;
+                columns.push([block]);
+            }
         });
         
-        const numPTOBlocks = dayPTOList.length;
-        if (numPTOBlocks === 0) return;
-        
-        const widthPadding = 6;
-        const availableWidth = slotWidth - widthPadding;
-        
-        // Split PTO blocks evenly across the column
-        const blockWidth = numPTOBlocks > 1 
-            ? Math.floor((availableWidth - (numPTOBlocks - 1) * 2) / numPTOBlocks)
+        const numSubColumns = columns.length || 1;
+        blocks.forEach(b => b.totalSubColumns = numSubColumns);
+    });
+    
+    // 4. Render all blocks
+    const widthPadding = 6;
+    const availableWidth = slotWidth - widthPadding;
+    
+    Object.values(allBlocksByCol).flat().forEach(block => {
+        const blockWidth = block.totalSubColumns > 1 
+            ? (availableWidth / block.totalSubColumns) - 1 
             : availableWidth;
         
-        dayPTOList.forEach((pto, ptoIdx) => {
-            const isMine = pto.employee_id === myId;
-            const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
-            const typeLabel = capitalizeFirstEmployee(pto.pto_type);
-            const name = pto.employee_name || 'Unknown';
+        const leftPos = timeCellWidth + (block.colIdx * slotWidth) + (widthPadding / 2) + 
+            ((block.subColumn || 0) * (blockWidth + 1));
+        
+        if (block.type === 'pto') {
+            // Render PTO block
+            const isMine = block.employeeId === myId;
+            const emoji = getPTOTypeEmojiEmployee(block.ptoType);
+            const typeLabel = capitalizeFirstEmployee(block.ptoType);
+            const name = block.employeeName || 'Unknown';
             
             const ptoBlock = document.createElement('div');
             ptoBlock.className = `grid-pto-block ${isMine ? 'my-pto' : 'other-pto'}`;
-            
-            // Position each PTO block side by side
-            const leftPos = timeCellWidth + (colIdx * slotWidth) + (widthPadding / 2) + 
-                (ptoIdx * (blockWidth + 2));
             
             ptoBlock.style.left = `${leftPos}px`;
             ptoBlock.style.top = `${headerHeight + 2}px`;
             ptoBlock.style.width = `${blockWidth}px`;
             ptoBlock.style.height = `${totalRows * slotHeight - 4}px`;
-            ptoBlock.style.zIndex = 5; // Below shifts
+            ptoBlock.style.zIndex = 10;
             
-            // Show name and type horizontally (readable)
             ptoBlock.innerHTML = `
                 <span class="pto-name">${name}</span>
                 <span class="pto-type">${emoji} ${typeLabel}</span>
@@ -889,10 +997,67 @@ function renderGridPTO(container, dates, showEveryone) {
             ptoBlock.title = `${name}'s Time Off: ${typeLabel}`;
             
             container.appendChild(ptoBlock);
-        });
+        } else {
+            // Render shift block
+            const emp = employeeMap[block.employeeId];
+            if (!emp) return;
+            
+            const isMine = block.employeeId == myId;
+            const roleNames = Array.from(block.roles)
+                .map(roleId => roleMap[roleId]?.name || roleId)
+                .join(', ');
+            
+            let color = emp.color || '#666';
+            if (block.roles.size > 0) {
+                const firstRoleId = Array.from(block.roles)[0];
+                color = roleMap[firstRoleId]?.color || emp.color || '#666';
+            }
+            
+            const hourOffset = block.startHour - employeeState.hours[0];
+            const duration = block.endHour - block.startHour;
+            
+            const el = document.createElement('div');
+            el.className = isMine ? 'schedule-shift-block my-shift' : 'schedule-shift-block other-shift';
+            if (block.viaSwap) {
+                el.classList.add('via-swap');
+            }
+            el.style.backgroundColor = color;
+            
+            el.style.left = `${leftPos}px`;
+            el.style.top = `${headerHeight + hourOffset * slotHeight + 2}px`;
+            el.style.width = `${blockWidth}px`;
+            el.style.height = `${duration * slotHeight - 4}px`;
+            el.style.zIndex = 10 + (block.subColumn || 0);
+            
+            let tooltipText = `${emp.name}\nRoles: ${roleNames}\n${formatTime(block.startHour)} - ${formatTime(block.endHour)}`;
+            let swapIndicator = '';
+            if (block.viaSwap) {
+                const swappedFromName = block.swappedFrom ? (employeeMap[block.swappedFrom]?.name || 'another employee') : 'another employee';
+                tooltipText += `\n\n🔄 Obtained via shift swap from ${swappedFromName}`;
+                swapIndicator = '<span class="swap-indicator">🔄</span>';
+            }
+            
+            el.innerHTML = `<span class="shift-name">${emp.name}</span>${swapIndicator}`;
+            el.title = tooltipText;
+            
+            // Attach click handler for popover
+            const shiftData = {
+                dayIdx: block.day,
+                empId: block.employeeId,
+                roleId: Array.from(block.roles)[0],
+                startHour: block.startHour,
+                endHour: block.endHour,
+                viaSwap: block.viaSwap,
+                swappedFrom: block.swappedFrom
+            };
+            el.addEventListener('click', (e) => showShiftPopover(e, shiftData));
+            
+            container.appendChild(el);
+        }
     });
 }
 
+// Keep for backwards compatibility but not used in grid view anymore
 function renderGridShifts(schedule, container, showEveryone) {
     const myId = employeeState.employee.id;
     const slotAssignments = schedule.slot_assignments || {};
