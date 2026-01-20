@@ -521,15 +521,26 @@ function renderTimelineView() {
             }
         });
         
-        // Create row containers and render shifts
-        const numShiftRows = shiftRows.length || 1; // At least 1 empty row
+        // Check for PTO on this day FIRST (needed to decide row structure)
+        const dayPTOList = (employeeState.approvedPTO || []).filter(pto => {
+            // Filter by mine/everyone
+            if (!showEveryone && pto.employee_id !== myId) return false;
+            
+            const ptoStart = new Date(pto.start_date + 'T00:00:00');
+            const ptoEnd = new Date(pto.end_date + 'T00:00:00');
+            return dayDate >= ptoStart && dayDate <= ptoEnd;
+        });
         
-        for (let rowIdx = 0; rowIdx < numShiftRows; rowIdx++) {
+        // Create row containers and render shifts
+        // Only create empty row if there are no shifts AND no PTO
+        const hasShifts = shiftRows.length > 0;
+        const hasPTO = dayPTOList.length > 0;
+        
+        // Render shift rows (only if there are actual shifts)
+        shiftRows.forEach((rowShifts, rowIdx) => {
             const rowContainer = document.createElement('div');
             rowContainer.className = 'timeline-slots-row';
             
-            // Add shifts for this row
-            const rowShifts = shiftRows[rowIdx] || [];
             rowShifts.forEach(shift => {
                 const duration = shift.endHour - shift.startHour;
                 
@@ -589,20 +600,10 @@ function renderTimelineView() {
             });
             
             slotsDiv.appendChild(rowContainer);
-        }
-        
-        // Check for PTO on this day (dayDate already declared above)
-        const dayPTOList = (employeeState.approvedPTO || []).filter(pto => {
-            // Filter by mine/everyone
-            if (!showEveryone && pto.employee_id !== myId) return false;
-            
-            const ptoStart = new Date(pto.start_date + 'T00:00:00');
-            const ptoEnd = new Date(pto.end_date + 'T00:00:00');
-            return dayDate >= ptoStart && dayDate <= ptoEnd;
         });
         
         // Add PTO blocks if any
-        if (dayPTOList.length > 0) {
+        if (hasPTO) {
             const ptoRow = document.createElement('div');
             ptoRow.className = 'timeline-slots-row timeline-pto-row';
             
@@ -633,7 +634,7 @@ function renderTimelineView() {
         }
         
         // Ensure at least one empty row if no shifts and no PTO
-        if (numShiftRows === 0 && dayPTOList.length === 0) {
+        if (!hasShifts && !hasPTO) {
             const emptyRow = document.createElement('div');
             emptyRow.className = 'timeline-slots-row';
             slotsDiv.appendChild(emptyRow);
