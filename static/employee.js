@@ -1488,10 +1488,12 @@ function renderTableView() {
         
         if (!ptoByEmployee[empKey]) {
             ptoByEmployee[empKey] = {
+                employee_id: pto.employee_id,
                 employee_name: pto.employee_name,
                 employee_color: pto.employee_color,
                 pto_type: pto.pto_type,
-                days: {}
+                days: {},
+                dayPtoData: {} // Store full PTO info per day for popover
             };
         }
         
@@ -1503,6 +1505,16 @@ function renderTableView() {
             const dayDate = dates[day];
             if (dayDate >= ptoStart && dayDate <= ptoEnd) {
                 ptoByEmployee[empKey].days[day] = pto.pto_type;
+                // Store full PTO data for this day
+                ptoByEmployee[empKey].dayPtoData[day] = {
+                    employee_id: pto.employee_id,
+                    employee_name: pto.employee_name,
+                    employee_color: pto.employee_color,
+                    pto_type: pto.pto_type,
+                    start_date: pto.start_date,
+                    end_date: pto.end_date,
+                    id: pto.id
+                };
             }
         }
     });
@@ -1586,10 +1598,21 @@ function renderTableView() {
                 const shifts = days[day] || [];
                 
                 if (hasPTO) {
-                    // Show PTO badge for this day
+                    // Show PTO badge for this day (clickable)
                     const emoji = getPTOTypeEmojiEmployee(pto.days[day]);
+                    const ptoData = pto.dayPtoData[day];
+                    const isMine = emp.id === myId;
                     html += `<td class="shift-times ${dayClass}">
-                        <span class="table-pto-cell"><span class="pto-emoji">${emoji}</span>${capitalizeFirstEmployee(pto.days[day])}</span>
+                        <span class="table-pto-cell clickable-pto" 
+                            data-pto-id="${ptoData.id}"
+                            data-pto-type="${ptoData.pto_type}"
+                            data-pto-start="${ptoData.start_date}"
+                            data-pto-end="${ptoData.end_date}"
+                            data-emp-id="${ptoData.employee_id}"
+                            data-emp-name="${ptoData.employee_name}"
+                            data-is-mine="${isMine}">
+                            <span class="pto-emoji">${emoji}</span>${capitalizeFirstEmployee(pto.days[day])}
+                        </span>
                     </td>`;
                 } else if (shifts.length === 0) {
                     html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
@@ -1606,6 +1629,22 @@ function renderTableView() {
             html += `<td class="total-hours">${hoursDisplay}</td>`;
             row.innerHTML = html;
             tbody.appendChild(row);
+        });
+        
+        // Add click handlers for table PTO cells
+        tbody.querySelectorAll('.clickable-pto').forEach(cell => {
+            cell.addEventListener('click', (e) => {
+                const ptoData = {
+                    id: cell.dataset.ptoId,
+                    pto_type: cell.dataset.ptoType,
+                    start_date: cell.dataset.ptoStart,
+                    end_date: cell.dataset.ptoEnd,
+                    employee_id: cell.dataset.empId,
+                    employee_name: cell.dataset.empName
+                };
+                const isMine = cell.dataset.isMine === 'true';
+                showPTOPopover(e, ptoData, isMine);
+            });
         });
     } else {
         // No shifts - show empty table structure with placeholder rows

@@ -342,13 +342,13 @@ body.employee-view {
 }
 
 .cancel-pto-popup-content {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
+    background: #1e1e2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 1.5rem;
     max-width: 400px;
     width: 90%;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     transform: scale(0.95);
     transition: transform 0.2s ease;
 }
@@ -2940,6 +2940,17 @@ body.employee-view {
     border-radius: 6px;
     text-align: center;
     border: 1px dashed rgba(139, 92, 246, 0.3);
+}
+
+.table-pto-cell.clickable-pto {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.table-pto-cell.clickable-pto:hover {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(109, 40, 217, 0.2) 100%);
+    border-color: rgba(139, 92, 246, 0.5);
+    transform: scale(1.05);
 }
 
 .table-pto-cell .pto-emoji {
