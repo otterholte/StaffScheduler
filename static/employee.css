@@ -153,6 +153,11 @@ body.employee-view {
     color: var(--text-primary);
 }
 
+/* Hide mobile close button on desktop */
+.notification-close-mobile {
+    display: none;
+}
+
 /* Unified Notification List */
 .unified-dropdown {
     width: 340px;
@@ -2262,6 +2267,7 @@ body.employee-view {
 
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 768px) {
+    /* === HEADER === */
     .employee-header .header-left {
         flex-direction: column;
         align-items: flex-start;
@@ -2280,6 +2286,133 @@ body.employee-view {
         display: none;
     }
     
+    /* === VIEW TOGGLES - Icon only on mobile === */
+    .view-toggle-btn .view-label {
+        display: none;
+    }
+    
+    .view-toggle-btn {
+        padding: 0.5rem 0.75rem;
+        min-width: 44px;
+        min-height: 44px;
+        justify-content: center;
+    }
+    
+    .view-toggle-btn svg {
+        width: 20px;
+        height: 20px;
+        margin: 0;
+    }
+    
+    .view-toggle {
+        gap: 0.25rem;
+    }
+    
+    /* === FILTER TOGGLES === */
+    .filter-toggle-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.5rem;
+    }
+    
+    /* === TOOLBAR LAYOUT === */
+    .employee-toolbar {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+    
+    .toolbar-left,
+    .toolbar-right {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .toolbar-center {
+        order: -1;
+        width: 100%;
+    }
+    
+    /* === WEEK NAVIGATION === */
+    .week-nav-inline {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .week-nav-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.5rem;
+    }
+    
+    .week-label {
+        font-size: 0.9rem;
+    }
+    
+    /* === SCHEDULE TABLE - Horizontal scroll with sticky name === */
+    .employee-schedule-layout .schedule-panel {
+        padding: 0.5rem;
+    }
+    
+    .schedule-table-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        margin: 0 -0.5rem;
+        padding: 0 0.5rem;
+    }
+    
+    .schedule-table {
+        min-width: 600px;
+    }
+    
+    .schedule-table .name-col {
+        position: sticky;
+        left: 0;
+        background: var(--bg-primary);
+        z-index: 10;
+        min-width: 100px;
+    }
+    
+    .schedule-table th.name-col {
+        background: var(--bg-secondary);
+    }
+    
+    .schedule-table .total-hours {
+        position: sticky;
+        right: 0;
+        background: var(--bg-primary);
+        z-index: 10;
+    }
+    
+    .schedule-table th.total-hours {
+        background: var(--bg-secondary);
+    }
+    
+    /* === GRID VIEW - Scroll horizontally === */
+    #scheduleGridWrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .schedule-grid-header {
+        min-width: 700px;
+    }
+    
+    #scheduleEvents {
+        min-width: 700px;
+    }
+    
+    /* === TIMELINE VIEW === */
+    .timeline-day-row {
+        min-height: 60px;
+    }
+    
+    .timeline-day-label {
+        min-width: 70px;
+        font-size: 0.75rem;
+    }
+    
+    /* === INFO CARDS === */
     .employee-info-card {
         flex-direction: column;
         gap: 1.5rem;
@@ -2310,22 +2443,278 @@ body.employee-view {
         margin-bottom: 0.25rem;
     }
     
+    /* === MODALS - Full screen on mobile === */
     .modal-content {
-        max-height: 95vh;
-        border-radius: 12px;
+        max-height: 100vh;
+        height: 100vh;
+        max-width: 100vw;
+        width: 100vw;
+        border-radius: 0;
+        margin: 0;
     }
     
+    .modal-body {
+        padding: 1rem;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .modal-header {
+        padding: 1rem;
+        position: sticky;
+        top: 0;
+        background: var(--bg-primary);
+        z-index: 10;
+    }
+    
+    .modal-footer {
+        padding: 1rem;
+        position: sticky;
+        bottom: 0;
+        background: var(--bg-primary);
+        z-index: 10;
+    }
+    
+    /* === SWAP REQUESTS === */
     .swap-request-item {
         flex-direction: column;
         gap: 0.75rem;
+        padding: 1rem;
     }
     
     .swap-request-actions {
         width: 100%;
+        flex-direction: row;
     }
     
     .swap-request-actions .btn {
         flex: 1;
+        min-height: 44px;
+        justify-content: center;
+    }
+    
+    /* === SWAP MODAL SPECIFICS === */
+    .swap-shift-details {
+        padding: 1rem;
+    }
+    
+    .eligible-staff-list {
+        max-height: none;
+    }
+    
+    .eligible-staff-item {
+        padding: 1rem;
+        min-height: 56px;
+    }
+    
+    .staff-checkbox {
+        width: 24px;
+        height: 24px;
+    }
+    
+    #swapNote {
+        font-size: 16px; /* Prevents iOS zoom */
+        min-height: 80px;
+    }
+    
+    #submitSwapBtn {
+        min-height: 48px;
+        font-size: 1rem;
+    }
+    
+    /* === UPCOMING SHIFTS === */
+    .upcoming-shifts-card {
+        padding: 1rem;
+    }
+    
+    .upcoming-shift-item {
+        padding: 0.875rem;
+    }
+    
+    .shift-swap-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.5rem;
+    }
+    
+    /* === NOTIFICATIONS - Full screen panel === */
+    .notification-dropdown {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        max-width: 100vw;
+        height: 100vh;
+        max-height: 100vh;
+        border-radius: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .notification-dropdown-header {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .notification-list {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 0.5rem;
+    }
+    
+    .notification-item {
+        padding: 1rem;
+        min-height: 60px;
+    }
+    
+    .notification-close-mobile {
+        display: flex;
+        width: 44px;
+        height: 44px;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-tertiary);
+        border: none;
+        border-radius: 8px;
+        color: var(--text-primary);
+        cursor: pointer;
+        font-size: 1.5rem;
+    }
+    
+    /* === PTO/TIME OFF === */
+    .pto-request-item {
+        padding: 1rem;
+    }
+    
+    .pto-delete-btn {
+        min-width: 44px;
+        min-height: 44px;
+    }
+    
+    /* PTO Form */
+    #ptoStartDate,
+    #ptoEndDate,
+    #ptoType,
+    #ptoNote {
+        font-size: 16px; /* Prevents iOS zoom */
+        min-height: 44px;
+        padding: 0.75rem;
+    }
+    
+    #submitPtoBtn {
+        min-height: 48px;
+        width: 100%;
+    }
+    
+    /* === LEGEND === */
+    .schedule-legend {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    
+    .legend-item {
+        font-size: 0.75rem;
+    }
+    
+    /* === POPOVERS - Bottom sheet on mobile === */
+    .shift-popover {
+        position: fixed !important;
+        top: auto !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        z-index: 9999;
+        transform: translateY(100%);
+    }
+    
+    .shift-popover.visible {
+        transform: translateY(0);
+    }
+    
+    .shift-popover .popover-content {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 16px 16px 0 0;
+        min-width: unset;
+        max-height: 70vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .shift-popover .popover-arrow {
+        display: none;
+    }
+    
+    .shift-popover .popover-header {
+        padding: 1.25rem 1rem;
+    }
+    
+    .shift-popover .popover-close {
+        width: 44px;
+        height: 44px;
+        font-size: 1.5rem;
+    }
+    
+    .shift-popover .popover-body {
+        padding: 1rem;
+    }
+    
+    .shift-popover .shift-action-btn {
+        min-height: 48px;
+        font-size: 1rem;
+    }
+    
+    /* PTO Popover - Bottom sheet on mobile */
+    .pto-popover {
+        position: fixed !important;
+        top: auto !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: unset !important;
+        z-index: 9999;
+        border-radius: 16px 16px 0 0;
+        transform: translateY(100%);
+        transition: transform 0.3s ease, opacity 0.2s ease;
+    }
+    
+    .pto-popover.visible {
+        transform: translateY(0);
+    }
+    
+    .pto-popover .btn {
+        min-height: 48px;
+    }
+    
+    /* Backdrop overlay for mobile popovers */
+    .mobile-popover-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9998;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.3s ease;
+    }
+    
+    .mobile-popover-backdrop.visible {
+        opacity: 1;
+        visibility: visible;
     }
 }
 

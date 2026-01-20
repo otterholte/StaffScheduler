@@ -2452,14 +2452,23 @@ function hideNotificationDropdown() {
 function initUnifiedNotificationBell() {
     const bell = document.getElementById('unifiedNotificationBell');
     const dropdown = document.getElementById('unifiedNotificationDropdown');
+    const mobileClose = document.getElementById('closeNotificationsMobile');
     
     if (!bell || !dropdown) return;
     
     // Toggle dropdown on bell click
-        bell.addEventListener('click', (e) => {
-            e.stopPropagation();
+    bell.addEventListener('click', (e) => {
+        e.stopPropagation();
         dropdown.classList.toggle('visible');
+    });
+    
+    // Mobile close button
+    if (mobileClose) {
+        mobileClose.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.remove('visible');
         });
+    }
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
