@@ -36,7 +36,6 @@ const employeeState = {
     weekOffset: 0,
     viewMode: getInitialViewMode(), // 'timeline', 'grid', or 'table'
     filterMode: 'mine', // 'mine' or 'everyone'
-    colorMode: 'role', // 'role' or 'employee' - how to color-code shifts
     // Availability editing state
     isSelecting: false,
     selectionStart: null,
@@ -67,18 +66,20 @@ employeeState.roles.forEach(role => {
 
 // Helper to get shift color based on color mode
 function getShiftColor(employeeId, roleIds) {
-    const emp = employeeMap[employeeId];
-    if (employeeState.colorMode === 'employee') {
-        // Color by employee
-        return emp?.color || '#666';
-    } else {
-        // Color by role (default)
-        if (roleIds && roleIds.size > 0) {
-            const firstRoleId = Array.from(roleIds)[0];
-            return roleMap[firstRoleId]?.color || emp?.color || '#666';
-        }
-        return emp?.color || '#666';
+    const myId = employeeState.employee?.id;
+    const isMine = employeeId == myId;
+    
+    // Other employees' shifts are always grey for easy identification
+    if (!isMine) {
+        return '#64748b'; // Slate grey for other staff
     }
+    
+    // My shifts colored by role
+    if (roleIds && roleIds.size > 0) {
+        const firstRoleId = Array.from(roleIds)[0];
+        return roleMap[firstRoleId]?.color || '#3b82f6';
+    }
+    return '#3b82f6'; // Default blue for my shifts
 }
 
 // ==================== UTILITIES ====================
@@ -161,7 +162,6 @@ function showToast(message, type = 'info') {
 async function initScheduleView() {
     setupViewToggle();
     setupFilterToggle();
-    setupColorModeToggle();
     setupWeekNavigation();
     updateWeekDisplay();
     await loadScheduleData(); // This now fetches from API and handles rendering
@@ -206,61 +206,35 @@ function setupFilterToggle() {
     });
 }
 
-function setupColorModeToggle() {
-    const colorModeToggle = document.getElementById('colorModeToggle');
-    if (!colorModeToggle) return;
-    
-    colorModeToggle.querySelectorAll('.filter-toggle-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            colorModeToggle.querySelectorAll('.filter-toggle-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            employeeState.colorMode = btn.dataset.color;
-            renderScheduleView(); // Re-render with new color mode
-            renderScheduleLegend(); // Update legend to match color mode
-        });
-    });
-}
-
-// Render schedule legend based on current color mode
+// Render schedule legend - always shows roles
 function renderScheduleLegend() {
     const legend = document.getElementById('scheduleLegend');
     const legendTitle = document.querySelector('.legend-title');
     if (!legend) return;
     
     legend.innerHTML = '';
+    if (legendTitle) legendTitle.textContent = 'Roles';
     
-    if (employeeState.colorMode === 'employee') {
-        // Show employees with their colors
-        if (legendTitle) legendTitle.textContent = 'Staff';
-        
-        // Get relevant employees - mine or everyone
-        const showEveryone = employeeState.filterMode === 'everyone';
-        const employees = showEveryone 
-            ? employeeState.allEmployees 
-            : [employeeState.employee];
-        
-        employees.forEach(emp => {
-            const item = document.createElement('div');
-            item.className = 'legend-item';
-            item.innerHTML = `
-                <span class="legend-color" style="background: ${emp.color || '#666'}"></span>
-                <span class="legend-label">${emp.name}</span>
-            `;
-            legend.appendChild(item);
-        });
-    } else {
-        // Show roles with their colors (default)
-        if (legendTitle) legendTitle.textContent = 'Roles';
-        
-        employeeState.roles.forEach(role => {
-            const item = document.createElement('div');
-            item.className = 'legend-item';
-            item.innerHTML = `
-                <span class="legend-color" style="background: ${role.color || '#666'}"></span>
-                <span class="legend-label">${role.name}</span>
-            `;
-            legend.appendChild(item);
-        });
+    // Show roles with their colors
+    employeeState.roles.forEach(role => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `
+            <span class="legend-color" style="background: ${role.color || '#666'}"></span>
+            <span class="legend-label">${role.name}</span>
+        `;
+        legend.appendChild(item);
+    });
+    
+    // Add "Other Staff" indicator when in everyone mode
+    if (employeeState.filterMode === 'everyone') {
+        const otherItem = document.createElement('div');
+        otherItem.className = 'legend-item';
+        otherItem.innerHTML = `
+            <span class="legend-color" style="background: #64748b"></span>
+            <span class="legend-label">Other Staff</span>
+        `;
+        legend.appendChild(otherItem);
     }
 }
 
@@ -1617,9 +1591,13 @@ function renderTableView() {
                 } else if (shifts.length === 0) {
                     html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
                 } else {
+                    // Build shift blocks with tooltips
+                    const roleNames = (emp.roles || []).map(rid => roleMap[rid]?.name || 'Staff').join(', ');
                     const shiftStrs = shifts.map(s => {
+                        const duration = s.end - s.start;
+                        const tooltip = `${emp.name}\nRoles: ${roleNames || 'Staff'}\n${formatTime(s.start)} - ${formatTime(s.end)}\n${duration} hours`;
                         const dataAttrs = `data-emp-id="${emp.id}" data-day="${day}" data-start="${s.start}" data-end="${s.end}"`;
-                        return `<span class="shift-block" ${dataAttrs}>${formatTime(s.start)}-${formatTime(s.end)}</span>`;
+                        return `<span class="shift-block table-shift-clickable" ${dataAttrs} title="${tooltip}">${formatTime(s.start)}-${formatTime(s.end)}</span>`;
                     }).join('');
                     html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
                 }
@@ -1644,6 +1622,19 @@ function renderTableView() {
                 };
                 const isMine = cell.dataset.isMine === 'true';
                 showPTOPopover(e, ptoData, isMine);
+            });
+        });
+        
+        // Add click handlers for table shift blocks (for popover)
+        tbody.querySelectorAll('.table-shift-clickable').forEach(cell => {
+            cell.addEventListener('click', (e) => {
+                const shiftData = {
+                    empId: cell.dataset.empId,
+                    day: parseInt(cell.dataset.day),
+                    startHour: parseInt(cell.dataset.start),
+                    endHour: parseInt(cell.dataset.end)
+                };
+                showShiftPopover(e, shiftData);
             });
         });
     } else {
@@ -1811,47 +1802,47 @@ function renderUpcomingShifts() {
         if (item.type === 'shift') {
             const role = roleMap[item.role] || {};
             const duration = item.end - item.start;
-            
-            // Create a unique shift identifier for the swap button
-            const shiftData = JSON.stringify({
+        
+        // Create a unique shift identifier for the swap button
+        const shiftData = JSON.stringify({
                 dayIdx: item.dayIdx,
                 start: item.start,
                 end: item.end,
                 role: item.role
-            }).replace(/"/g, '&quot;');
-            
-            // Check if shift was obtained via swap
+        }).replace(/"/g, '&quot;');
+        
+        // Check if shift was obtained via swap
             const swapBadge = item.viaSwap 
                 ? `<span class="swap-badge" title="Obtained via shift swap from ${employeeMap[item.swappedFrom]?.name || 'another employee'}">🔄 Swapped</span>` 
-                : '';
-            
-            // Add data attributes for click handler
+            : '';
+        
+        // Add data attributes for click handler
             const dataAttrs = `data-day="${item.dayIdx}" data-start="${item.start}" data-end="${item.end}" data-role="${item.role}" data-via-swap="${item.viaSwap || ''}" data-swapped-from="${item.swappedFrom || ''}"`;
-            
+        
             html += `<div class="upcoming-shift-item ${item.viaSwap ? 'via-swap' : ''}" ${dataAttrs}>
-                <div class="shift-date-badge">
+            <div class="shift-date-badge">
                     <span class="day-name">${DAYS_SHORT[item.dayIdx]}</span>
                     <span class="day-num">${item.date.getDate()}</span>
-                </div>
-                <div class="shift-details shift-clickable" title="Click to view details">
+            </div>
+            <div class="shift-details shift-clickable" title="Click to view details">
                     <div class="shift-time">${formatTimeRange(item.start, item.end)} ${swapBadge}</div>
-                    <div class="shift-role">
-                        <span class="shift-role-dot" style="background: ${role.color || '#6366f1'}"></span>
-                        ${role.name || 'Shift'}
-                    </div>
+                <div class="shift-role">
+                    <span class="shift-role-dot" style="background: ${role.color || '#6366f1'}"></span>
+                    ${role.name || 'Shift'}
                 </div>
-                <div class="shift-actions">
-                    <div class="shift-duration">${duration}h</div>
-                    <button class="shift-swap-btn" title="Request to swap this shift" onclick='showSwapModal(${shiftData})'>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="17 1 21 5 17 9"></polyline>
-                            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
-                            <polyline points="7 23 3 19 7 15"></polyline>
-                            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>`;
+            </div>
+            <div class="shift-actions">
+                <div class="shift-duration">${duration}h</div>
+                <button class="shift-swap-btn" title="Request to swap this shift" onclick='showSwapModal(${shiftData})'>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="17 1 21 5 17 9"></polyline>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                        <polyline points="7 23 3 19 7 15"></polyline>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>`;
         } else {
             // PTO item
             const emoji = getPTOTypeEmojiEmployee(item.pto_type);
@@ -1863,12 +1854,12 @@ function renderUpcomingShifts() {
                 <div class="pto-date-badge" style="${isOtherPerson ? `background: ${item.employee_color || '#8b5cf6'}` : ''}">
                     <span class="day-name">${DAYS_SHORT[item.dayIdx]}</span>
                     <span class="day-num">${item.date.getDate()}</span>
-                </div>
-                <div class="pto-details">
+            </div>
+            <div class="pto-details">
                     <div class="pto-title">${emoji} Time Off${isOtherPerson ? ` - ${personLabel}` : ''}</div>
-                    <div class="pto-subtitle">${typeLabel}</div>
-                </div>
-            </div>`;
+                <div class="pto-subtitle">${typeLabel}</div>
+            </div>
+        </div>`;
         }
     });
     
@@ -2465,10 +2456,10 @@ function initUnifiedNotificationBell() {
     if (!bell || !dropdown) return;
     
     // Toggle dropdown on bell click
-    bell.addEventListener('click', (e) => {
-        e.stopPropagation();
+        bell.addEventListener('click', (e) => {
+            e.stopPropagation();
         dropdown.classList.toggle('visible');
-    });
+        });
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {

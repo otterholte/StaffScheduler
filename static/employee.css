@@ -2953,6 +2953,17 @@ body.employee-view {
     transform: scale(1.05);
 }
 
+/* Table shift blocks - clickable with tooltip */
+.table-shift-clickable {
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.table-shift-clickable:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
 .table-pto-cell .pto-emoji {
     margin-right: 0.25rem;
 }
