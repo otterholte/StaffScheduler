@@ -2504,6 +2504,20 @@ function renderUnifiedNotificationList() {
                     <div class="notif-subtitle">${notif.subtitle}</div>
                 </div>
             `;
+            item.style.cursor = 'pointer';
+            item.dataset.ptoId = notif.id;
+            
+            // Click to dismiss/mark as seen
+            item.addEventListener('click', () => {
+                markPTOAsSeen(notif.id);
+                item.remove();
+                updateUnifiedNotificationBadge();
+                
+                // If no notifications left, show empty message
+                if (list.querySelectorAll('.unified-notification-item').length === 0) {
+                    list.innerHTML = '<div class="empty-notifications">No notifications</div>';
+                }
+            });
         } else if (notif.type === 'swap') {
             item.innerHTML = `
                 <div class="notif-icon swap-icon">🔄</div>
@@ -2543,6 +2557,11 @@ function formatPTODateRange(start, end) {
         return `${months[startDate.getMonth()]} ${startDate.getDate()}`;
     }
     return `${months[startDate.getMonth()]} ${startDate.getDate()} - ${months[endDate.getMonth()]} ${endDate.getDate()}`;
+}
+
+function markPTOAsSeen(ptoId) {
+    seenPTOUpdates.add(ptoId);
+    localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
 }
 
 async function handleSwapFromNotification(swapId, action) {
