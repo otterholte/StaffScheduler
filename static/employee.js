@@ -2463,7 +2463,8 @@ function renderUnifiedNotificationList() {
             subtitle: `${capitalizeFirstEmployee(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
             status: pto.status,
             date: new Date(pto.updated_at || pto.created_at),
-            seen: seenPTOUpdates.has(pto.id)
+            seen: seenPTOUpdates.has(pto.id),
+            pto: pto // Store full PTO data for navigation
         });
     });
     
@@ -2507,16 +2508,19 @@ function renderUnifiedNotificationList() {
             item.style.cursor = 'pointer';
             item.dataset.ptoId = notif.id;
             
-            // Click to dismiss/mark as seen
+            // Click to view on schedule and mark as seen
             item.addEventListener('click', () => {
+                // Mark as seen
                 markPTOAsSeen(notif.id);
-                item.remove();
-                updateUnifiedNotificationBadge();
                 
-                // If no notifications left, show empty message
-                if (list.querySelectorAll('.unified-notification-item').length === 0) {
-                    list.innerHTML = '<div class="empty-notifications">No notifications</div>';
-                }
+                // Close dropdown
+                document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+                
+                // Scroll to and highlight the PTO on the schedule
+                scrollToAndHighlightPTO(notif.pto);
+                
+                // Update the notification list
+                updateUnifiedNotificationBadge();
             });
         } else if (notif.type === 'swap') {
             item.innerHTML = `
@@ -2562,6 +2566,75 @@ function formatPTODateRange(start, end) {
 function markPTOAsSeen(ptoId) {
     seenPTOUpdates.add(ptoId);
     localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
+}
+
+function scrollToAndHighlightPTO(pto) {
+    if (!pto) return;
+    
+    // Navigate to the week containing this PTO
+    const ptoStart = new Date(pto.start_date + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Calculate week offset for the PTO start date
+    const currentMonday = new Date(today);
+    currentMonday.setDate(today.getDate() - today.getDay() + 1);
+    
+    const ptoMonday = new Date(ptoStart);
+    ptoMonday.setDate(ptoStart.getDate() - ptoStart.getDay() + 1);
+    
+    const weekDiff = Math.round((ptoMonday - currentMonday) / (7 * 24 * 60 * 60 * 1000));
+    
+    // If we need to change weeks, navigate there
+    if (weekDiff !== employeeState.weekOffset) {
+        employeeState.weekOffset = weekDiff;
+        updateWeekDisplay();
+        loadScheduleData().then(() => {
+            highlightPTOElement(pto);
+        });
+    } else {
+        highlightPTOElement(pto);
+    }
+}
+
+function highlightPTOElement(pto) {
+    // Wait a moment for render
+    setTimeout(() => {
+        // Try to find PTO elements in the current view
+        let ptoElement = null;
+        
+        // Look for PTO blocks in grid view
+        ptoElement = document.querySelector('.grid-pto-block.my-pto');
+        
+        // Or timeline view
+        if (!ptoElement) {
+            ptoElement = document.querySelector('.timeline-pto-block.my-pto');
+        }
+        
+        // Or table view - look for PTO cells
+        if (!ptoElement) {
+            ptoElement = document.querySelector('.table-pto-cell');
+        }
+        
+        if (ptoElement) {
+            // Scroll into view
+            ptoElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Add highlight animation
+            ptoElement.classList.add('highlight-pulse');
+            setTimeout(() => {
+                ptoElement.classList.remove('highlight-pulse');
+            }, 2000);
+        } else {
+            // Scroll to schedule section at least
+            const scheduleSection = document.querySelector('.schedule-panel');
+            if (scheduleSection) {
+                scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+        
+        showToast(`Viewing time off: ${capitalizeFirstEmployee(pto.pto_type)}`, 'info');
+    }, 300);
 }
 
 async function handleSwapFromNotification(swapId, action) {
