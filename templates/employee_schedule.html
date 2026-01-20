@@ -53,50 +53,49 @@
                 </nav>
             </div>
             <div class="header-right">
-                <!-- PTO Notification Bell -->
-                <div class="notification-bell-wrapper pto-notification-wrapper">
-                    <button class="notification-bell pto-bell" id="ptoNotificationBell" title="Time Off Updates">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-                        </svg>
-                        <span class="notification-badge pto-badge" id="ptoNotificationBadge"></span>
-                    </button>
-                    
-                    <!-- PTO Dropdown (hidden by default) -->
-                    <div class="notification-dropdown pto-dropdown" id="ptoNotificationDropdown">
-                        <div class="notification-header">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 6px;">
-                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                <line x1="16" y1="2" x2="16" y2="6"></line>
-                                <line x1="8" y1="2" x2="8" y2="6"></line>
-                                <line x1="3" y1="10" x2="21" y2="10"></line>
-                            </svg>
-                            <span>Time Off Updates</span>
-                        </div>
-                        <div class="notification-list" id="ptoNotificationList">
-                            <!-- Populated by JS -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Swap Notification Bell -->
+                <!-- Unified Notification Bell -->
                 <div class="notification-bell-wrapper">
-                    <button class="notification-bell" id="swapNotificationBell" title="Swap Requests">
+                    <button class="notification-bell" id="unifiedNotificationBell" title="Notifications">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
                             <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
                         </svg>
-                        <span class="notification-badge" id="swapNotificationBadge"></span>
+                        <span class="notification-badge" id="unifiedNotificationBadge"></span>
                     </button>
                     
-                    <!-- Dropdown (hidden by default) -->
-                    <div class="notification-dropdown" id="notificationDropdown">
-                        <div class="notification-header">
-                            <span>Pending Requests</span>
+                    <!-- Unified Dropdown -->
+                    <div class="notification-dropdown unified-dropdown" id="unifiedNotificationDropdown">
+                        <div class="notification-tabs">
+                            <button class="notification-tab active" data-tab="timeoff">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                                Time Off
+                                <span class="tab-badge" id="ptoTabBadge"></span>
+                            </button>
+                            <button class="notification-tab" data-tab="swaps">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;">
+                                    <polyline points="17 1 21 5 17 9"></polyline>
+                                    <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+                                    <polyline points="7 23 3 19 7 15"></polyline>
+                                    <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+                                </svg>
+                                Swaps
+                                <span class="tab-badge" id="swapTabBadge"></span>
+                            </button>
                         </div>
-                        <div class="notification-list" id="notificationList">
-                            <!-- Populated by JS -->
+                        <div class="notification-tab-content active" id="timeoffTabContent">
+                            <div class="notification-list" id="ptoNotificationList">
+                                <!-- Populated by JS -->
+                            </div>
+                        </div>
+                        <div class="notification-tab-content" id="swapsTabContent">
+                            <div class="notification-list" id="notificationList">
+                                <!-- Populated by JS -->
+                            </div>
                         </div>
                     </div>
                 </div>

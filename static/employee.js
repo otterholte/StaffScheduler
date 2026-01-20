@@ -33,7 +33,9 @@ const employeeState = {
     currentSwapRequest: null,
     selectedSwapShift: null,
     // Approved PTO for schedule display
-    approvedPTO: []
+    approvedPTO: [],
+    // PTO notifications for unified notification bell
+    ptoNotifications: []
 };
 
 // Build lookup maps
@@ -2303,22 +2305,8 @@ async function loadSwapRequests() {
 
 // ==================== NOTIFICATION BELL ====================
 function updateNotificationBell() {
-    const bell = document.getElementById('swapNotificationBell');
-    const badge = document.getElementById('swapNotificationBadge');
-    
-    if (!bell || !badge) return;
-    
-    const pendingCount = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').length;
-    
-    if (pendingCount > 0) {
-        // Has notifications - amber bell, show badge with count
-        bell.classList.add('has-notifications');
-        badge.textContent = pendingCount;
-    } else {
-        // No notifications - default color, hide badge
-        bell.classList.remove('has-notifications');
-        badge.textContent = ''; // Empty hides via CSS :not(:empty)
-    }
+    // Update the unified notification badge
+    updateUnifiedNotificationBadge();
     
     // Always update dropdown content (shows empty message if no requests)
     updateNotificationDropdown();
@@ -2375,36 +2363,90 @@ function updateNotificationDropdown() {
 }
 
 function toggleNotificationDropdown() {
-    const dropdown = document.getElementById('notificationDropdown');
+    const dropdown = document.getElementById('unifiedNotificationDropdown');
     if (dropdown) {
         dropdown.classList.toggle('visible');
     }
 }
 
 function hideNotificationDropdown() {
-    const dropdown = document.getElementById('notificationDropdown');
+    const dropdown = document.getElementById('unifiedNotificationDropdown');
     if (dropdown) {
         dropdown.classList.remove('visible');
     }
 }
 
-function initNotificationBell() {
-    const bell = document.getElementById('swapNotificationBell');
-    if (bell) {
-        bell.addEventListener('click', (e) => {
-            e.stopPropagation();
-            toggleNotificationDropdown();
+// Unified Notification Bell
+function initUnifiedNotificationBell() {
+    const bell = document.getElementById('unifiedNotificationBell');
+    const dropdown = document.getElementById('unifiedNotificationDropdown');
+    
+    if (!bell || !dropdown) return;
+    
+    // Toggle dropdown on bell click
+    bell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('visible');
+    });
+    
+    // Tab switching
+    dropdown.querySelectorAll('.notification-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Update tab active state
+            dropdown.querySelectorAll('.notification-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // Update content visibility
+            dropdown.querySelectorAll('.notification-tab-content').forEach(c => c.classList.remove('active'));
+            const targetContent = document.getElementById(tab.dataset.tab === 'timeoff' ? 'timeoffTabContent' : 'swapsTabContent');
+            if (targetContent) targetContent.classList.add('active');
         });
-    }
+    });
     
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        const dropdown = document.getElementById('notificationDropdown');
-        const bell = document.getElementById('swapNotificationBell');
-        if (dropdown && !dropdown.contains(e.target) && !bell?.contains(e.target)) {
-            hideNotificationDropdown();
+        if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
+            dropdown.classList.remove('visible');
         }
     });
+}
+
+function updateUnifiedNotificationBadge() {
+    const badge = document.getElementById('unifiedNotificationBadge');
+    const ptoTabBadge = document.getElementById('ptoTabBadge');
+    const swapTabBadge = document.getElementById('swapTabBadge');
+    
+    // Get PTO count
+    const ptoCount = (employeeState.ptoNotifications || []).filter(req => !seenPTOUpdates.has(req.id)).length;
+    
+    // Get swap count
+    const swapCount = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').length;
+    
+    const totalCount = ptoCount + swapCount;
+    
+    // Update main badge
+    if (badge) {
+        if (totalCount > 0) {
+            badge.textContent = totalCount;
+            document.getElementById('unifiedNotificationBell')?.classList.add('has-notifications');
+        } else {
+            badge.textContent = '';
+            document.getElementById('unifiedNotificationBell')?.classList.remove('has-notifications');
+        }
+    }
+    
+    // Update tab badges
+    if (ptoTabBadge) {
+        ptoTabBadge.textContent = ptoCount > 0 ? ptoCount : '';
+    }
+    if (swapTabBadge) {
+        swapTabBadge.textContent = swapCount > 0 ? swapCount : '';
+    }
+}
+
+function initNotificationBell() {
+    // Initialize unified notification bell
+    initUnifiedNotificationBell();
 }
 
 function renderSwapRequests() {
@@ -3606,35 +3648,7 @@ function capitalizeFirst(str) {
 const seenPTOUpdates = new Set(JSON.parse(localStorage.getItem('seenPTOUpdates') || '[]'));
 
 function initPTONotifications() {
-    const bell = document.getElementById('ptoNotificationBell');
-    const dropdown = document.getElementById('ptoNotificationDropdown');
-    
-    if (!bell || !dropdown) return;
-    
-    // Toggle dropdown on bell click
-    bell.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const wasHidden = !dropdown.classList.contains('visible');
-        dropdown.classList.toggle('visible');
-        
-        // Close swap dropdown if open
-        const swapDropdown = document.getElementById('notificationDropdown');
-        if (swapDropdown) swapDropdown.classList.remove('visible');
-        
-        // If opening the dropdown, mark all notifications as seen
-        if (wasHidden) {
-            markAllPTONotificationsAsSeen();
-        }
-    });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        if (!dropdown.contains(e.target) && !bell.contains(e.target)) {
-            dropdown.classList.remove('visible');
-        }
-    });
-    
-    // Load PTO notifications
+    // Load PTO notifications (unified bell handles the dropdown now)
     loadPTONotifications();
 }
 
@@ -3650,11 +3664,11 @@ async function loadPTONotifications() {
                 req.status === 'approved' || req.status === 'denied'
             );
             
-            // Count unseen updates
-            const unseenCount = decidedRequests.filter(req => !seenPTOUpdates.has(req.id)).length;
+            // Store in state for unified badge
+            employeeState.ptoNotifications = decidedRequests;
             
-            updatePTONotificationBadge(unseenCount);
             renderPTONotificationDropdown(decidedRequests);
+            updateUnifiedNotificationBadge();
         }
     } catch (error) {
         console.warn('Could not load PTO notifications:', error);
@@ -3662,18 +3676,8 @@ async function loadPTONotifications() {
 }
 
 function updatePTONotificationBadge(count) {
-    const bell = document.getElementById('ptoNotificationBell');
-    const badge = document.getElementById('ptoNotificationBadge');
-    
-    if (!bell || !badge) return;
-    
-    if (count > 0) {
-        bell.classList.add('has-notifications');
-        badge.textContent = count;
-    } else {
-        bell.classList.remove('has-notifications');
-        badge.textContent = '';
-    }
+    // Now handled by updateUnifiedNotificationBadge()
+    updateUnifiedNotificationBadge();
 }
 
 function renderPTONotificationDropdown(requests) {
