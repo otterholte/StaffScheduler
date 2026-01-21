@@ -2805,52 +2805,74 @@ body.menu-open {
         padding: 0.5rem;
     }
     
-    /* === NOTIFICATIONS - Slide up panel (auto height) === */
+    /* === NOTIFICATIONS - Full screen on mobile === */
     .notification-dropdown {
         position: fixed;
-        top: 96px;
+        top: 0;
         left: 0;
         right: 0;
+        bottom: 0;
         width: 100vw;
         max-width: 100vw;
-        height: 33vh;
-        max-height: 33vh;
-        border-radius: 0 0 16px 16px;
+        height: 100vh;
+        height: 100dvh;
+        max-height: none;
+        border-radius: 0;
         z-index: 10001;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-        background: #1a1a2e;
+        box-shadow: none;
+        background: #12121f;
         display: flex;
         flex-direction: column;
-        transform: translateY(-10px);
-        opacity: 0;
+        transform: translateX(100%);
+        opacity: 1;
         visibility: hidden;
-        transition: transform 0.2s ease, opacity 0.2s ease;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     
     .notification-dropdown.visible {
-        transform: translateY(0);
-        opacity: 1;
+        transform: translateX(0);
         visibility: visible;
     }
     
     .notification-dropdown-header {
-        padding: 1rem;
-        border-bottom: 1px solid var(--border-color);
+        padding: 1.25rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         justify-content: space-between;
         align-items: center;
+        background: #1a1a2e;
+        flex-shrink: 0;
+    }
+    
+    .notification-dropdown-header span {
+        font-size: 1.1rem;
+        font-weight: 600;
     }
     
     .notification-list {
+        flex: 1;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
-        padding: 0.5rem;
-        padding-bottom: 1.5rem;
+        padding: 1rem;
+        padding-bottom: 2rem;
     }
     
     .notification-item {
-        padding: 1rem;
-        min-height: 60px;
+        padding: 1.25rem;
+        min-height: 70px;
+        margin-bottom: 0.75rem;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.03);
+    }
+    
+    .notification-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--text-muted);
+        font-size: 1rem;
     }
     
     .notification-close-mobile {
@@ -2859,12 +2881,18 @@ body.menu-open {
         height: 44px;
         align-items: center;
         justify-content: center;
-        background: var(--bg-tertiary);
+        background: rgba(255, 255, 255, 0.1);
         border: none;
-        border-radius: 8px;
-        color: var(--text-primary);
+        border-radius: 10px;
+        color: white;
         cursor: pointer;
-        font-size: 1.5rem;
+        font-size: 1.75rem;
+        font-weight: 300;
+        transition: background 0.2s ease;
+    }
+    
+    .notification-close-mobile:active {
+        background: rgba(255, 255, 255, 0.2);
     }
     
     /* === PTO/TIME OFF === */
