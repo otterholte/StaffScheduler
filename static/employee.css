@@ -2583,28 +2583,43 @@ body.menu-open {
         padding: 0.5rem;
     }
     
-    /* === TOOLBAR LAYOUT === */
+    /* === TOOLBAR LAYOUT - Mobile restructured === */
     .employee-toolbar {
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
         gap: 0.75rem;
         padding: 0.75rem;
     }
     
-    .toolbar-left,
-    .toolbar-right {
-        width: 100%;
-        justify-content: center;
+    /* Row 1: View toggle LEFT, Filter toggle RIGHT */
+    .toolbar-left {
+        grid-column: 1;
+        grid-row: 1;
+        justify-content: flex-start;
+        width: auto;
     }
     
+    .toolbar-right {
+        grid-column: 2;
+        grid-row: 1;
+        justify-content: flex-end;
+        width: auto;
+    }
+    
+    /* Row 2: Date navigation centered, spans both columns */
     .toolbar-center {
-        order: -1;
+        grid-column: 1 / -1;
+        grid-row: 2;
         width: 100%;
+        justify-content: center;
     }
     
     /* === WEEK NAVIGATION === */
     .week-nav-inline {
         width: 100%;
-        justify-content: space-between;
+        justify-content: center;
+        gap: 0.5rem;
     }
     
     .week-nav-btn {
