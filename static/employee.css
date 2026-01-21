@@ -1540,24 +1540,24 @@ body.menu-open {
 /* Position time labels at the TOP of cells (aligned with hour boundaries) */
 .employee-view .schedule-grid .time-cell {
     vertical-align: top;
-    padding-top: 0;
+    padding-top: 2px;
     padding-bottom: 0;
     line-height: 1;
-    transform: translateY(-50%);
 }
 
 /* Closing hour row - minimal height, just for showing the time label */
 .employee-view .schedule-grid .closing-hour-row {
-    height: 0;
+    height: 8px;
 }
 
 .employee-view .schedule-grid .closing-hour-row .time-cell {
-    transform: translateY(-50%);
+    vertical-align: top;
+    padding-top: 2px;
 }
 
 .employee-view .schedule-grid .closing-hour-cell {
     padding: 0;
-    height: 0;
+    height: 8px;
     border: none;
     background: transparent !important;
 }

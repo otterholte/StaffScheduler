@@ -858,7 +858,7 @@ function renderGridView() {
     // Rebuild header with dates
     const thead = grid.querySelector('thead tr');
     if (thead) {
-        thead.innerHTML = '<th class="time-col">Time</th>';
+        thead.innerHTML = '<th class="time-col"></th>'; // Empty - time labels are in rows
         
         employeeState.daysOpen.forEach((dayIdx, colIndex) => {
             const th = document.createElement('th');
