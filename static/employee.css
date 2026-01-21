@@ -1467,10 +1467,12 @@ body.menu-open {
 .employee-view .timeline-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    padding-right: 1rem; /* Extra space for scrolling to see last hour */
 }
 
 .employee-view .timeline-grid {
     min-width: 600px; /* Ensures horizontal scroll on mobile */
+    padding-right: 40px; /* Space for the closing hour label */
 }
 
 .employee-view .timeline-header-hours {
@@ -1480,6 +1482,15 @@ body.menu-open {
 .employee-view .timeline-hour-label {
     min-width: 50px;
     flex: 1 0 50px; /* Don't shrink below 50px */
+}
+
+.employee-view .timeline-hour-label.timeline-closing-hour {
+    position: relative;
+    right: auto;
+    flex: 0 0 auto;
+    min-width: auto;
+    padding-right: 0;
+    margin-left: -10px; /* Slight overlap to align with end of shifts */
 }
 
 .employee-view .timeline-slots {
