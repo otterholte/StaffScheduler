@@ -1536,6 +1536,32 @@ body.menu-open {
     }
 }
 
+/* ==================== GRID VIEW TIME LABEL FIXES ==================== */
+/* Position time labels at the TOP of cells (aligned with hour boundaries) */
+.employee-view .schedule-grid .time-cell {
+    vertical-align: top;
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1;
+    transform: translateY(-50%);
+}
+
+/* Closing hour row - minimal height, just for showing the time label */
+.employee-view .schedule-grid .closing-hour-row {
+    height: 0;
+}
+
+.employee-view .schedule-grid .closing-hour-row .time-cell {
+    transform: translateY(-50%);
+}
+
+.employee-view .schedule-grid .closing-hour-cell {
+    padding: 0;
+    height: 0;
+    border: none;
+    background: transparent !important;
+}
+
 /* Timeline shift blocks for employee view - these use the same structure as manager */
 .employee-view .timeline-shift-block {
     position: absolute;

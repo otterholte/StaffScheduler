@@ -872,16 +872,24 @@ function renderGridView() {
         });
     }
     
-    // Build grid body with time rows
+    // Build grid body with time rows (include closing hour for label)
     let html = '';
-    for (let hour = employeeState.startHour; hour < employeeState.endHour; hour++) {
-        html += `<tr>`;
+    for (let hour = employeeState.startHour; hour <= employeeState.endHour; hour++) {
+        const isClosingHour = hour === employeeState.endHour;
+        html += `<tr class="${isClosingHour ? 'closing-hour-row' : ''}">`;
         html += `<td class="time-cell">${formatTime(hour)}</td>`;
         
-        employeeState.daysOpen.forEach((dayIdx, colIndex) => {
-            const cellClass = 'slot ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
-            html += `<td class="${cellClass}" data-day="${dayIdx}" data-hour="${hour}"></td>`;
-        });
+        if (!isClosingHour) {
+            employeeState.daysOpen.forEach((dayIdx, colIndex) => {
+                const cellClass = 'slot ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
+                html += `<td class="${cellClass}" data-day="${dayIdx}" data-hour="${hour}"></td>`;
+            });
+        } else {
+            // Closing hour row - empty cells just for the time label
+            employeeState.daysOpen.forEach(() => {
+                html += `<td class="closing-hour-cell"></td>`;
+            });
+        }
         
         html += `</tr>`;
     }
