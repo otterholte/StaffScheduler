@@ -3609,6 +3609,22 @@ body.menu-open {
 /* PTO Request Modal */
 .pto-modal {
     max-width: 420px;
+    background: #1a1a2e !important; /* Solid dark background */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pto-modal .modal-body {
+    background: #1a1a2e;
+}
+
+.pto-modal .modal-header {
+    background: #1a1a2e;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pto-modal .modal-footer {
+    background: #1a1a2e;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .pto-form-group {
