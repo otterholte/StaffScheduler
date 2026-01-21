@@ -2088,12 +2088,12 @@ body.menu-open {
     color: var(--text-primary);
     font-size: 1.1rem;
     margin-bottom: 0.25rem;
-    padding-left: 2.5rem; /* Align with time below */
+    padding-left: 2.2rem;
 }
 
 .swap-shift-details .shift-time {
     color: var(--text-secondary);
-    padding-left: 2.5rem; /* Match day alignment */
+    padding-left: 1.2rem; /* Less padding to align with day above */
 }
 
 .swap-shift-details .shift-role {
