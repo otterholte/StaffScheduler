@@ -1463,6 +1463,68 @@ body.menu-open {
     min-height: 400px;
 }
 
+/* Ensure timeline has minimum width for proper hour display */
+.employee-view .timeline-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.employee-view .timeline-grid {
+    min-width: 600px; /* Ensures horizontal scroll on mobile */
+}
+
+.employee-view .timeline-header-hours {
+    min-width: 0;
+}
+
+.employee-view .timeline-hour-label {
+    min-width: 50px;
+    flex: 1 0 50px; /* Don't shrink below 50px */
+}
+
+.employee-view .timeline-slots {
+    min-width: 0;
+}
+
+/* Mobile specific timeline fixes */
+@media (max-width: 768px) {
+    .employee-view .timeline-grid {
+        min-width: 550px;
+    }
+    
+    .employee-view .timeline-hour-label {
+        min-width: 45px;
+        flex: 1 0 45px;
+        font-size: 0.65rem;
+    }
+    
+    .employee-view .timeline-day-label {
+        min-width: 60px;
+        width: 60px;
+        padding: 0.4rem 0.5rem;
+    }
+    
+    .employee-view .timeline-day-label .day-name {
+        font-size: 0.7rem;
+    }
+    
+    .employee-view .timeline-day-label .day-date {
+        font-size: 0.6rem;
+    }
+    
+    .employee-view .timeline-shift-block {
+        font-size: 0.65rem;
+        padding: 0 0.35rem;
+    }
+    
+    .employee-view .timeline-header-day {
+        min-width: 60px;
+        width: 60px;
+        padding: 0.4rem 0.5rem;
+        font-size: 0.7rem;
+    }
+}
+
 /* Timeline shift blocks for employee view - these use the same structure as manager */
 .employee-view .timeline-shift-block {
     position: absolute;
