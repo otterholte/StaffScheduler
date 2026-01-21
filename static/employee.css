@@ -2590,7 +2590,8 @@ body.menu-open {
         grid-template-rows: auto auto;
         gap: 1rem;
         padding: 1rem;
-        padding-bottom: 1.25rem;
+        padding-bottom: 1.5rem;
+        margin-bottom: 0.5rem;
     }
     
     /* Row 1: View toggle LEFT, Filter toggle RIGHT */
@@ -2614,9 +2615,7 @@ body.menu-open {
         grid-row: 2;
         width: 100%;
         justify-content: center;
-        margin-top: 0.5rem;
-        padding-top: 0.75rem;
-        border-top: 1px solid var(--border-color);
+        margin-bottom: 0.5rem;
     }
     
     /* === WEEK NAVIGATION === */
