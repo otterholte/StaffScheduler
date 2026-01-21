@@ -1537,27 +1537,38 @@ body.menu-open {
 }
 
 /* ==================== GRID VIEW TIME LABEL FIXES ==================== */
-/* Position time labels at the TOP of cells (aligned with hour boundaries) */
+/* Position time labels at the boundary between hours (on the line) */
+.employee-view .schedule-grid tbody tr {
+    position: relative;
+}
+
 .employee-view .schedule-grid .time-cell {
     vertical-align: top;
-    padding-top: 2px;
-    padding-bottom: 0;
+    padding: 0;
     line-height: 1;
+    position: relative;
+    height: 0;
+    overflow: visible;
 }
 
-/* Closing hour row - minimal height, just for showing the time label */
+/* Time label spans positioned to sit on the boundary line */
+.employee-view .schedule-grid .time-cell span {
+    display: block;
+    position: relative;
+    top: -0.4em;
+}
+
+/* Closing hour row - minimal height for final time label */
 .employee-view .schedule-grid .closing-hour-row {
-    height: 8px;
+    height: 20px;
 }
 
-.employee-view .schedule-grid .closing-hour-row .time-cell {
-    vertical-align: top;
-    padding-top: 2px;
+.employee-view .schedule-grid .closing-hour-row .time-cell span {
+    top: -0.4em;
 }
 
 .employee-view .schedule-grid .closing-hour-cell {
     padding: 0;
-    height: 8px;
     border: none;
     background: transparent !important;
 }

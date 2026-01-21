@@ -877,7 +877,7 @@ function renderGridView() {
     for (let hour = employeeState.startHour; hour <= employeeState.endHour; hour++) {
         const isClosingHour = hour === employeeState.endHour;
         html += `<tr class="${isClosingHour ? 'closing-hour-row' : ''}">`;
-        html += `<td class="time-cell">${formatTime(hour)}</td>`;
+        html += `<td class="time-cell"><span>${formatTime(hour)}</span></td>`;
         
         if (!isClosingHour) {
             employeeState.daysOpen.forEach((dayIdx, colIndex) => {
