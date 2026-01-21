@@ -1995,7 +1995,7 @@ body.menu-open {
 }
 
 .modal-content {
-    background: var(--bg-primary);
+    background: #1a1a2e; /* Solid dark background */
     border-radius: 16px;
     width: 100%;
     max-width: 500px;
@@ -2003,7 +2003,8 @@ body.menu-open {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .modal-header {
@@ -2087,10 +2088,12 @@ body.menu-open {
     color: var(--text-primary);
     font-size: 1.1rem;
     margin-bottom: 0.25rem;
+    padding-left: 0.5rem; /* Align with time below */
 }
 
 .swap-shift-details .shift-time {
     color: var(--text-secondary);
+    padding-left: 0.5rem; /* Match day alignment */
 }
 
 .swap-shift-details .shift-role {
