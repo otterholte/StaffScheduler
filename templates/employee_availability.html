@@ -184,7 +184,7 @@
                         </div>
                     </div>
 
-                    <!-- Availability Grid -->
+                    <!-- Availability Editor -->
                     <div class="availability-editor-card panel-card">
                         <div class="availability-instructions">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
@@ -192,82 +192,15 @@
                                 <line x1="12" y1="16" x2="12" y2="12"></line>
                                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
                             </svg>
-                            <span>Click and drag on the grid to mark when you're available to work. Green cells = available.</span>
-                        </div>
-                        
-                        <!-- Quick Presets -->
-                        <div class="availability-presets employee-presets">
-                            <span class="presets-label">Quick Set:</span>
-                            <button class="preset-btn" data-preset="all-9-5">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                                </svg>
-                                All Days 9-5
-                            </button>
-                            <button class="preset-btn" data-preset="weekdays-9-5">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                                </svg>
-                                Weekdays 9-5
-                            </button>
-                            <button class="preset-btn" data-preset="weekends-9-5">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                                </svg>
-                                Weekends Only
-                            </button>
-                            <button class="preset-btn" data-preset="mornings">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <circle cx="12" cy="12" r="5"></circle>
-                                    <line x1="12" y1="1" x2="12" y2="3"></line>
-                                    <line x1="12" y1="21" x2="12" y2="23"></line>
-                                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                                    <line x1="1" y1="12" x2="3" y2="12"></line>
-                                    <line x1="21" y1="12" x2="23" y2="12"></line>
-                                </svg>
-                                Mornings
-                            </button>
-                            <button class="preset-btn" data-preset="evenings">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                                </svg>
-                                Evenings
-                            </button>
-                            <button class="preset-btn preset-danger" data-preset="clear">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                                </svg>
-                                Clear All
-                            </button>
+                            <span>Set your available hours for each day. Tap a day to add or edit time ranges.</span>
                         </div>
 
-                        <!-- Availability Grid -->
-                        <div class="availability-grid-container">
-                            <table class="availability-table employee-availability-table" id="availabilityTable">
-                                <thead>
-                                    <tr>
-                                        <th class="time-header"></th>
-                                        <th>Sun</th>
-                                        <th>Mon</th>
-                                        <th>Tue</th>
-                                        <th>Wed</th>
-                                        <th>Thu</th>
-                                        <th>Fri</th>
-                                        <th>Sat</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="availabilityTableBody">
-                                    <!-- Generated by JavaScript -->
-                                </tbody>
-                            </table>
+                        <!-- Time Range Cards View (Mobile-friendly) -->
+                        <div class="availability-cards-view" id="availabilityCardsView">
+                            <!-- Generated by JavaScript -->
                         </div>
 
-                        <!-- Legend -->
+                        <!-- Save Status -->
                         <div class="availability-legend-bar">
                             <div class="legend-items">
                                 <span class="legend-item"><span class="legend-dot available"></span> Available</span>

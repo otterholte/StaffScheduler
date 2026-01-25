@@ -1893,37 +1893,297 @@ function capitalizeFirstEmployee(str) {
 }
 
 // ==================== AVAILABILITY EDITOR ====================
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
 function initAvailabilityEditor() {
-    renderAvailabilityGrid();
-    setupAvailabilityPresets();
+    renderAvailabilityCards();
     setupSaveButton();
     updateAvailabilityStats();
 }
 
-function renderAvailabilityGrid() {
-    const tbody = document.getElementById('availabilityTableBody');
-    if (!tbody) return;
+function renderAvailabilityCards() {
+    const container = document.getElementById('availabilityCardsView');
+    if (!container) return;
     
     const availability = employeeState.availability || {};
     let html = '';
     
-    for (let hour = employeeState.startHour; hour < employeeState.endHour; hour++) {
-        html += `<tr>`;
-        html += `<td class="time-cell">${formatTime(hour)}</td>`;
+    for (let day = 0; day < 7; day++) {
+        const dayRanges = availability[day] || [];
+        const hasRanges = dayRanges.length > 0;
         
-        for (let day = 0; day < 7; day++) {
-            const isAvailable = isHourAvailable(day, hour);
-            const activeClass = isAvailable ? 'available' : '';
-            html += `<td class="avail-cell ${activeClass}" data-day="${day}" data-hour="${hour}"></td>`;
+        html += `
+            <div class="availability-day-card" data-day="${day}">
+                <div class="availability-day-header">
+                    <span class="availability-day-name">${DAY_NAMES[day]}</span>
+                    <button class="availability-add-btn" data-day="${day}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        Add
+                    </button>
+                </div>
+                <div class="availability-day-ranges">
+        `;
+        
+        if (hasRanges) {
+            dayRanges.forEach((range, idx) => {
+                const [start, end] = range;
+                const isAllDay = start === employeeState.startHour && end === employeeState.endHour;
+                
+                html += `
+                    <div class="availability-time-range" data-day="${day}" data-idx="${idx}">
+                        <div class="range-check">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="range-times">
+                            ${isAllDay ? '<span class="availability-all-day">All Day</span>' : `
+                                <span>${formatTime12(start)}</span>
+                                <span class="range-arrow">→</span>
+                                <span>${formatTime12(end)}</span>
+                            `}
+                        </div>
+                        <div class="range-actions">
+                            <button class="range-edit-btn" data-day="${day}" data-idx="${idx}" title="Edit">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                            <button class="range-delete-btn" data-day="${day}" data-idx="${idx}" title="Delete">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            html += `
+                <div class="availability-not-available">
+                    <div class="na-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </div>
+                    <span>Not Available</span>
+                </div>
+            `;
         }
         
-        html += `</tr>`;
+        html += `
+                </div>
+            </div>
+        `;
     }
     
-    tbody.innerHTML = html;
+    container.innerHTML = html;
     
-    // Setup drag selection
-    setupAvailabilityDrag();
+    // Setup event listeners
+    setupAvailabilityCardListeners();
+}
+
+function formatTime12(hour) {
+    if (hour === 0) return '12am';
+    if (hour === 12) return '12pm';
+    if (hour < 12) return `${hour}am`;
+    return `${hour - 12}pm`;
+}
+
+function setupAvailabilityCardListeners() {
+    // Add buttons
+    document.querySelectorAll('.availability-add-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const day = parseInt(btn.dataset.day);
+            showTimeRangeEditor(day, null);
+        });
+    });
+    
+    // Edit buttons
+    document.querySelectorAll('.range-edit-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const day = parseInt(btn.dataset.day);
+            const idx = parseInt(btn.dataset.idx);
+            showTimeRangeEditor(day, idx);
+        });
+    });
+    
+    // Delete buttons
+    document.querySelectorAll('.range-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const day = parseInt(btn.dataset.day);
+            const idx = parseInt(btn.dataset.idx);
+            deleteTimeRange(day, idx);
+        });
+    });
+}
+
+function showTimeRangeEditor(day, rangeIdx) {
+    const isEdit = rangeIdx !== null;
+    const availability = employeeState.availability || {};
+    const dayRanges = availability[day] || [];
+    const existingRange = isEdit ? dayRanges[rangeIdx] : null;
+    
+    const defaultStart = existingRange ? existingRange[0] : employeeState.startHour;
+    const defaultEnd = existingRange ? existingRange[1] : employeeState.endHour;
+    
+    // Create time options
+    let startOptions = '';
+    let endOptions = '';
+    for (let h = employeeState.startHour; h <= employeeState.endHour; h++) {
+        const selected = h === defaultStart ? 'selected' : '';
+        startOptions += `<option value="${h}" ${selected}>${formatTime12(h)}</option>`;
+    }
+    for (let h = employeeState.startHour; h <= employeeState.endHour; h++) {
+        const selected = h === defaultEnd ? 'selected' : '';
+        endOptions += `<option value="${h}" ${selected}>${formatTime12(h)}</option>`;
+    }
+    
+    // Create modal HTML
+    const modalHTML = `
+        <div class="modal-overlay active" id="timeRangeModal">
+            <div class="modal-content time-range-modal">
+                <div class="modal-header">
+                    <h2>${isEdit ? 'Edit' : 'Add'} Availability - ${DAY_NAMES[day]}</h2>
+                    <button class="modal-close" id="closeTimeRangeModal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="time-range-form">
+                        <div class="time-range-row">
+                            <div class="time-range-field">
+                                <label>Start Time</label>
+                                <select id="rangeStartTime">${startOptions}</select>
+                            </div>
+                            <div class="time-range-field">
+                                <label>End Time</label>
+                                <select id="rangeEndTime">${endOptions}</select>
+                            </div>
+                        </div>
+                        <div class="time-range-quick-btns">
+                            <button class="time-range-quick-btn" data-start="${employeeState.startHour}" data-end="${employeeState.endHour}">All Day</button>
+                            <button class="time-range-quick-btn" data-start="${employeeState.startHour}" data-end="12">Morning</button>
+                            <button class="time-range-quick-btn" data-start="12" data-end="${employeeState.endHour}">Afternoon</button>
+                            <button class="time-range-quick-btn" data-start="${Math.max(employeeState.startHour, 17)}" data-end="${employeeState.endHour}">Evening</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" id="cancelTimeRange">Cancel</button>
+                    <button class="btn btn-primary" id="saveTimeRange">Save</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    const modal = document.getElementById('timeRangeModal');
+    const closeBtn = document.getElementById('closeTimeRangeModal');
+    const cancelBtn = document.getElementById('cancelTimeRange');
+    const saveBtn = document.getElementById('saveTimeRange');
+    const startSelect = document.getElementById('rangeStartTime');
+    const endSelect = document.getElementById('rangeEndTime');
+    
+    // Quick buttons
+    modal.querySelectorAll('.time-range-quick-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            startSelect.value = btn.dataset.start;
+            endSelect.value = btn.dataset.end;
+        });
+    });
+    
+    // Close handlers
+    const closeModal = () => modal.remove();
+    closeBtn.addEventListener('click', closeModal);
+    cancelBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+    
+    // Save handler
+    saveBtn.addEventListener('click', () => {
+        const start = parseInt(startSelect.value);
+        const end = parseInt(endSelect.value);
+        
+        if (end <= start) {
+            alert('End time must be after start time');
+            return;
+        }
+        
+        saveTimeRange(day, rangeIdx, start, end);
+        closeModal();
+    });
+}
+
+function saveTimeRange(day, rangeIdx, start, end) {
+    if (!employeeState.availability) {
+        employeeState.availability = {};
+    }
+    if (!employeeState.availability[day]) {
+        employeeState.availability[day] = [];
+    }
+    
+    if (rangeIdx !== null) {
+        // Edit existing
+        employeeState.availability[day][rangeIdx] = [start, end];
+    } else {
+        // Add new
+        employeeState.availability[day].push([start, end]);
+    }
+    
+    // Sort ranges by start time
+    employeeState.availability[day].sort((a, b) => a[0] - b[0]);
+    
+    // Merge overlapping ranges
+    mergeOverlappingRanges(day);
+    
+    renderAvailabilityCards();
+    updateAvailabilityStats();
+    markUnsaved();
+}
+
+function deleteTimeRange(day, rangeIdx) {
+    if (!employeeState.availability || !employeeState.availability[day]) return;
+    
+    employeeState.availability[day].splice(rangeIdx, 1);
+    
+    if (employeeState.availability[day].length === 0) {
+        delete employeeState.availability[day];
+    }
+    
+    renderAvailabilityCards();
+    updateAvailabilityStats();
+    markUnsaved();
+}
+
+function mergeOverlappingRanges(day) {
+    const ranges = employeeState.availability[day];
+    if (!ranges || ranges.length < 2) return;
+    
+    const merged = [ranges[0]];
+    
+    for (let i = 1; i < ranges.length; i++) {
+        const last = merged[merged.length - 1];
+        const current = ranges[i];
+        
+        if (current[0] <= last[1]) {
+            // Overlapping or adjacent - merge
+            last[1] = Math.max(last[1], current[1]);
+        } else {
+            merged.push(current);
+        }
+    }
+    
+    employeeState.availability[day] = merged;
 }
 
 function isHourAvailable(day, hour) {
@@ -1936,175 +2196,7 @@ function isHourAvailable(day, hour) {
     return dayAvail.some(([start, end]) => hour >= start && hour < end);
 }
 
-function setupAvailabilityDrag() {
-    const tbody = document.getElementById('availabilityTableBody');
-    if (!tbody) return;
-    
-    let isMouseDown = false;
-    let selectionMode = null;
-    
-    tbody.addEventListener('mousedown', (e) => {
-        const cell = e.target.closest('.avail-cell');
-        if (!cell) return;
-        
-        isMouseDown = true;
-        selectionMode = cell.classList.contains('available') ? 'remove' : 'add';
-        toggleCell(cell, selectionMode);
-        
-        e.preventDefault();
-    });
-    
-    tbody.addEventListener('mouseover', (e) => {
-        if (!isMouseDown) return;
-        
-        const cell = e.target.closest('.avail-cell');
-        if (!cell) return;
-        
-        toggleCell(cell, selectionMode);
-    });
-    
-    document.addEventListener('mouseup', () => {
-        if (isMouseDown) {
-            isMouseDown = false;
-            selectionMode = null;
-            updateAvailabilityFromGrid();
-            updateAvailabilityStats();
-            markUnsaved();
-        }
-    });
-}
-
-function toggleCell(cell, mode) {
-    if (mode === 'add') {
-        cell.classList.add('available');
-    } else {
-        cell.classList.remove('available');
-    }
-}
-
-function updateAvailabilityFromGrid() {
-    const tbody = document.getElementById('availabilityTableBody');
-    if (!tbody) return;
-    
-    const newAvailability = {};
-    
-    for (let day = 0; day < 7; day++) {
-        const daySlots = [];
-        let currentStart = null;
-        
-        for (let hour = employeeState.startHour; hour < employeeState.endHour; hour++) {
-            const cell = tbody.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
-            const isAvailable = cell && cell.classList.contains('available');
-            
-            if (isAvailable && currentStart === null) {
-                currentStart = hour;
-            } else if (!isAvailable && currentStart !== null) {
-                daySlots.push([currentStart, hour]);
-                currentStart = null;
-            }
-        }
-        
-        // Close any open slot at end of day
-        if (currentStart !== null) {
-            daySlots.push([currentStart, employeeState.endHour]);
-        }
-        
-        if (daySlots.length > 0) {
-            newAvailability[day] = daySlots;
-        }
-    }
-    
-    employeeState.availability = newAvailability;
-}
-
-function setupAvailabilityPresets() {
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            applyPreset(btn.dataset.preset);
-            updateAvailabilityStats();
-            markUnsaved();
-        });
-    });
-}
-
-function applyPreset(preset) {
-    const tbody = document.getElementById('availabilityTableBody');
-    if (!tbody) return;
-    
-    // Clear all first
-    tbody.querySelectorAll('.avail-cell').forEach(cell => {
-        cell.classList.remove('available');
-    });
-    
-    const startHour = employeeState.startHour;
-    const endHour = employeeState.endHour;
-    
-    switch (preset) {
-        case 'all-9-5':
-            // All days 9am-5pm
-            for (let day = 0; day < 7; day++) {
-                for (let hour = 9; hour < 17; hour++) {
-                    if (hour >= startHour && hour < endHour) {
-                        const cell = tbody.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
-                        if (cell) cell.classList.add('available');
-                    }
-                }
-            }
-            break;
-            
-        case 'weekdays-9-5':
-            // Mon-Fri 9am-5pm
-            for (let day = 1; day <= 5; day++) {
-                for (let hour = 9; hour < 17; hour++) {
-                    if (hour >= startHour && hour < endHour) {
-                        const cell = tbody.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
-                        if (cell) cell.classList.add('available');
-                    }
-                }
-            }
-            break;
-            
-        case 'weekends-9-5':
-            // Sat-Sun 9am-5pm
-            [0, 6].forEach(day => {
-                for (let hour = 9; hour < 17; hour++) {
-                    if (hour >= startHour && hour < endHour) {
-                        const cell = tbody.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
-                        if (cell) cell.classList.add('available');
-                    }
-                }
-            });
-            break;
-            
-        case 'mornings':
-            // All days, first half of operating hours
-            const midMorning = Math.floor((startHour + endHour) / 2);
-            for (let day = 0; day < 7; day++) {
-                for (let hour = startHour; hour < midMorning; hour++) {
-                    const cell = tbody.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
-                    if (cell) cell.classList.add('available');
-                }
-            }
-            break;
-            
-        case 'evenings':
-            // All days, second half of operating hours
-            const midEvening = Math.floor((startHour + endHour) / 2);
-            for (let day = 0; day < 7; day++) {
-                for (let hour = midEvening; hour < endHour; hour++) {
-                    const cell = tbody.querySelector(`[data-day="${day}"][data-hour="${hour}"]`);
-                    if (cell) cell.classList.add('available');
-                }
-            }
-            break;
-            
-        case 'clear':
-            // Already cleared above
-            break;
-    }
-    
-    updateAvailabilityFromGrid();
-}
+// Note: Old grid functions removed - now using cards view
 
 function updateAvailabilityStats() {
     let totalHours = 0;
