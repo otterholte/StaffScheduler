@@ -4447,14 +4447,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Determine which page we're on
     const scheduleView = document.getElementById('scheduleViewTimeline');
-    const availabilityTable = document.getElementById('availabilityTable');
+    const availabilityCardsView = document.getElementById('availabilityCardsView');
     
     if (scheduleView) {
         initScheduleView();
         initShiftPopover();
     }
     
-    if (availabilityTable) {
+    if (availabilityCardsView) {
         initAvailabilityEditor();
         initPTORequests();
         initPTONotifications(); // Also show PTO notifications on availability page
