@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Availability - Staff Scheduler Pro</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
-    <link rel="stylesheet" href="{{ url_for('static', filename='employee.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ range(100000, 999999) | random }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='employee.css') }}?v={{ range(100000, 999999) | random }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -305,7 +305,7 @@
             availability: {{ availability_data|tojson|safe }}
         };
     </script>
-    <script src="{{ url_for('static', filename='employee.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='employee.js') }}?v={{ range(100000, 999999) | random }}"></script>
 </body>
 </html>
 
