@@ -3620,36 +3620,66 @@ body.menu-open {
 .pto-modal .modal-header {
     background: #1a1a2e;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1rem 1.25rem;
 }
 
 .pto-modal .modal-footer {
     background: #1a1a2e;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.75rem 1.25rem;
+}
+
+/* PTO Modal - Compact on mobile (not full screen) */
+@media (max-width: 768px) {
+    .pto-modal {
+        max-height: 85vh !important;
+        height: auto !important;
+        max-width: calc(100vw - 2rem) !important;
+        width: calc(100vw - 2rem) !important;
+        margin: 1rem !important;
+        border-radius: 16px !important;
+    }
+    
+    .pto-modal .modal-header {
+        padding: 0.875rem 1rem;
+    }
+    
+    .pto-modal .modal-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    .pto-modal .modal-body {
+        padding: 0.875rem 1rem;
+    }
+    
+    .pto-modal .modal-footer {
+        padding: 0.75rem 1rem;
+    }
 }
 
 .pto-form-group {
-    margin-bottom: 1rem;
+    margin-bottom: 0.875rem;
 }
 
 .pto-form-group label {
     display: block;
     font-weight: 500;
-    margin-bottom: 0.375rem;
+    margin-bottom: 0.25rem;
     color: var(--text-primary);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .pto-form-group input[type="date"],
 .pto-form-group select,
 .pto-form-group textarea {
     width: 100%;
-    padding: 0.75rem 1rem;
+    padding: 0.6rem 0.875rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
 }
 
 /* Date input specific styling */
@@ -3726,7 +3756,7 @@ body.menu-open {
 
 .pto-form-group textarea {
     resize: vertical;
-    min-height: 60px;
+    min-height: 50px;
 }
 
 /* ==================== PTO IN SCHEDULE VIEWS ==================== */
