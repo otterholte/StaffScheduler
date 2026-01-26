@@ -5874,7 +5874,11 @@ function renderEmployeesGrid() {
         });
         card.querySelector('.avail-emp-btn').addEventListener('click', (e) => {
             e.stopPropagation();
-            openAvailabilityEditor(emp.id);
+            // Navigate to Settings (Availability) tab and select this employee
+            switchTab('settings');
+            setTimeout(() => {
+                selectAvailabilityEmployee(emp.id);
+            }, 100);
         });
         card.querySelector('.delete-emp-btn').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -7158,19 +7162,18 @@ function setupManagerAvailTableListeners(emp) {
             // Add default 9am-5pm range
             managerAvailEdits[dataDay].push([state.startHour, state.endHour]);
             renderManagerAvailabilityTable(emp);
-            saveManagerAvailability(emp);
         });
     });
     
     // Remove button
     container.querySelectorAll('.avail-remove-row-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
             const dataDay = parseInt(btn.dataset.day);
             const idx = parseInt(btn.dataset.idx);
             if (managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay].splice(idx, 1);
                 renderManagerAvailabilityTable(emp);
-                saveManagerAvailability(emp);
             }
         });
     });
