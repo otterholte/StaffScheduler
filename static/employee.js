@@ -1897,6 +1897,15 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function initAvailabilityEditor() {
+    // Normalize availability keys to integers if they are strings from JSON
+    if (employeeState.availability && typeof employeeState.availability === 'object') {
+        const normalized = {};
+        Object.entries(employeeState.availability).forEach(([day, ranges]) => {
+            normalized[parseInt(day)] = ranges;
+        });
+        employeeState.availability = normalized;
+    }
+
     // Initialize with default "All Day" if no availability exists
     if (!employeeState.availability || Object.keys(employeeState.availability).length === 0) {
         employeeState.availability = {};
@@ -1918,7 +1927,8 @@ function renderAvailabilityTable() {
     let html = `<div class="availability-table">`;
     
     for (let day = 0; day < 7; day++) {
-        const dayRanges = availability[day] || [];
+        // Handle both string and number keys just in case
+        const dayRanges = availability[day] || availability[day.toString()] || [];
         const hasRanges = dayRanges.length > 0;
         
         html += `
@@ -2130,17 +2140,22 @@ function updateTimeFromCustomInputs(inputGroup) {
     
     const decimal = timePartsToDecimal(hour, min, ampm);
     
-    if (!employeeState.availability[day]) return;
+    // Ensure we check for both string and number keys
+    let dayAvail = employeeState.availability[day] || employeeState.availability[day.toString()];
+    if (!dayAvail) return;
+    
+    // Ensure it's stored under the numeric key for consistency
+    employeeState.availability[day] = dayAvail;
     
     const isStart = type === 'start';
     if (isStart) {
-        employeeState.availability[day][idx][0] = decimal;
+        dayAvail[idx][0] = decimal;
     } else {
-        employeeState.availability[day][idx][1] = decimal;
+        dayAvail[idx][1] = decimal;
     }
     
     // Validate: end must be after start
-    const [start, end] = employeeState.availability[day][idx];
+    const [start, end] = dayAvail[idx];
     if (end <= start) {
         if (isStart) {
             employeeState.availability[day][idx][1] = Math.min(start + 0.25, employeeState.endHour);
@@ -2230,11 +2245,21 @@ async function saveAvailability() {
         const data = await response.json();
         
         if (data.success) {
+            // Update local state with returned availability (preserves precision)
+            if (data.availability) {
+                const normalized = {};
+                Object.entries(data.availability).forEach(([day, ranges]) => {
+                    normalized[parseInt(day)] = ranges;
+                });
+                employeeState.availability = normalized;
+            }
+            
             if (status) {
                 status.textContent = 'Saved!';
                 status.className = 'save-status saved';
             }
             showToast('Availability saved successfully', 'success');
+            renderAvailabilityTable(); // Re-render to ensure everything matches
         } else {
             throw new Error(data.error || 'Failed to save');
         }

@@ -7072,6 +7072,16 @@ function renderManagerAvailabilityTable(emp) {
     if (shouldInitialize) {
         console.log('[ManagerAvail] Initializing managerAvailEdits for emp:', emp.id);
         managerAvailEdits = {};
+        
+        // Normalize availability_ranges keys to integers if they are strings
+        if (emp.availability_ranges) {
+            const normalized = {};
+            Object.entries(emp.availability_ranges).forEach(([day, ranges]) => {
+                normalized[parseInt(day)] = ranges;
+            });
+            emp.availability_ranges = normalized;
+        }
+
         for (let d = 0; d < 7; d++) {
             const dataDay = toDataDay(d);
             managerAvailEdits[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
@@ -7359,16 +7369,21 @@ function updateManagerTimeFromInputs(inputGroup, emp) {
     
     const decimal = timePartsToDecimalManager(hour, min, ampm);
             
-    if (!managerAvailEdits[dataDay] || !managerAvailEdits[dataDay][idx]) return;
+    // Check for both string and number keys
+    let dayEdits = managerAvailEdits[dataDay] || managerAvailEdits[dataDay.toString()];
+    if (!dayEdits || !dayEdits[idx]) return;
+    
+    // Ensure it's stored under the numeric key for consistency
+    managerAvailEdits[dataDay] = dayEdits;
     
     if (type === 'start') {
-        managerAvailEdits[dataDay][idx][0] = decimal;
+        dayEdits[idx][0] = decimal;
     } else {
-        managerAvailEdits[dataDay][idx][1] = decimal;
+        dayEdits[idx][1] = decimal;
     }
     
     // Validate: end must be after start
-    const [start, end] = managerAvailEdits[dataDay][idx];
+    const [start, end] = dayEdits[idx];
     if (end <= start) {
         if (type === 'start') {
             managerAvailEdits[dataDay][idx][1] = Math.min(start + 0.25, state.endHour);
@@ -7404,18 +7419,33 @@ async function saveSettingsAvailability() {
         
         if (data.success) {
             // Update local employee data with the returned availability
-            // Convert ranges back to slots for compatibility
-            const availabilitySlots = [];
-            for (const [dayStr, ranges] of Object.entries(data.availability || managerAvailEdits)) {
-                const day = parseInt(dayStr);
-                ranges.forEach(([start, end]) => {
-                    // Store slots for each hour in the range
-                    for (let h = Math.floor(start); h < Math.ceil(end); h++) {
-                        availabilitySlots.push({ day, hour: h });
-                    }
-                });
+            if (data.employee) {
+                // Update the entire employee object to get the latest ranges
+                Object.assign(emp, data.employee);
+                
+                // Normalize keys in the newly received availability_ranges
+                if (emp.availability_ranges) {
+                    const normalized = {};
+                    Object.entries(emp.availability_ranges).forEach(([day, ranges]) => {
+                        normalized[parseInt(day)] = ranges;
+                    });
+                    emp.availability_ranges = normalized;
+                }
+            } else {
+                // Fallback if data.employee is missing
+                // Convert ranges back to slots for compatibility
+                const availabilitySlots = [];
+                for (const [dayStr, ranges] of Object.entries(data.availability || managerAvailEdits)) {
+                    const day = parseInt(dayStr);
+                    ranges.forEach(([start, end]) => {
+                        // Store slots for each hour in the range
+                        for (let h = Math.floor(start); h < Math.ceil(end); h++) {
+                            availabilitySlots.push({ day, hour: h });
+                        }
+                    });
+                }
+                emp.availability = availabilitySlots;
             }
-            emp.availability = availabilitySlots;
             
             // Update hours display
             const availHours = calculateAvailableHoursFromRanges(managerAvailEdits);
@@ -7444,9 +7474,12 @@ function calculateAvailableHoursFromRanges(rangesObj) {
 
 function getAvailabilityRangesForDay(emp, dataDay) {
     // First, check if we have availability_ranges (new format with 15-min precision)
-    if (emp.availability_ranges && emp.availability_ranges[dataDay]) {
+    // Handle both string and number keys
+    const ranges = emp.availability_ranges ? (emp.availability_ranges[dataDay] || emp.availability_ranges[dataDay.toString()]) : null;
+    
+    if (ranges) {
         // availability_ranges is { day: [[start, end], ...] }
-        return emp.availability_ranges[dataDay].map(r => [r[0], r[1]]);
+        return ranges.map(r => [r[0], r[1]]);
     }
     
     // Fall back to converting from slot-based availability
