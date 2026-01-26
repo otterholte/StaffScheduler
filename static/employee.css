@@ -1371,7 +1371,7 @@ body.menu-open {
 }
 
 .time-input-group:focus-within {
-    border-color: var(--employee-accent);
+    border-color: #467df6;
 }
 
 /* Custom Select Dropdown */
@@ -1393,7 +1393,7 @@ body.menu-open {
 }
 
 .custom-select:hover .custom-select-value {
-    color: var(--employee-accent);
+    color: #467df6;
 }
 
 .custom-select-dropdown {
@@ -1438,12 +1438,12 @@ body.menu-open {
 }
 
 .custom-select-option:hover {
-    background: rgba(16, 185, 129, 0.15);
-    color: #10b981;
+    background: rgba(70, 125, 246, 0.15);
+    color: #467df6;
 }
 
 .custom-select-option.selected {
-    background: var(--employee-accent);
+    background: #467df6;
     color: white;
 }
 
@@ -1476,7 +1476,7 @@ body.menu-open {
 }
 
 .time-input-group .time-ampm-select:hover .custom-select-value {
-    color: var(--employee-accent);
+    color: #467df6;
 }
 
 .avail-remove-row-btn {
