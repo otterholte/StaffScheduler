@@ -3450,7 +3450,7 @@ function renderSimpleTableView(schedule) {
             emp = schedule.employee;
             totalHours = schedule.totalHours;
             days = schedule.days;
-        } else {
+            } else {
             // Employee only has PTO, no scheduled shifts
             emp = {
                 id: empId,
@@ -3491,15 +3491,15 @@ function renderSimpleTableView(schedule) {
     
     // Render employee rows (including PTO in same row)
     combinedEmployeeData.forEach(({ emp, totalHours, days, pto }) => {
-        const row = document.createElement('tr');
-        
-        let html = `<td class="name-col"><div class="emp-name">
-            <span class="emp-color" style="background: ${emp.color || '#666'}"></span>
-            <span>${emp.name}</span>
-        </div></td>`;
-        
-        for (let day = 0; day < 7; day++) {
-            const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
+            const row = document.createElement('tr');
+            
+            let html = `<td class="name-col"><div class="emp-name">
+                <span class="emp-color" style="background: ${emp.color || '#666'}"></span>
+                <span>${emp.name}</span>
+            </div></td>`;
+            
+            for (let day = 0; day < 7; day++) {
+                const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
             const hasPTO = pto && pto.days[day];
             const shifts = days[day] || [];
             
@@ -3510,19 +3510,19 @@ function renderSimpleTableView(schedule) {
                     <span class="pto-shift">${emoji} ${capitalizeFirst(pto.days[day])}</span>
                 </td>`;
             } else if (shifts.length === 0) {
-                html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
-            } else {
-                const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
-                html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
+                    html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
+                } else {
+                    const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
+                    html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
+                }
             }
-        }
-        
+            
         // Show hours or "Off" for PTO-only employees
         const hoursDisplay = totalHours > 0 ? `${totalHours}h` : 'Off';
         html += `<td class="total-hours">${hoursDisplay}</td>`;
-        row.innerHTML = html;
-        tbody.appendChild(row);
-    });
+            row.innerHTML = html;
+            tbody.appendChild(row);
+        });
     
     // If no employees have hours, show a message
     if (tbody.children.length === 0) {
@@ -6164,7 +6164,7 @@ function openAvailabilityEditor(empId) {
 function renderModalAvailabilityTable(emp) {
     const container = document.getElementById('modalAvailTableView');
     if (!container) return;
-    
+        
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     
     // Initialize edits from current availability (Mon=0 to Sun=6)
@@ -6177,7 +6177,7 @@ function renderModalAvailabilityTable(emp) {
     }
     
     let html = '';
-    for (let d = 0; d < 7; d++) {
+        for (let d = 0; d < 7; d++) {
         const ranges = modalAvailEdits[d];
         
         html += `<div class="avail-day-row" data-day="${d}">
@@ -6314,7 +6314,7 @@ function updateModalTimeFromInputs(inputGroup) {
     const ampm = inputGroup.querySelector('[data-field="ampm"]').dataset.value;
     
     const decimal = timePartsToDecimalManager(hour, min, ampm);
-    
+        
     if (!modalAvailEdits[day] || !modalAvailEdits[day][idx]) return;
     
     if (type === 'start') {
@@ -6333,7 +6333,7 @@ function updateModalTimeFromInputs(inputGroup) {
         }
         const emp = employeeMap[state.editingAvailability];
         if (emp) renderModalAvailabilityTable(emp);
-    }
+        }
 }
 
 async function saveAvailability() {
@@ -6348,8 +6348,8 @@ async function saveAvailability() {
         ranges.forEach(([start, end]) => {
             for (let h = Math.floor(start); h < Math.ceil(end); h++) {
                 availability.push({ day, hour: h });
-            }
-        });
+        }
+    });
     }
     
     try {
@@ -6558,7 +6558,7 @@ async function approvePTOFromNotification(requestId) {
             if (data.shifts_removed && data.shifts_removed > 0) {
                 showToast(`Time off approved. ${data.shifts_removed} shift(s) removed from schedule.`, 'warning');
             } else {
-                showToast('Time off request approved', 'success');
+            showToast('Time off request approved', 'success');
             }
             
             loadPTONotifications();
@@ -6763,7 +6763,7 @@ async function approvePTORequest(requestId) {
             if (data.shifts_removed && data.shifts_removed > 0) {
                 showToast(`Time off approved. ${data.shifts_removed} shift(s) removed from schedule.`, 'warning');
             } else {
-                showToast('Time off request approved', 'success');
+            showToast('Time off request approved', 'success');
             }
             
             // Reload the PTO list
@@ -7042,7 +7042,7 @@ function navigateToStaffAndEdit(empId) {
                 if (editBtn) {
                     editBtn.classList.add('highlight-pulse');
                     setTimeout(() => editBtn.classList.remove('highlight-pulse'), 2000);
-                }
+}
             }, 300);
         }
     }, 100);
@@ -7156,7 +7156,7 @@ function timePartsToDecimalManager(hour, min, ampm) {
 
 function setupManagerAvailTableListeners(emp) {
     const container = document.getElementById('managerAvailTableView');
-    
+        
     // Custom dropdown handlers
     container.querySelectorAll('.custom-select').forEach(select => {
         const valueEl = select.querySelector('.custom-select-value');
@@ -7226,7 +7226,7 @@ function updateManagerTimeFromInputs(inputGroup, emp) {
     const ampm = inputGroup.querySelector('[data-field="ampm"]').dataset.value;
     
     const decimal = timePartsToDecimalManager(hour, min, ampm);
-    
+            
     if (!managerAvailEdits[dataDay] || !managerAvailEdits[dataDay][idx]) return;
     
     if (type === 'start') {
@@ -7244,8 +7244,8 @@ function updateManagerTimeFromInputs(inputGroup, emp) {
             managerAvailEdits[dataDay][idx][0] = Math.max(end - 0.25, state.startHour);
         }
         renderManagerAvailabilityTable(emp);
-    }
-    
+            }
+            
     // Don't auto-save - user must click Save button
 }
 
