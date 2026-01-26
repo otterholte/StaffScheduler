@@ -7050,6 +7050,7 @@ function navigateToStaffAndEdit(empId) {
 
 // Store manager availability edits in progress
 let managerAvailEdits = {};
+let managerAvailEditsEmpId = null;
 
 function renderManagerAvailabilityTable(emp) {
     console.log('[ManagerAvail] renderManagerAvailabilityTable called');
@@ -7063,15 +7064,23 @@ function renderManagerAvailabilityTable(emp) {
     // Convert display day index to data day (our data uses Mon=0, Sun=6)
     const toDataDay = (displayDay) => displayDay === 0 ? 6 : displayDay - 1;
     
-    // Initialize edits from current availability
-    managerAvailEdits = {};
-    for (let d = 0; d < 7; d++) {
-        const dataDay = toDataDay(d);
-        managerAvailEdits[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
-        // If no availability, start with empty array
-        if (managerAvailEdits[dataDay].length === 0) {
-            managerAvailEdits[dataDay] = [];
+    // Initialize edits from current availability only when switching employees or if not yet initialized
+    const shouldInitialize = managerAvailEditsEmpId !== emp.id || 
+                             !managerAvailEdits || 
+                             Object.keys(managerAvailEdits).length === 0;
+
+    if (shouldInitialize) {
+        console.log('[ManagerAvail] Initializing managerAvailEdits for emp:', emp.id);
+        managerAvailEdits = {};
+        for (let d = 0; d < 7; d++) {
+            const dataDay = toDataDay(d);
+            managerAvailEdits[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
+            // If no availability, start with empty array
+            if (managerAvailEdits[dataDay].length === 0) {
+                managerAvailEdits[dataDay] = [];
+            }
         }
+        managerAvailEditsEmpId = emp.id;
     }
     
     let html = '';
@@ -7081,7 +7090,7 @@ function renderManagerAvailabilityTable(emp) {
         
         html += `<div class="avail-day-row" data-day="${dataDay}" data-display-day="${d}">
             <div class="avail-day-name">${dayNames[d]}</div>
-            <div class="avail-times-container">`;
+            <div class="avail-day-times">`;
         
         if (ranges.length > 0) {
             ranges.forEach((range, idx) => {
@@ -7160,43 +7169,37 @@ function timePartsToDecimalManager(hour, min, ampm) {
 
 function setupManagerAvailTableListeners(emp) {
     const container = document.getElementById('managerAvailTableView');
-    console.log('[ManagerAvail] setupManagerAvailTableListeners called, container:', container);
-    if (!container) {
-        console.log('[ManagerAvail] Container not found!');
-        return;
-    }
+    if (!container) return;
     
     // Remove button - attach directly to each button
     container.querySelectorAll('.avail-remove-row-btn').forEach(btn => {
-        console.log('[ManagerAvail] Attaching listener to remove btn:', btn);
-        btn.addEventListener('click', function(e) {
-            console.log('[ManagerAvail] Remove button clicked!');
+        btn.onclick = function(e) {
             e.preventDefault();
             e.stopPropagation();
             const dataDay = parseInt(this.dataset.day);
             const idx = parseInt(this.dataset.idx);
-            console.log('[ManagerAvail] dataDay:', dataDay, 'idx:', idx);
-            console.log('[ManagerAvail] managerAvailEdits:', managerAvailEdits);
+            
             if (managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay].splice(idx, 1);
-                console.log('[ManagerAvail] After splice:', managerAvailEdits[dataDay]);
                 renderManagerAvailabilityTable(emp);
             }
-        });
+        };
     });
     
     // Add button
     container.querySelectorAll('.avail-add-btn').forEach(btn => {
-        btn.addEventListener('click', function(e) {
-            console.log('[ManagerAvail] Add button clicked!');
+        btn.onclick = function(e) {
             e.preventDefault();
             const dataDay = parseInt(this.dataset.day);
             if (!managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay] = [];
             }
-            managerAvailEdits[dataDay].push([state.startHour, state.endHour]);
+            // Use business hours for default if available, otherwise 9-5
+            const start = state.business ? state.business.start_hour : 9;
+            const end = state.business ? state.business.end_hour : 17;
+            managerAvailEdits[dataDay].push([start, end]);
             renderManagerAvailabilityTable(emp);
-        });
+        };
     });
     
     // Custom dropdown handlers
