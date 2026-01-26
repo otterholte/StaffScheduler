@@ -1939,12 +1939,6 @@ function renderAvailabilityTable() {
                         <select class="avail-time-select avail-end" data-day="${day}" data-idx="${idx}">
                             ${generateTimeOptions(end)}
                         </select>
-                        <button class="avail-remove-btn" data-day="${day}" data-idx="${idx}" title="Remove">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
                     </div>
                 `;
             });
@@ -1954,7 +1948,10 @@ function renderAvailabilityTable() {
         
         html += `
                 </div>
-                <button class="avail-add-btn" data-day="${day}" title="Add time range">+</button>
+                <div class="avail-day-actions">
+                    <button class="avail-add-btn" data-day="${day}" title="Add time range">+</button>
+                    ${hasRanges ? `<button class="avail-clear-btn" data-day="${day}" title="Clear day">−</button>` : ''}
+                </div>
             </div>
         `;
     }
@@ -2028,20 +2025,52 @@ function setupAvailabilityTableListeners() {
         });
     });
     
-    // Remove button
-    document.querySelectorAll('.avail-remove-btn').forEach(btn => {
+    // Clear day button (with confirmation)
+    document.querySelectorAll('.avail-clear-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const day = parseInt(btn.dataset.day);
-            const idx = parseInt(btn.dataset.idx);
-            if (employeeState.availability[day]) {
-                employeeState.availability[day].splice(idx, 1);
-                if (employeeState.availability[day].length === 0) {
-                    delete employeeState.availability[day];
-                }
-            }
-            renderAvailabilityTable();
-            updateAvailabilityStats();
+            showClearDayConfirm(day);
         });
+    });
+}
+
+function showClearDayConfirm(day) {
+    const dayName = DAY_NAMES[day];
+    
+    // Create confirmation popup
+    const popup = document.createElement('div');
+    popup.className = 'avail-confirm-popup';
+    popup.innerHTML = `
+        <div class="avail-confirm-content">
+            <p>Clear all availability for <strong>${dayName}</strong>?</p>
+            <div class="avail-confirm-actions">
+                <button class="btn btn-secondary avail-confirm-cancel">Cancel</button>
+                <button class="btn btn-danger avail-confirm-yes">Clear</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(popup);
+    
+    // Add event listeners
+    popup.querySelector('.avail-confirm-cancel').addEventListener('click', () => {
+        popup.remove();
+    });
+    
+    popup.querySelector('.avail-confirm-yes').addEventListener('click', () => {
+        if (employeeState.availability[day]) {
+            delete employeeState.availability[day];
+        }
+        renderAvailabilityTable();
+        updateAvailabilityStats();
+        popup.remove();
+    });
+    
+    // Close on backdrop click
+    popup.addEventListener('click', (e) => {
+        if (e.target === popup) {
+            popup.remove();
+        }
     });
 }
 
