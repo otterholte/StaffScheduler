@@ -2822,12 +2822,14 @@ body.menu-open {
 }
 
 .btn-primary {
-    background: var(--employee-accent);
+    background: linear-gradient(135deg, #467df6 0%, #a855f7 50%, #e749a0 100%);
     color: white;
+    box-shadow: 0 0 20px rgba(167, 85, 247, 0.3);
 }
 
 .btn-primary:hover:not(:disabled) {
-    background: var(--employee-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 0 30px rgba(167, 85, 247, 0.5), 0 0 50px rgba(231, 73, 160, 0.3);
 }
 
 .btn-secondary {
