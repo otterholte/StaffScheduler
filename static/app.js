@@ -7206,6 +7206,10 @@ function setupManagerAvailTableListeners(emp) {
     container.querySelectorAll('.custom-select').forEach(select => {
         const valueEl = select.querySelector('.custom-select-value');
         const dropdown = select.querySelector('.custom-select-dropdown');
+        const field = select.dataset.field; // 'hour', 'min', or 'ampm'
+        
+        // Make focusable for keyboard input
+        select.setAttribute('tabindex', '0');
         
         valueEl.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -7213,18 +7217,108 @@ function setupManagerAvailTableListeners(emp) {
                 if (s !== select) s.classList.remove('open');
             });
             select.classList.toggle('open');
+            select.focus();
+        });
+        
+        // Keyboard input support
+        let keyBuffer = '';
+        let keyBufferTimeout = null;
+        
+        select.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            
+            // Handle AM/PM toggle
+            if (field === 'ampm') {
+                if (e.key.toLowerCase() === 'a') {
+                    selectDropdownOption(select, 'am', emp);
+                    return;
+                } else if (e.key.toLowerCase() === 'p') {
+                    selectDropdownOption(select, 'pm', emp);
+                    return;
+                }
+            }
+            
+            // Handle number input for hours/minutes
+            if (/^[0-9]$/.test(e.key)) {
+                e.preventDefault();
+                clearTimeout(keyBufferTimeout);
+                keyBuffer += e.key;
+                
+                if (field === 'hour') {
+                    // Hours: 1-12
+                    const num = parseInt(keyBuffer);
+                    if (keyBuffer.length === 1) {
+                        // Single digit: 2-9 select immediately, 1 waits for potential 10-12
+                        if (num >= 2 && num <= 9) {
+                            selectDropdownOption(select, num.toString(), emp);
+                            keyBuffer = '';
+                            return;
+                        }
+                        // 1 could be 1, 10, 11, or 12 - wait for more input
+                        keyBufferTimeout = setTimeout(() => {
+                            if (keyBuffer === '1') {
+                                selectDropdownOption(select, '1', emp);
+                            }
+                            keyBuffer = '';
+                        }, 800);
+                    } else if (keyBuffer.length >= 2) {
+                        // Two digits: try to match 10, 11, or 12
+                        if (num >= 10 && num <= 12) {
+                            selectDropdownOption(select, num.toString(), emp);
+                        } else if (keyBuffer[1] >= '0' && keyBuffer[1] <= '2') {
+                            // Invalid like "13" - take just second digit if valid
+                            selectDropdownOption(select, '1', emp);
+                        }
+                        keyBuffer = '';
+                    }
+                } else if (field === 'min') {
+                    // Minutes: 00, 15, 30, 45
+                    const validMins = ['00', '15', '30', '45'];
+                    if (keyBuffer.length === 1) {
+                        // Single digit starting with 0, 1, 3, or 4
+                        if (e.key === '0') {
+                            selectDropdownOption(select, '00', emp);
+                            keyBuffer = '';
+                            return;
+                        }
+                        keyBufferTimeout = setTimeout(() => {
+                            // Match closest
+                            if (keyBuffer === '1') selectDropdownOption(select, '15', emp);
+                            else if (keyBuffer === '3') selectDropdownOption(select, '30', emp);
+                            else if (keyBuffer === '4') selectDropdownOption(select, '45', emp);
+                            keyBuffer = '';
+                        }, 500);
+                    } else {
+                        const match = validMins.find(m => m === keyBuffer || m.startsWith(keyBuffer));
+                        if (match) {
+                            selectDropdownOption(select, match, emp);
+                        }
+                        keyBuffer = '';
+                    }
+                }
+            }
+            
+            // Enter/Space to toggle dropdown
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                select.classList.toggle('open');
+            }
+            
+            // Escape to close
+            if (e.key === 'Escape') {
+                select.classList.remove('open');
+            }
+            
+            // Tab to move to next field
+            if (e.key === 'Tab' && !e.shiftKey) {
+                select.classList.remove('open');
+            }
         });
         
         dropdown.querySelectorAll('.custom-select-option').forEach(option => {
             option.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const value = option.dataset.value;
-                select.dataset.value = value;
-                valueEl.textContent = option.textContent;
-                dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
-                option.classList.add('selected');
-                select.classList.remove('open');
-                updateManagerTimeFromInputs(select.closest('.time-input-group'), emp);
+                selectDropdownOption(select, option.dataset.value, emp);
             });
         });
     });
@@ -7233,6 +7327,25 @@ function setupManagerAvailTableListeners(emp) {
     document.addEventListener('click', () => {
         document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
     });
+}
+
+function selectDropdownOption(select, value, emp) {
+    const valueEl = select.querySelector('.custom-select-value');
+    const dropdown = select.querySelector('.custom-select-dropdown');
+    const option = dropdown.querySelector(`[data-value="${value}"]`);
+    
+    if (!option) return;
+    
+    select.dataset.value = value;
+    valueEl.textContent = option.textContent;
+    dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+    option.classList.add('selected');
+    select.classList.remove('open');
+    
+    const inputGroup = select.closest('.time-input-group');
+    if (inputGroup) {
+        updateManagerTimeFromInputs(inputGroup, emp);
+    }
 }
 
 function updateManagerTimeFromInputs(inputGroup, emp) {
@@ -7289,10 +7402,10 @@ async function saveSettingsAvailability() {
     }
     
     try {
-        const response = await fetch(`/api/${state.business.slug}/employees/${emp.id}/availability`, {
+        const response = await fetch(`/api/employees/${emp.id}/availability`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ availability: availabilitySlots })
+            body: JSON.stringify({ availability: availabilitySlots, preferences: [], time_off: [] })
         });
         
         if (response.ok) {
@@ -8228,6 +8341,11 @@ function setupKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
         // Ignore if typing in input
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Ignore if a custom dropdown is open (time pickers, etc.)
+        if (document.querySelector('.custom-select.open')) {
             return;
         }
         
