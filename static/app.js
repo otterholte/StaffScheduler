@@ -28,23 +28,31 @@ function slugify(text) {
 function getLocationSlug() {
     // Get from state or URL
     const businessData = state.businesses.find(b => b.id === state.business.id);
-    return businessData?.slug || state.business.slug || slugify(state.business.name);
+    const slug = businessData?.slug || state.business?.slug || (state.business?.name ? slugify(state.business.name) : null);
+    console.log('[DEBUG getLocationSlug]', {
+        businessId: state.business?.id,
+        businessDataSlug: businessData?.slug,
+        stateBusinessSlug: state.business?.slug,
+        businessName: state.business?.name,
+        resultSlug: slug
+    });
+    return slug;
 }
 
 function getLocationSlugSafe() {
     try {
         return getLocationSlug();
     } catch (err) {
+        console.error('[DEBUG getLocationSlugSafe] Error:', err);
         return null;
     }
 }
 
 function getAvailabilityApiUrl(empId) {
     const locationSlug = getLocationSlugSafe();
-    if (locationSlug) {
-        return `/api/${locationSlug}/employees/${empId}/availability`;
-    }
-    return `/api/employees/${empId}/availability`;
+    const url = locationSlug ? `/api/${locationSlug}/employees/${empId}/availability` : `/api/employees/${empId}/availability`;
+    console.log('[DEBUG getAvailabilityApiUrl]', { empId, locationSlug, url });
+    return url;
 }
 
 function getCurrentUrlPath() {
