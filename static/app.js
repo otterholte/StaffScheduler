@@ -6874,9 +6874,15 @@ function selectAvailabilityEmployee(empId) {
     showAvailabilityPanel(empId);
 }
 
+// Track current availability view mode for manager
+let managerAvailViewMode = 'table';
+let currentAvailEmpId = null;
+
 function showAvailabilityPanel(empId) {
     const emp = employeeMap[empId];
     if (!emp) return;
+    
+    currentAvailEmpId = empId;
     
     const emptyPanel = document.getElementById('availabilityPanelEmpty');
     const contentPanel = document.getElementById('availabilityPanelContent');
@@ -6893,76 +6899,210 @@ function showAvailabilityPanel(empId) {
     const availHours = calculateAvailableHours(emp);
     document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
     
-    // Render the grid
-    renderAvailabilityGrid(emp);
+    // Setup view toggle
+    setupManagerAvailViewToggle();
     
-    // Setup preset buttons
-    setupAvailabilityPresets(emp);
+    // Render current view
+    renderManagerAvailabilityView(emp);
+}
+
+function setupManagerAvailViewToggle() {
+    const toggleBtns = document.querySelectorAll('#availViewToggle .avail-view-btn');
+    toggleBtns.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.view === managerAvailViewMode);
+        btn.onclick = () => {
+            managerAvailViewMode = btn.dataset.view;
+            toggleBtns.forEach(b => b.classList.toggle('active', b.dataset.view === managerAvailViewMode));
+            
+            const tableView = document.getElementById('managerAvailTableView');
+            const gridView = document.getElementById('managerAvailGridView');
+            
+            if (managerAvailViewMode === 'table') {
+                tableView.style.display = 'block';
+                gridView.style.display = 'none';
+            } else {
+                tableView.style.display = 'none';
+                gridView.style.display = 'block';
+            }
+            
+            if (currentAvailEmpId) {
+                renderManagerAvailabilityView(employeeMap[currentAvailEmpId]);
+            }
+        };
+    });
+}
+
+function renderManagerAvailabilityView(emp) {
+    if (managerAvailViewMode === 'table') {
+        renderManagerAvailabilityTable(emp);
+    } else {
+        renderAvailabilityGrid(emp);
+    }
+}
+
+function renderManagerAvailabilityTable(emp) {
+    const container = document.getElementById('managerAvailTableView');
+    if (!container) return;
+    
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    // Convert display day index to data day (our data uses Mon=0, Sun=6)
+    const toDataDay = (displayDay) => displayDay === 0 ? 6 : displayDay - 1;
+    
+    // Group availability by day into ranges (supporting partial hours)
+    const dayRanges = {};
+    for (let d = 0; d < 7; d++) {
+        const dataDay = toDataDay(d);
+        dayRanges[d] = getAvailabilityRangesForDay(emp, dataDay);
+    }
+    
+    let html = '';
+    for (let d = 0; d < 7; d++) {
+        const ranges = dayRanges[d];
+        const hasAvail = ranges.length > 0;
+        
+        html += `<div class="avail-day-row ${hasAvail ? '' : 'unavailable'}">
+            <div class="avail-day-name">${dayNames[d]}</div>
+            <div class="avail-times-container">`;
+        
+        if (hasAvail) {
+            ranges.forEach((range, idx) => {
+                const startTime = formatDecimalTime(range[0]);
+                const endTime = formatDecimalTime(range[1]);
+                html += `<div class="avail-time-badge">${startTime} - ${endTime}</div>`;
+            });
+        } else {
+            html += `<div class="avail-unavailable-text">Unavailable</div>`;
+        }
+        
+        html += `</div></div>`;
+    }
+    
+    container.innerHTML = html;
+}
+
+function getAvailabilityRangesForDay(emp, dataDay) {
+    // Get all availability slots for this day
+    const slots = emp.availability.filter(s => s.day === dataDay).map(s => s.hour);
+    if (slots.length === 0) return [];
+    
+    // Sort and group into ranges
+    slots.sort((a, b) => a - b);
+    const ranges = [];
+    let start = slots[0];
+    let end = slots[0] + 1;
+    
+    for (let i = 1; i < slots.length; i++) {
+        if (slots[i] === end) {
+            end = slots[i] + 1;
+        } else {
+            ranges.push([start, end]);
+            start = slots[i];
+            end = slots[i] + 1;
+        }
+    }
+    ranges.push([start, end]);
+    
+    return ranges;
+}
+
+function formatDecimalTime(decimal) {
+    const hour24 = Math.floor(decimal);
+    const mins = Math.round((decimal - hour24) * 60);
+    const hour12 = hour24 > 12 ? hour24 - 12 : (hour24 === 0 ? 12 : hour24);
+    const ampm = hour24 >= 12 ? 'PM' : 'AM';
+    
+    if (mins === 0) {
+        return `${hour12}${ampm}`;
+    }
+    return `${hour12}:${mins.toString().padStart(2, '0')}${ampm}`;
 }
 
 function renderAvailabilityGrid(emp) {
-    const tbody = document.getElementById('availabilityTableBody');
-    tbody.innerHTML = '';
+    const gridContainer = document.getElementById('managerAvailGridView');
+    if (!gridContainer) return;
     
-    // Days start from Sunday (0) to Saturday (6) for display
+    // Build the grid HTML
     const dayOrder = [0, 1, 2, 3, 4, 5, 6]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const toDataDay = (displayDay) => displayDay === 0 ? 6 : displayDay - 1;
+    
+    // Pre-compute day ranges for tooltips
+    const dayRangesMap = {};
+    dayOrder.forEach(displayDay => {
+        const dataDay = toDataDay(displayDay);
+        dayRangesMap[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
+    });
+    
+    let html = `<table class="availability-table" id="availabilityTable">
+        <thead><tr><th></th>`;
+    dayNames.forEach(name => html += `<th>${name}</th>`);
+    html += `</tr></thead><tbody id="availabilityTableBody">`;
     
     for (let h = state.startHour; h <= state.endHour; h++) {
-        const tr = document.createElement('tr');
-        
-        // Time label
-        const timeCell = document.createElement('td');
         const hour12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
         const ampm = h >= 12 ? 'PM' : 'AM';
-        timeCell.textContent = `${hour12} ${ampm}`;
-        tr.appendChild(timeCell);
+        html += `<tr><td>${hour12} ${ampm}</td>`;
         
-        // Day cells - reorder for Sun-Sat display
         dayOrder.forEach(displayDay => {
-            // Map display day to data day (our data uses Mon=0, so Sun=6)
-            const dataDay = displayDay === 0 ? 6 : displayDay - 1;
-            
-            const td = document.createElement('td');
-            td.className = 'avail-cell';
-            td.dataset.day = dataDay;
-            td.dataset.hour = h;
-            
-            // Check current state
+            const dataDay = toDataDay(displayDay);
             const isAvailable = emp.availability.some(s => s.day === dataDay && s.hour === h);
             const isPreferred = emp.preferences.some(s => s.day === dataDay && s.hour === h);
             const isTimeOff = emp.time_off.some(s => s.day === dataDay && s.hour === h);
             
-            if (isTimeOff) {
-                td.classList.add('time-off');
-            } else if (isPreferred) {
-                td.classList.add('preferred');
-            } else if (isAvailable) {
-                td.classList.add('available');
+            let cellClass = 'avail-cell';
+            if (isTimeOff) cellClass += ' time-off';
+            else if (isPreferred) cellClass += ' preferred';
+            else if (isAvailable) cellClass += ' available';
+            
+            // Build tooltip showing full day availability
+            const ranges = dayRangesMap[dataDay];
+            let tooltip = '';
+            if (ranges.length > 0) {
+                tooltip = `${dayNames[displayDay]}: ${ranges.map(r => `${formatDecimalTime(r[0])} - ${formatDecimalTime(r[1])}`).join(', ')}`;
+            } else {
+                tooltip = `${dayNames[displayDay]}: Unavailable`;
             }
             
-            // Drag selection handlers
-            td.addEventListener('mousedown', (e) => {
-                e.preventDefault();
-                availabilityDragState.isDragging = true;
-                availabilityDragState.isSelecting = !td.classList.contains('available');
-                availabilityDragState.currentEmpId = emp.id;
-                availabilityDragState.startCell = td;
-                toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
-            });
-            
-            td.addEventListener('mouseenter', () => {
-                if (availabilityDragState.isDragging && availabilityDragState.currentEmpId === emp.id) {
-                    toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
-                }
-            });
-            
-            td.addEventListener('contextmenu', (e) => e.preventDefault());
-            
-            tr.appendChild(td);
+            html += `<td class="${cellClass}" data-day="${dataDay}" data-hour="${h}" title="${tooltip}"></td>`;
         });
         
-        tbody.appendChild(tr);
+        html += `</tr>`;
     }
+    
+    html += `</tbody></table>
+        <div class="availability-legend-bar">
+            <span class="legend-hint">Click and drag to select available times</span>
+            <div class="legend-items">
+                <span class="legend-item"><span class="legend-dot available"></span> Available</span>
+            </div>
+        </div>`;
+    
+    gridContainer.innerHTML = html;
+    
+    // Re-attach event listeners
+    setupGridDragListeners(emp);
+}
+
+function setupGridDragListeners(emp) {
+    const cells = document.querySelectorAll('#availabilityTableBody .avail-cell');
+    cells.forEach(td => {
+        td.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            availabilityDragState.isDragging = true;
+            availabilityDragState.isSelecting = !td.classList.contains('available');
+            availabilityDragState.currentEmpId = emp.id;
+            availabilityDragState.startCell = td;
+            toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
+        });
+        
+        td.addEventListener('mouseenter', () => {
+            if (availabilityDragState.isDragging && availabilityDragState.currentEmpId === emp.id) {
+                toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
+            }
+        });
+        
+        td.addEventListener('contextmenu', (e) => e.preventDefault());
+    });
 }
 
 async function toggleAvailabilityCellSimple(cell, empId, select) {
