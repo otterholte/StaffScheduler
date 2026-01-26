@@ -593,6 +593,107 @@ This notification was sent by Staff Scheduler.
         return self.send_email(to_email, subject, html_body, text_body)
 
 
+    def send_password_reset(
+        self,
+        to_email: str,
+        user_name: str,
+        reset_url: str
+    ) -> Tuple[bool, str]:
+        """
+        Send a password reset email.
+        
+        Args:
+            to_email: User's email address
+            user_name: User's name or username
+            reset_url: Full URL to reset password page
+            
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        subject = "Reset your Staff Scheduler password"
+        
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5fa;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <tr>
+            <td>
+                <div style="background: linear-gradient(135deg, #467df6 0%, #a855f7 50%, #e749a0 100%); padding: 3px; border-radius: 16px;">
+                    <div style="background-color: #ffffff; border-radius: 14px; padding: 40px;">
+                        <!-- Logo/Header -->
+                        <div style="text-align: center; margin-bottom: 30px;">
+                            <h1 style="margin: 0; font-size: 24px; color: #1a1a2e;">
+                                🔐 Password Reset
+                            </h1>
+                        </div>
+                        
+                        <!-- Main Content -->
+                        <h2 style="margin: 0 0 15px; font-size: 20px; color: #1a1a2e;">
+                            Hi {user_name}!
+                        </h2>
+                        
+                        <p style="margin: 0 0 20px; font-size: 16px; color: #5a5a70; line-height: 1.6;">
+                            We received a request to reset your password for your Staff Scheduler account.
+                        </p>
+                        
+                        <p style="margin: 0 0 25px; font-size: 16px; color: #5a5a70; line-height: 1.6;">
+                            Click the button below to create a new password. This link will expire in 1 hour.
+                        </p>
+                        
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{reset_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #467df6 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                Reset Password
+                            </a>
+                        </div>
+                        
+                        <p style="margin: 25px 0 0; font-size: 14px; color: #9090a0; line-height: 1.6;">
+                            Or copy and paste this link into your browser:<br>
+                            <a href="{reset_url}" style="color: #467df6; word-break: break-all;">{reset_url}</a>
+                        </p>
+                        
+                        <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 30px 0;">
+                        
+                        <p style="margin: 0; font-size: 14px; color: #9090a0; line-height: 1.6;">
+                            If you didn't request this password reset, you can safely ignore this email. Your password will not be changed.
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Footer -->
+                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #9090a0;">
+                    This email was sent by Staff Scheduler.
+                </p>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+        
+        text_body = f"""
+Hi {user_name}!
+
+We received a request to reset your password for your Staff Scheduler account.
+
+Click the link below to create a new password. This link will expire in 1 hour.
+
+{reset_url}
+
+If you didn't request this password reset, you can safely ignore this email. Your password will not be changed.
+
+---
+This email was sent by Staff Scheduler.
+"""
+        
+        return self.send_email(to_email, subject, html_body, text_body)
+
+
 # Singleton instance
 _email_service = None
 

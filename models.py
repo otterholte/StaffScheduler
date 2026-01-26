@@ -612,6 +612,31 @@ class SwapRequestRecipient(db.Model):
         }
 
 
+class PasswordResetToken(db.Model):
+    """Token for password reset requests."""
+    __tablename__ = 'password_reset_tokens'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    token = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    
+    # Expiration
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    
+    # Relationship
+    user = db.relationship('User', backref=db.backref('reset_tokens', lazy=True))
+    
+    def __repr__(self):
+        return f'<PasswordResetToken for user {self.user_id}>'
+    
+    def is_valid(self):
+        """Check if token is still valid (not expired, not used)."""
+        from datetime import datetime
+        return self.used_at is None and self.expires_at > datetime.utcnow()
+
+
 class PTORequest(db.Model):
     """PTO / Time-off request from an employee."""
     __tablename__ = 'pto_requests'

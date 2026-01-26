@@ -1,10 +1,12 @@
 """Authentication routes for user login, registration, and logout."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
+import secrets
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_user, logout_user, login_required, current_user
-from models import db, User
+from models import db, User, PasswordResetToken
 from scheduler import create_user_business, get_user_business
+from email_service import get_email_service
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -268,3 +270,97 @@ def delete_user_account():
         'success': True,
         'message': f'Account "{username}" has been deleted.'
     })
+
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    """Handle forgot password requests."""
+    if current_user.is_authenticated:
+        return redirect('/sunrise-coffee/schedule')
+    
+    if request.method == 'POST':
+        email = request.form.get('email', '').lower().strip()
+        
+        if not email:
+            flash('Please enter your email address.', 'error')
+            return render_template('forgot_password.html')
+        
+        # Find user by email
+        user = User.query.filter_by(email=email).first()
+        
+        # Always show success message to prevent email enumeration
+        if user:
+            # Delete any existing unused tokens for this user
+            PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).delete()
+            
+            # Create new token
+            token = secrets.token_urlsafe(32)
+            reset_token = PasswordResetToken(
+                user_id=user.id,
+                token=token,
+                expires_at=datetime.utcnow() + timedelta(hours=1)
+            )
+            db.session.add(reset_token)
+            db.session.commit()
+            
+            # Send email
+            email_service = get_email_service()
+            if email_service.is_configured():
+                reset_url = request.host_url.rstrip('/') + url_for('auth.reset_password', token=token)
+                user_name = user.first_name or user.username
+                success, msg = email_service.send_password_reset(user.email, user_name, reset_url)
+                if not success:
+                    print(f"[AUTH] Password reset email failed: {msg}", flush=True)
+            else:
+                print(f"[AUTH] Email not configured, reset token: {token}", flush=True)
+        
+        flash('If an account with that email exists, we\'ve sent a password reset link.', 'success')
+        return redirect(url_for('auth.login'))
+    
+    return render_template('forgot_password.html')
+
+
+@auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    """Handle password reset with token."""
+    if current_user.is_authenticated:
+        return redirect('/sunrise-coffee/schedule')
+    
+    # Find and validate token
+    reset_token = PasswordResetToken.query.filter_by(token=token).first()
+    
+    if not reset_token or not reset_token.is_valid():
+        flash('This password reset link is invalid or has expired.', 'error')
+        return redirect(url_for('auth.forgot_password'))
+    
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        errors = []
+        
+        if not password:
+            errors.append('Password is required.')
+        elif len(password) < 8:
+            errors.append('Password must be at least 8 characters.')
+        
+        if password != confirm_password:
+            errors.append('Passwords do not match.')
+        
+        if errors:
+            for error in errors:
+                flash(error, 'error')
+            return render_template('reset_password.html', token=token)
+        
+        # Update password
+        user = reset_token.user
+        user.set_password(password)
+        
+        # Mark token as used
+        reset_token.used_at = datetime.utcnow()
+        db.session.commit()
+        
+        flash('Your password has been reset. You can now log in.', 'success')
+        return redirect(url_for('auth.login'))
+    
+    return render_template('reset_password.html', token=token)
