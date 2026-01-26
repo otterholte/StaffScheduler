@@ -1390,6 +1390,13 @@ body.menu-open {
     outline: none;
 }
 
+/* Dark mode dropdown options */
+.time-input-group select option {
+    background: #1a1a2e;
+    color: var(--text-primary);
+    padding: 0.5rem;
+}
+
 .time-input-group .time-hour {
     min-width: 28px;
 }
