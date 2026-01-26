@@ -1896,19 +1896,31 @@ function capitalizeFirstEmployee(str) {
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// Day conversion: Backend uses Mon=0, Sun=6. Display uses Sun=0, Sat=6.
+function dataToDisplayDay(dataDay) {
+    // Mon(0)->1, Tue(1)->2, ..., Sat(5)->6, Sun(6)->0
+    return (dataDay + 1) % 7;
+}
+
+function displayToDataDay(displayDay) {
+    // Sun(0)->6, Mon(1)->0, Tue(2)->1, ..., Sat(6)->5
+    return displayDay === 0 ? 6 : displayDay - 1;
+}
+
 function initAvailabilityEditor() {
     console.log('[EmployeeAvail] initAvailabilityEditor called');
     console.log('[EmployeeAvail] Raw EMPLOYEE_DATA.availability:', EMPLOYEE_DATA.availability);
-    console.log('[EmployeeAvail] employeeState.availability before normalize:', JSON.stringify(employeeState.availability));
+    console.log('[EmployeeAvail] employeeState.availability before conversion:', JSON.stringify(employeeState.availability));
     
-    // Normalize availability keys to integers if they are strings from JSON
+    // Convert from backend day format (Mon=0) to display format (Sun=0)
     if (employeeState.availability && typeof employeeState.availability === 'object') {
-        const normalized = {};
-        Object.entries(employeeState.availability).forEach(([day, ranges]) => {
-            normalized[parseInt(day)] = ranges;
-            console.log(`[EmployeeAvail] Day ${day} ranges:`, ranges);
+        const converted = {};
+        Object.entries(employeeState.availability).forEach(([dataDay, ranges]) => {
+            const displayDay = dataToDisplayDay(parseInt(dataDay));
+            converted[displayDay] = ranges;
+            console.log(`[EmployeeAvail] DataDay ${dataDay} -> DisplayDay ${displayDay}:`, ranges);
         });
-        employeeState.availability = normalized;
+        employeeState.availability = converted;
     }
 
     // Initialize with default "All Day" if no availability exists
@@ -1920,7 +1932,7 @@ function initAvailabilityEditor() {
         }
     }
     
-    console.log('[EmployeeAvail] Final availability:', JSON.stringify(employeeState.availability));
+    console.log('[EmployeeAvail] Final availability (display days):', JSON.stringify(employeeState.availability));
     renderAvailabilityTable();
     setupSaveButton();
     updateAvailabilityStats();
@@ -2240,26 +2252,35 @@ async function saveAvailability() {
     if (saveBtn) saveBtn.disabled = true;
     
     try {
+        // Convert display days (Sun=0) back to data days (Mon=0) for the backend
+        const availabilityForBackend = {};
+        Object.entries(employeeState.availability).forEach(([displayDay, ranges]) => {
+            const dataDay = displayToDataDay(parseInt(displayDay));
+            availabilityForBackend[dataDay] = ranges;
+        });
+        console.log('[EmployeeAvail] Saving availability, converted to backend format:', availabilityForBackend);
+        
         const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(`/api/employee/${empId}/availability`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 business_id: employeeState.business.id,
-                availability: employeeState.availability
+                availability: availabilityForBackend
             })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            // Update local state with returned availability (preserves precision)
+            // Update local state with returned availability (convert back to display days)
             if (data.availability) {
-                const normalized = {};
-                Object.entries(data.availability).forEach(([day, ranges]) => {
-                    normalized[parseInt(day)] = ranges;
+                const converted = {};
+                Object.entries(data.availability).forEach(([dataDay, ranges]) => {
+                    const displayDay = dataToDisplayDay(parseInt(dataDay));
+                    converted[displayDay] = ranges;
                 });
-                employeeState.availability = normalized;
+                employeeState.availability = converted;
             }
             
             if (status) {
