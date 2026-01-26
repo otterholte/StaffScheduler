@@ -8372,15 +8372,15 @@ body[data-theme="light"] .footer-bottom {
 /* Highlight pulse animation for buttons */
 @keyframes highlightPulse {
     0%, 100% {
-        box-shadow: 0 0 0 0 rgba(70, 125, 246, 0.7);
+        box-shadow: 0 0 0 0 rgba(70, 125, 246, 0.5);
     }
     50% {
-        box-shadow: 0 0 0 8px rgba(70, 125, 246, 0);
+        box-shadow: 0 0 0 6px rgba(70, 125, 246, 0.3);
     }
 }
 
 .highlight-pulse {
-    animation: highlightPulse 0.6s ease-in-out 3;
+    animation: highlightPulse 1.5s ease-in-out 4;
     background: var(--accent-primary) !important;
     color: white !important;
 }
