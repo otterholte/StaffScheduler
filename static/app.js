@@ -7611,7 +7611,7 @@ function getAvailabilityRangesForDay(emp, dataDay) {
     
     // Sort and group into ranges
     slots.sort((a, b) => a - b);
-    const ranges = [];
+    const groupedRanges = [];
     let start = slots[0];
     let end = slots[0] + 1;
     
@@ -7619,14 +7619,14 @@ function getAvailabilityRangesForDay(emp, dataDay) {
         if (slots[i] === end) {
             end = slots[i] + 1;
         } else {
-            ranges.push([start, end]);
+            groupedRanges.push([start, end]);
             start = slots[i];
             end = slots[i] + 1;
         }
     }
-    ranges.push([start, end]);
+    groupedRanges.push([start, end]);
     
-    return ranges;
+    return groupedRanges;
 }
 
 function formatDecimalTime(decimal) {
