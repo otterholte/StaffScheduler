@@ -8147,6 +8147,182 @@ body[data-theme="light"] .footer-bottom {
     font-style: italic;
 }
 
+/* Manager Availability Editable Table */
+.manager-avail-table .avail-time-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.manager-avail-table .avail-time-sep {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 0 0.25rem;
+}
+
+.manager-avail-table .avail-add-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+    font-size: 1.25rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.manager-avail-table .avail-add-btn:hover {
+    background: #10b981;
+    color: white;
+}
+
+.manager-avail-table .avail-remove-row-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(100, 116, 139, 0.15);
+    color: #64748b;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.manager-avail-table .avail-remove-row-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* Manager Time Input Styling */
+.manager-time-input {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 0.15rem 0.35rem;
+}
+
+.manager-time-input .custom-select {
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+}
+
+.manager-time-input .custom-select-value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.3rem 0.35rem;
+    min-width: 24px;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    transition: color 0.15s ease;
+}
+
+.manager-time-input .custom-select:hover .custom-select-value {
+    color: var(--accent-primary);
+}
+
+.manager-time-input .custom-select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e1e32;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    padding: 0.4rem;
+    min-width: 52px;
+    max-height: 200px;
+    overflow-y: auto;
+    opacity: 0;
+    visibility: hidden;
+    z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    transition: all 0.2s ease;
+}
+
+.manager-time-input .custom-select.open .custom-select-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+}
+
+.manager-time-input .custom-select-option {
+    padding: 0.45rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #cbd5e1;
+    text-align: center;
+    transition: all 0.15s ease;
+    margin-bottom: 2px;
+}
+
+.manager-time-input .custom-select-option:last-child {
+    margin-bottom: 0;
+}
+
+.manager-time-input .custom-select-option:hover {
+    background: rgba(70, 125, 246, 0.15);
+    color: var(--accent-primary);
+}
+
+.manager-time-input .custom-select-option.selected {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.manager-time-input .time-colon {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    padding: 0 2px;
+}
+
+.manager-time-input .time-ampm-select .custom-select-value {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    min-width: 28px;
+}
+
+/* Scrollbar for dropdowns */
+.manager-time-input .custom-select-dropdown::-webkit-scrollbar {
+    width: 4px;
+}
+
+.manager-time-input .custom-select-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.manager-time-input .custom-select-dropdown::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+/* Read-only grid styling */
+.availability-table.readonly .avail-cell {
+    cursor: default;
+}
+
+.availability-table.readonly .avail-cell:hover {
+    transform: none;
+}
+
 .availability-emp-info {
     display: flex;
     align-items: center;

@@ -6874,8 +6874,6 @@ function selectAvailabilityEmployee(empId) {
     showAvailabilityPanel(empId);
 }
 
-// Track current availability view mode for manager
-let managerAvailViewMode = 'table';
 let currentAvailEmpId = null;
 
 function showAvailabilityPanel(empId) {
@@ -6899,46 +6897,12 @@ function showAvailabilityPanel(empId) {
     const availHours = calculateAvailableHours(emp);
     document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
     
-    // Setup view toggle
-    setupManagerAvailViewToggle();
-    
-    // Render current view
-    renderManagerAvailabilityView(emp);
+    // Render table view
+    renderManagerAvailabilityTable(emp);
 }
 
-function setupManagerAvailViewToggle() {
-    const toggleBtns = document.querySelectorAll('#availViewToggle .avail-view-btn');
-    toggleBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.view === managerAvailViewMode);
-        btn.onclick = () => {
-            managerAvailViewMode = btn.dataset.view;
-            toggleBtns.forEach(b => b.classList.toggle('active', b.dataset.view === managerAvailViewMode));
-            
-            const tableView = document.getElementById('managerAvailTableView');
-            const gridView = document.getElementById('managerAvailGridView');
-            
-            if (managerAvailViewMode === 'table') {
-                tableView.style.display = 'block';
-                gridView.style.display = 'none';
-            } else {
-                tableView.style.display = 'none';
-                gridView.style.display = 'block';
-            }
-            
-            if (currentAvailEmpId) {
-                renderManagerAvailabilityView(employeeMap[currentAvailEmpId]);
-            }
-        };
-    });
-}
-
-function renderManagerAvailabilityView(emp) {
-    if (managerAvailViewMode === 'table') {
-        renderManagerAvailabilityTable(emp);
-    } else {
-        renderAvailabilityGrid(emp);
-    }
-}
+// Store manager availability edits in progress
+let managerAvailEdits = {};
 
 function renderManagerAvailabilityTable(emp) {
     const container = document.getElementById('managerAvailTableView');
@@ -6948,36 +6912,230 @@ function renderManagerAvailabilityTable(emp) {
     // Convert display day index to data day (our data uses Mon=0, Sun=6)
     const toDataDay = (displayDay) => displayDay === 0 ? 6 : displayDay - 1;
     
-    // Group availability by day into ranges (supporting partial hours)
-    const dayRanges = {};
+    // Initialize edits from current availability
+    managerAvailEdits = {};
     for (let d = 0; d < 7; d++) {
         const dataDay = toDataDay(d);
-        dayRanges[d] = getAvailabilityRangesForDay(emp, dataDay);
+        managerAvailEdits[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
+        // If no availability, start with empty array
+        if (managerAvailEdits[dataDay].length === 0) {
+            managerAvailEdits[dataDay] = [];
+        }
     }
     
     let html = '';
     for (let d = 0; d < 7; d++) {
-        const ranges = dayRanges[d];
-        const hasAvail = ranges.length > 0;
+        const dataDay = toDataDay(d);
+        const ranges = managerAvailEdits[dataDay];
         
-        html += `<div class="avail-day-row ${hasAvail ? '' : 'unavailable'}">
+        html += `<div class="avail-day-row" data-day="${dataDay}" data-display-day="${d}">
             <div class="avail-day-name">${dayNames[d]}</div>
             <div class="avail-times-container">`;
         
-        if (hasAvail) {
+        if (ranges.length > 0) {
             ranges.forEach((range, idx) => {
-                const startTime = formatDecimalTime(range[0]);
-                const endTime = formatDecimalTime(range[1]);
-                html += `<div class="avail-time-badge">${startTime} - ${endTime}</div>`;
+                html += renderManagerTimeRange(dataDay, idx, range[0], range[1]);
             });
         } else {
             html += `<div class="avail-unavailable-text">Unavailable</div>`;
         }
         
-        html += `</div></div>`;
+        html += `</div>
+            <button class="avail-add-btn" data-day="${dataDay}" title="Add time slot">+</button>
+        </div>`;
     }
     
     container.innerHTML = html;
+    setupManagerAvailTableListeners(emp);
+}
+
+function renderManagerTimeRange(dataDay, idx, startHour, endHour) {
+    const startParts = decimalToTimeParts(startHour);
+    const endParts = decimalToTimeParts(endHour);
+    
+    return `
+        <div class="avail-time-row" data-day="${dataDay}" data-idx="${idx}">
+            <button class="avail-remove-row-btn" data-day="${dataDay}" data-idx="${idx}" title="Remove">−</button>
+            ${renderManagerTimeInput('start', dataDay, idx, startParts)}
+            <span class="avail-time-sep">to</span>
+            ${renderManagerTimeInput('end', dataDay, idx, endParts)}
+        </div>`;
+}
+
+function renderManagerTimeInput(type, day, idx, parts) {
+    const hours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    const mins = ['00', '15', '30', '45'];
+    const ampms = ['AM', 'PM'];
+    
+    return `
+        <div class="time-input-group manager-time-input" data-type="${type}" data-day="${day}" data-idx="${idx}">
+            <div class="custom-select" data-field="hour" data-value="${parts.hour}">
+                <span class="custom-select-value">${parts.hour}</span>
+                <div class="custom-select-dropdown">
+                    ${hours.map(h => `<div class="custom-select-option ${h === parts.hour ? 'selected' : ''}" data-value="${h}">${h}</div>`).join('')}
+                </div>
+            </div>
+            <span class="time-colon">:</span>
+            <div class="custom-select" data-field="min" data-value="${parts.min}">
+                <span class="custom-select-value">${parts.min}</span>
+                <div class="custom-select-dropdown">
+                    ${mins.map(m => `<div class="custom-select-option ${m === parts.min ? 'selected' : ''}" data-value="${m}">${m}</div>`).join('')}
+                </div>
+            </div>
+            <div class="custom-select time-ampm-select" data-field="ampm" data-value="${parts.ampm}">
+                <span class="custom-select-value">${parts.ampm.toUpperCase()}</span>
+                <div class="custom-select-dropdown">
+                    ${ampms.map(a => `<div class="custom-select-option ${a.toLowerCase() === parts.ampm ? 'selected' : ''}" data-value="${a.toLowerCase()}">${a}</div>`).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function decimalToTimeParts(decimal) {
+    const hour24 = Math.floor(decimal);
+    const mins = Math.round((decimal - hour24) * 60);
+    const hour12 = hour24 > 12 ? hour24 - 12 : (hour24 === 0 ? 12 : hour24);
+    const ampm = hour24 >= 12 ? 'pm' : 'am';
+    return { hour: hour12, min: mins.toString().padStart(2, '0'), ampm };
+}
+
+function timePartsToDecimalManager(hour, min, ampm) {
+    let hour24 = parseInt(hour);
+    if (ampm === 'pm' && hour24 !== 12) hour24 += 12;
+    if (ampm === 'am' && hour24 === 12) hour24 = 0;
+    return hour24 + parseInt(min) / 60;
+}
+
+function setupManagerAvailTableListeners(emp) {
+    const container = document.getElementById('managerAvailTableView');
+    
+    // Custom dropdown handlers
+    container.querySelectorAll('.custom-select').forEach(select => {
+        const valueEl = select.querySelector('.custom-select-value');
+        const dropdown = select.querySelector('.custom-select-dropdown');
+        
+        valueEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.custom-select.open').forEach(s => {
+                if (s !== select) s.classList.remove('open');
+            });
+            select.classList.toggle('open');
+        });
+        
+        dropdown.querySelectorAll('.custom-select-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                select.dataset.value = value;
+                valueEl.textContent = option.textContent;
+                dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                select.classList.remove('open');
+                updateManagerTimeFromInputs(select.closest('.time-input-group'), emp);
+            });
+        });
+    });
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
+    });
+    
+    // Add button
+    container.querySelectorAll('.avail-add-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dataDay = parseInt(btn.dataset.day);
+            if (!managerAvailEdits[dataDay]) {
+                managerAvailEdits[dataDay] = [];
+            }
+            // Add default 9am-5pm range
+            managerAvailEdits[dataDay].push([state.startHour, state.endHour]);
+            renderManagerAvailabilityTable(emp);
+            saveManagerAvailability(emp);
+        });
+    });
+    
+    // Remove button
+    container.querySelectorAll('.avail-remove-row-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dataDay = parseInt(btn.dataset.day);
+            const idx = parseInt(btn.dataset.idx);
+            if (managerAvailEdits[dataDay]) {
+                managerAvailEdits[dataDay].splice(idx, 1);
+                renderManagerAvailabilityTable(emp);
+                saveManagerAvailability(emp);
+            }
+        });
+    });
+}
+
+function updateManagerTimeFromInputs(inputGroup, emp) {
+    const type = inputGroup.dataset.type;
+    const dataDay = parseInt(inputGroup.dataset.day);
+    const idx = parseInt(inputGroup.dataset.idx);
+    
+    const hour = inputGroup.querySelector('[data-field="hour"]').dataset.value;
+    const min = inputGroup.querySelector('[data-field="min"]').dataset.value;
+    const ampm = inputGroup.querySelector('[data-field="ampm"]').dataset.value;
+    
+    const decimal = timePartsToDecimalManager(hour, min, ampm);
+    
+    if (!managerAvailEdits[dataDay] || !managerAvailEdits[dataDay][idx]) return;
+    
+    if (type === 'start') {
+        managerAvailEdits[dataDay][idx][0] = decimal;
+    } else {
+        managerAvailEdits[dataDay][idx][1] = decimal;
+    }
+    
+    // Validate: end must be after start
+    const [start, end] = managerAvailEdits[dataDay][idx];
+    if (end <= start) {
+        if (type === 'start') {
+            managerAvailEdits[dataDay][idx][1] = Math.min(start + 0.25, state.endHour);
+        } else {
+            managerAvailEdits[dataDay][idx][0] = Math.max(end - 0.25, state.startHour);
+        }
+        renderManagerAvailabilityTable(emp);
+    }
+    
+    saveManagerAvailability(emp);
+}
+
+async function saveManagerAvailability(emp) {
+    // Convert ranges to individual hour slots for the backend
+    const availabilitySlots = [];
+    
+    for (const [dayStr, ranges] of Object.entries(managerAvailEdits)) {
+        const day = parseInt(dayStr);
+        ranges.forEach(([start, end]) => {
+            // Create slots for each hour in the range
+            for (let h = Math.floor(start); h < Math.ceil(end); h++) {
+                availabilitySlots.push({ day, hour: h });
+            }
+        });
+    }
+    
+    try {
+        const response = await fetch(`/api/${state.business.slug}/employees/${emp.id}/availability`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ availability: availabilitySlots })
+        });
+        
+        if (response.ok) {
+            // Update local employee data
+            emp.availability = availabilitySlots;
+            
+            // Update hours display
+            const availHours = calculateAvailableHours(emp);
+            document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
+            updateSidebarHours(emp.id, availHours);
+        }
+    } catch (error) {
+        console.error('Failed to save availability:', error);
+    }
 }
 
 function getAvailabilityRangesForDay(emp, dataDay) {
@@ -7015,94 +7173,6 @@ function formatDecimalTime(decimal) {
         return `${hour12}${ampm}`;
     }
     return `${hour12}:${mins.toString().padStart(2, '0')}${ampm}`;
-}
-
-function renderAvailabilityGrid(emp) {
-    const gridContainer = document.getElementById('managerAvailGridView');
-    if (!gridContainer) return;
-    
-    // Build the grid HTML
-    const dayOrder = [0, 1, 2, 3, 4, 5, 6]; // Sun, Mon, Tue, Wed, Thu, Fri, Sat
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const toDataDay = (displayDay) => displayDay === 0 ? 6 : displayDay - 1;
-    
-    // Pre-compute day ranges for tooltips
-    const dayRangesMap = {};
-    dayOrder.forEach(displayDay => {
-        const dataDay = toDataDay(displayDay);
-        dayRangesMap[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
-    });
-    
-    let html = `<table class="availability-table" id="availabilityTable">
-        <thead><tr><th></th>`;
-    dayNames.forEach(name => html += `<th>${name}</th>`);
-    html += `</tr></thead><tbody id="availabilityTableBody">`;
-    
-    for (let h = state.startHour; h <= state.endHour; h++) {
-        const hour12 = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-        const ampm = h >= 12 ? 'PM' : 'AM';
-        html += `<tr><td>${hour12} ${ampm}</td>`;
-        
-        dayOrder.forEach(displayDay => {
-            const dataDay = toDataDay(displayDay);
-            const isAvailable = emp.availability.some(s => s.day === dataDay && s.hour === h);
-            const isPreferred = emp.preferences.some(s => s.day === dataDay && s.hour === h);
-            const isTimeOff = emp.time_off.some(s => s.day === dataDay && s.hour === h);
-            
-            let cellClass = 'avail-cell';
-            if (isTimeOff) cellClass += ' time-off';
-            else if (isPreferred) cellClass += ' preferred';
-            else if (isAvailable) cellClass += ' available';
-            
-            // Build tooltip showing full day availability
-            const ranges = dayRangesMap[dataDay];
-            let tooltip = '';
-            if (ranges.length > 0) {
-                tooltip = `${dayNames[displayDay]}: ${ranges.map(r => `${formatDecimalTime(r[0])} - ${formatDecimalTime(r[1])}`).join(', ')}`;
-            } else {
-                tooltip = `${dayNames[displayDay]}: Unavailable`;
-            }
-            
-            html += `<td class="${cellClass}" data-day="${dataDay}" data-hour="${h}" title="${tooltip}"></td>`;
-        });
-        
-        html += `</tr>`;
-    }
-    
-    html += `</tbody></table>
-        <div class="availability-legend-bar">
-            <span class="legend-hint">Click and drag to select available times</span>
-            <div class="legend-items">
-                <span class="legend-item"><span class="legend-dot available"></span> Available</span>
-            </div>
-        </div>`;
-    
-    gridContainer.innerHTML = html;
-    
-    // Re-attach event listeners
-    setupGridDragListeners(emp);
-}
-
-function setupGridDragListeners(emp) {
-    const cells = document.querySelectorAll('#availabilityTableBody .avail-cell');
-    cells.forEach(td => {
-        td.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            availabilityDragState.isDragging = true;
-            availabilityDragState.isSelecting = !td.classList.contains('available');
-            availabilityDragState.currentEmpId = emp.id;
-            availabilityDragState.startCell = td;
-            toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
-        });
-        
-        td.addEventListener('mouseenter', () => {
-            if (availabilityDragState.isDragging && availabilityDragState.currentEmpId === emp.id) {
-                toggleAvailabilityCellSimple(td, emp.id, availabilityDragState.isSelecting);
-            }
-        });
-        
-        td.addEventListener('contextmenu', (e) => e.preventDefault());
-    });
 }
 
 async function toggleAvailabilityCellSimple(cell, empId, select) {
