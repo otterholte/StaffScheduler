@@ -1961,23 +1961,31 @@ function renderAvailabilityTable() {
 }
 
 function renderTimeInput(type, day, idx, parts) {
-    const hourOptions = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(h => 
-        `<option value="${h}" ${h === parts.hour ? 'selected' : ''}>${h}</option>`
-    ).join('');
-    
-    const minOptions = ['00', '15', '30', '45'].map(m => 
-        `<option value="${m}" ${m === parts.min ? 'selected' : ''}>${m}</option>`
-    ).join('');
+    const hours = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    const mins = ['00', '15', '30', '45'];
+    const ampms = ['AM', 'PM'];
     
     return `
         <div class="time-input-group" data-type="${type}" data-day="${day}" data-idx="${idx}">
-            <select class="time-hour" data-field="hour">${hourOptions}</select>
+            <div class="custom-select" data-field="hour" data-value="${parts.hour}">
+                <span class="custom-select-value">${parts.hour}</span>
+                <div class="custom-select-dropdown">
+                    ${hours.map(h => `<div class="custom-select-option ${h === parts.hour ? 'selected' : ''}" data-value="${h}">${h}</div>`).join('')}
+                </div>
+            </div>
             <span class="time-colon">:</span>
-            <select class="time-min" data-field="min">${minOptions}</select>
-            <select class="time-ampm" data-field="ampm">
-                <option value="am" ${parts.ampm === 'am' ? 'selected' : ''}>AM</option>
-                <option value="pm" ${parts.ampm === 'pm' ? 'selected' : ''}>PM</option>
-            </select>
+            <div class="custom-select" data-field="min" data-value="${parts.min}">
+                <span class="custom-select-value">${parts.min}</span>
+                <div class="custom-select-dropdown">
+                    ${mins.map(m => `<div class="custom-select-option ${m === parts.min ? 'selected' : ''}" data-value="${m}">${m}</div>`).join('')}
+                </div>
+            </div>
+            <div class="custom-select time-ampm-select" data-field="ampm" data-value="${parts.ampm}">
+                <span class="custom-select-value">${parts.ampm.toUpperCase()}</span>
+                <div class="custom-select-dropdown">
+                    ${ampms.map(a => `<div class="custom-select-option ${a.toLowerCase() === parts.ampm ? 'selected' : ''}" data-value="${a.toLowerCase()}">${a}</div>`).join('')}
+                </div>
+            </div>
         </div>
     `;
 }
@@ -2020,24 +2028,54 @@ function formatTime12(time) {
 }
 
 function setupAvailabilityTableListeners() {
-    // Time input group changes
-    document.querySelectorAll('.time-input-group select').forEach(select => {
-        select.addEventListener('change', () => {
-            updateTimeFromInputs(select.closest('.time-input-group'));
+    // Custom dropdown click handlers
+    document.querySelectorAll('.custom-select').forEach(select => {
+        const valueEl = select.querySelector('.custom-select-value');
+        const dropdown = select.querySelector('.custom-select-dropdown');
+        
+        // Toggle dropdown on click
+        valueEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // Close all other dropdowns
+            document.querySelectorAll('.custom-select.open').forEach(s => {
+                if (s !== select) s.classList.remove('open');
+            });
+            select.classList.toggle('open');
         });
         
-        // Handle keyboard shortcuts for AM/PM
-        if (select.classList.contains('time-ampm')) {
+        // Option selection
+        dropdown.querySelectorAll('.custom-select-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                select.dataset.value = value;
+                valueEl.textContent = option.textContent;
+                
+                // Update selected state
+                dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                
+                select.classList.remove('open');
+                updateTimeFromCustomInputs(select.closest('.time-input-group'));
+            });
+        });
+        
+        // Keyboard support for AM/PM
+        if (select.classList.contains('time-ampm-select')) {
+            select.setAttribute('tabindex', '0');
             select.addEventListener('keydown', (e) => {
                 if (e.key.toLowerCase() === 'a') {
-                    select.value = 'am';
-                    updateTimeFromInputs(select.closest('.time-input-group'));
+                    selectCustomOption(select, 'am', 'AM');
                 } else if (e.key.toLowerCase() === 'p') {
-                    select.value = 'pm';
-                    updateTimeFromInputs(select.closest('.time-input-group'));
+                    selectCustomOption(select, 'pm', 'PM');
                 }
             });
         }
+    });
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
     });
     
     // Add button
@@ -2071,14 +2109,24 @@ function setupAvailabilityTableListeners() {
     });
 }
 
-function updateTimeFromInputs(inputGroup) {
+function selectCustomOption(select, value, display) {
+    select.dataset.value = value;
+    select.querySelector('.custom-select-value').textContent = display;
+    select.querySelectorAll('.custom-select-option').forEach(o => {
+        o.classList.toggle('selected', o.dataset.value === value);
+    });
+    select.classList.remove('open');
+    updateTimeFromCustomInputs(select.closest('.time-input-group'));
+}
+
+function updateTimeFromCustomInputs(inputGroup) {
     const type = inputGroup.dataset.type;
     const day = parseInt(inputGroup.dataset.day);
     const idx = parseInt(inputGroup.dataset.idx);
     
-    const hour = inputGroup.querySelector('.time-hour').value;
-    const min = inputGroup.querySelector('.time-min').value;
-    const ampm = inputGroup.querySelector('.time-ampm').value;
+    const hour = inputGroup.querySelector('[data-field="hour"]').dataset.value;
+    const min = inputGroup.querySelector('[data-field="min"]').dataset.value;
+    const ampm = inputGroup.querySelector('[data-field="ampm"]').dataset.value;
     
     const decimal = timePartsToDecimal(hour, min, ampm);
     
