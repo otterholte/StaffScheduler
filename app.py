@@ -3264,7 +3264,12 @@ def email_status():
 @app.route('/api/employees/<emp_id>/availability', methods=['PUT'])
 @login_required
 def update_availability(emp_id):
-    """Update an employee's availability."""
+    """Update an employee's availability.
+    
+    Accepts either:
+    - Individual slots: {"availability": [{"day": 0, "hour": 9}, ...]}
+    - Range format: {"availability": {"0": [[9, 17], [18.5, 21]], ...}}
+    """
     global _solver
     business = get_current_business()
     data = request.json
@@ -3287,9 +3292,25 @@ def update_availability(emp_id):
     employee.preferences.clear()
     employee.time_off.clear()
     
-    # Set new availability
-    for slot in data.get('availability', []):
-        employee.availability.add(TimeSlot(slot['day'], slot['hour']))
+    availability_data = data.get('availability', [])
+    
+    # Check if availability is in range format (dict) or slot format (list)
+    if isinstance(availability_data, dict):
+        # Range format: {"0": [[9, 17.5], [18, 21]], "1": [[9.25, 17]], ...}
+        for day_str, ranges in availability_data.items():
+            day = int(day_str)
+            for start, end in ranges:
+                # Add slots for each hour in the range (handles decimals)
+                # For 15-min granularity, we still need to store the decimal values somewhere
+                # For now, store whole hours but round appropriately
+                start_hour = int(start)
+                end_hour = int(end) if end == int(end) else int(end) + 1
+                for hour in range(start_hour, end_hour):
+                    employee.availability.add(TimeSlot(day, hour))
+    else:
+        # Slot format: [{"day": 0, "hour": 9}, ...]
+        for slot in availability_data:
+            employee.availability.add(TimeSlot(slot['day'], slot['hour']))
     
     for slot in data.get('preferences', []):
         employee.preferences.add(TimeSlot(slot['day'], slot['hour']))
@@ -3306,6 +3327,7 @@ def update_availability(emp_id):
     return jsonify({
         'success': True,
         'employee': employee.to_dict(),
+        'availability': availability_data if isinstance(availability_data, dict) else None,
         'message': 'Availability updated successfully'
     })
 

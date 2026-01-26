@@ -7388,43 +7388,58 @@ async function saveSettingsAvailability() {
         return;
     }
     
-    // Convert ranges to individual hour slots for the backend
-    const availabilitySlots = [];
-    
-    for (const [dayStr, ranges] of Object.entries(managerAvailEdits)) {
-        const day = parseInt(dayStr);
-        ranges.forEach(([start, end]) => {
-            // Create slots for each hour in the range
-            for (let h = Math.floor(start); h < Math.ceil(end); h++) {
-                availabilitySlots.push({ day, hour: h });
-            }
-        });
-    }
+    // Use the model ID (e.g., "emp_abc123") with the manager API endpoint
+    // which accepts range-based availability format
     
     try {
         const response = await fetch(`/api/employees/${emp.id}/availability`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ availability: availabilitySlots, preferences: [], time_off: [] })
+            body: JSON.stringify({ 
+                availability: managerAvailEdits 
+            })
         });
         
-        if (response.ok) {
-            // Update local employee data
+        const data = await response.json();
+        
+        if (data.success) {
+            // Update local employee data with the returned availability
+            // Convert ranges back to slots for compatibility
+            const availabilitySlots = [];
+            for (const [dayStr, ranges] of Object.entries(data.availability || managerAvailEdits)) {
+                const day = parseInt(dayStr);
+                ranges.forEach(([start, end]) => {
+                    // Store slots for each hour in the range
+                    for (let h = Math.floor(start); h < Math.ceil(end); h++) {
+                        availabilitySlots.push({ day, hour: h });
+                    }
+                });
+            }
             emp.availability = availabilitySlots;
             
             // Update hours display
-            const availHours = calculateAvailableHours(emp);
+            const availHours = calculateAvailableHoursFromRanges(managerAvailEdits);
             document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
             updateSidebarHours(emp.id, availHours);
             
             showToast('Availability saved', 'success');
         } else {
-            showToast('Failed to save availability', 'error');
+            showToast(data.message || 'Failed to save availability', 'error');
         }
     } catch (error) {
         console.error('Failed to save availability:', error);
         showToast('Error saving availability', 'error');
     }
+}
+
+function calculateAvailableHoursFromRanges(rangesObj) {
+    let totalHours = 0;
+    for (const ranges of Object.values(rangesObj)) {
+        for (const [start, end] of ranges) {
+            totalHours += (end - start);
+        }
+    }
+    return Math.round(totalHours * 10) / 10; // Round to 1 decimal
 }
 
 function getAvailabilityRangesForDay(emp, dataDay) {
