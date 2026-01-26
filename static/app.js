@@ -7007,8 +7007,45 @@ function showAvailabilityPanel(empId) {
     const availHours = calculateAvailableHours(emp);
     document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
     
+    // Setup edit button to navigate to Staff page
+    const editBtn = document.getElementById('availEditEmpBtn');
+    if (editBtn) {
+        editBtn.onclick = () => navigateToStaffAndEdit(empId);
+    }
+    
     // Render table view
     renderManagerAvailabilityTable(emp);
+}
+
+function navigateToStaffAndEdit(empId) {
+    // Switch to Staff tab
+    switchTab('employees');
+    
+    setTimeout(() => {
+        // Find and expand the employee card
+        const card = document.querySelector(`.employee-card[data-id="${empId}"]`);
+        if (card) {
+            // Collapse any other expanded cards
+            document.querySelectorAll('.employee-card.expanded').forEach(c => {
+                if (c !== card) c.classList.remove('expanded');
+            });
+            
+            // Expand this card
+            card.classList.add('expanded');
+            
+            // Scroll to the card
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Highlight the Edit button
+            setTimeout(() => {
+                const editBtn = card.querySelector('.edit-emp-btn');
+                if (editBtn) {
+                    editBtn.classList.add('highlight-pulse');
+                    setTimeout(() => editBtn.classList.remove('highlight-pulse'), 2000);
+                }
+            }, 300);
+        }
+    }, 100);
 }
 
 // Store manager availability edits in progress

@@ -8334,6 +8334,57 @@ body[data-theme="light"] .footer-bottom {
     margin-bottom: 1rem;
 }
 
+/* Availability panel name row with edit button */
+.avail-name-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.avail-name-row h2 {
+    margin: 0;
+}
+
+.avail-edit-emp-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.avail-edit-emp-btn:hover {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.avail-edit-emp-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Highlight pulse animation for buttons */
+@keyframes highlightPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(70, 125, 246, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(70, 125, 246, 0);
+    }
+}
+
+.highlight-pulse {
+    animation: highlightPulse 0.6s ease-in-out 3;
+    background: var(--accent-primary) !important;
+    color: white !important;
+}
+
 .availability-emp-info {
     display: flex;
     align-items: center;
