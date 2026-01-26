@@ -3256,19 +3256,9 @@ def email_status():
     })
 
 
-@app.route('/api/employees/<emp_id>/availability', methods=['PUT'])
-@login_required
-def update_availability(emp_id):
-    """Update an employee's availability with 15-minute precision support.
-    
-    Accepts either:
-    - Individual slots: {"availability": [{"day": 0, "hour": 9}, ...]}
-    - Range format: {"availability": {"0": [[9, 17], [18.5, 21]], ...}}
-    
-    Range format preserves 15-minute precision (e.g., 9.25 = 9:15 AM).
-    """
+def _update_employee_availability_for_business(emp_id, business):
+    """Shared availability update logic for manager endpoints."""
     global _solver
-    business = get_current_business()
     data = request.json
     
     print(f"[DEBUG update_availability] emp_id={emp_id}", flush=True)
@@ -3357,6 +3347,32 @@ def update_availability(emp_id):
         'availability': availability_data if isinstance(availability_data, dict) else None,
         'message': 'Availability updated successfully'
     })
+
+
+@app.route('/api/employees/<emp_id>/availability', methods=['PUT'])
+@login_required
+def update_availability(emp_id):
+    """Update an employee's availability with 15-minute precision support."""
+    business = get_current_business()
+    return _update_employee_availability_for_business(emp_id, business)
+
+
+@app.route('/api/<business_slug>/employees/<emp_id>/availability', methods=['PUT'])
+@login_required
+def update_availability_by_slug(business_slug, emp_id):
+    """Compatibility route for availability updates using business slug."""
+    global _current_business
+    business = get_business_by_slug(business_slug, force_reload=True)
+    if not business:
+        return jsonify({
+            'success': False,
+            'message': 'Business not found'
+        }), 404
+    
+    if _current_business is None or _current_business.id != business.id:
+        _current_business = business
+    
+    return _update_employee_availability_for_business(emp_id, business)
 
 
 @app.route('/api/employees/<emp_id>/availability-cell', methods=['PUT'])
