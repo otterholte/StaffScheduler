@@ -682,14 +682,19 @@ def employee_availability(business_slug, employee_id):
         
         # Get availability data - use availability_ranges if available (preserves 15-min precision)
         availability_data = {}
+        print(f"[DEBUG employee_avail] employee.availability_ranges count: {len(employee.availability_ranges) if hasattr(employee, 'availability_ranges') and employee.availability_ranges else 0}")
+        print(f"[DEBUG employee_avail] employee.availability_ranges raw: {[r.to_dict() for r in employee.availability_ranges] if hasattr(employee, 'availability_ranges') and employee.availability_ranges else 'None'}")
+        
         if hasattr(employee, 'availability_ranges') and employee.availability_ranges:
             # Use the new range-based format with 15-minute precision
             for r in employee.availability_ranges:
                 if r.day not in availability_data:
                     availability_data[r.day] = []
                 availability_data[r.day].append([r.start_time, r.end_time])
+                print(f"[DEBUG employee_avail] Added range: day={r.day}, start={r.start_time}, end={r.end_time}")
         elif hasattr(employee, 'availability') and employee.availability:
             # Fall back to converting from slot-based availability
+            print(f"[DEBUG employee_avail] FALLBACK: Using slot-based availability (no ranges found)")
             from collections import defaultdict
             day_hours = defaultdict(list)
             for slot in employee.availability:
@@ -712,7 +717,7 @@ def employee_availability(business_slug, employee_id):
                     ranges.append([start, end])
                 availability_data[day] = ranges
         
-        print(f"[DEBUG] Rendering template with availability_data keys: {list(availability_data.keys())}")
+        print(f"[DEBUG employee_avail] Final availability_data: {availability_data}")
         
         # Build employee_data with db_id for API calls
         employee_data = employee.to_dict()
