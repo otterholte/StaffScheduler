@@ -7052,8 +7052,12 @@ function navigateToStaffAndEdit(empId) {
 let managerAvailEdits = {};
 
 function renderManagerAvailabilityTable(emp) {
+    console.log('[ManagerAvail] renderManagerAvailabilityTable called');
     const container = document.getElementById('managerAvailTableView');
-    if (!container) return;
+    if (!container) {
+        console.log('[ManagerAvail] Container not found in render!');
+        return;
+    }
     
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     // Convert display day index to data day (our data uses Mon=0, Sun=6)
@@ -7156,20 +7160,34 @@ function timePartsToDecimalManager(hour, min, ampm) {
 
 function setupManagerAvailTableListeners(emp) {
     const container = document.getElementById('managerAvailTableView');
-    if (!container) return;
+    console.log('[ManagerAvail] setupManagerAvailTableListeners called, container:', container);
+    console.log('[ManagerAvail] emp:', emp);
+    console.log('[ManagerAvail] managerAvailEdits:', managerAvailEdits);
+    if (!container) {
+        console.log('[ManagerAvail] Container not found!');
+        return;
+    }
     
     // Use event delegation for better reliability
     container.onclick = (e) => {
         const target = e.target;
+        console.log('[ManagerAvail] Click detected on:', target);
+        console.log('[ManagerAvail] Target classes:', target.classList);
         
         // Handle remove button click
         if (target.classList.contains('avail-remove-row-btn')) {
+            console.log('[ManagerAvail] Remove button clicked!');
             e.stopPropagation();
             const dataDay = parseInt(target.dataset.day);
             const idx = parseInt(target.dataset.idx);
+            console.log('[ManagerAvail] dataDay:', dataDay, 'idx:', idx);
+            console.log('[ManagerAvail] managerAvailEdits[dataDay]:', managerAvailEdits[dataDay]);
             if (managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay].splice(idx, 1);
+                console.log('[ManagerAvail] After splice:', managerAvailEdits[dataDay]);
                 renderManagerAvailabilityTable(emp);
+            } else {
+                console.log('[ManagerAvail] No edits found for day', dataDay);
             }
             return;
         }
