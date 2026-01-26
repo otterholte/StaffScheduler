@@ -7202,6 +7202,7 @@ function renderManagerAvailabilityTable(emp) {
 
     if (shouldInitialize) {
         console.log('[ManagerAvail] Initializing managerAvailEdits for emp:', emp.id);
+        console.log('[ManagerAvail] Raw emp.availability_ranges:', JSON.stringify(emp.availability_ranges));
         managerAvailEdits = {};
         
         // Normalize availability_ranges keys to integers if they are strings
@@ -7211,10 +7212,12 @@ function renderManagerAvailabilityTable(emp) {
                 normalized[parseInt(day)] = ranges;
             });
             emp.availability_ranges = normalized;
+            console.log('[ManagerAvail] Normalized availability_ranges:', JSON.stringify(emp.availability_ranges));
         }
 
         for (let d = 0; d < 7; d++) {
             const dataDay = toDataDay(d);
+            console.log(`[ManagerAvail] Display day ${d} (${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]}) -> Data day ${dataDay}`);
             managerAvailEdits[dataDay] = getAvailabilityRangesForDay(emp, dataDay);
             // If no availability, start with empty array
             if (managerAvailEdits[dataDay].length === 0) {
@@ -7607,6 +7610,8 @@ function getAvailabilityRangesForDay(emp, dataDay) {
     // First, check if we have availability_ranges (new format with 15-min precision)
     // Handle both string and number keys
     const ranges = emp.availability_ranges ? (emp.availability_ranges[dataDay] || emp.availability_ranges[dataDay.toString()]) : null;
+    
+    console.log(`[ManagerAvail] getAvailabilityRangesForDay: emp=${emp.name}, dataDay=${dataDay}, ranges=`, ranges);
     
     if (ranges) {
         // availability_ranges is { day: [[start, end], ...] }
