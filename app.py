@@ -794,15 +794,20 @@ def employee_update_availability(employee_id):
     except ValueError:
         return jsonify({'success': False, 'error': 'Business not found'}), 404
     
-    # Find the employee
+    # Look up DB employee to get the model ID
+    db_employee = DBEmployee.query.get(employee_id)
+    if not db_employee:
+        return jsonify({'success': False, 'error': 'Employee not found in database'}), 404
+    
+    # Find the employee model using the model ID from DB record
     employee = None
     for emp in business.employees:
-        if emp.id == employee_id:
+        if emp.id == db_employee.employee_id:
             employee = emp
             break
     
     if not employee:
-        return jsonify({'success': False, 'error': 'Employee not found'}), 404
+        return jsonify({'success': False, 'error': 'Employee not found in business'}), 404
     
     # Clear existing availability (it's a set, not a dict)
     employee.availability.clear()
