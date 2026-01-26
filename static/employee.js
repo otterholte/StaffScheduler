@@ -1949,8 +1949,8 @@ function renderAvailabilityTable() {
         html += `
                 </div>
                 <div class="avail-day-actions">
+                    ${hasRanges ? `<button class="avail-remove-btn" data-day="${day}" title="Remove last">−</button>` : ''}
                     <button class="avail-add-btn" data-day="${day}" title="Add time range">+</button>
-                    ${hasRanges ? `<button class="avail-clear-btn" data-day="${day}" title="Clear day">−</button>` : ''}
                 </div>
             </div>
         `;
@@ -2032,52 +2032,20 @@ function setupAvailabilityTableListeners() {
         });
     });
     
-    // Clear day button (with confirmation)
-    document.querySelectorAll('.avail-clear-btn').forEach(btn => {
+    // Remove last time range button
+    document.querySelectorAll('.avail-remove-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const day = parseInt(btn.dataset.day);
-            showClearDayConfirm(day);
+            if (employeeState.availability[day] && employeeState.availability[day].length > 0) {
+                // Remove the last time range
+                employeeState.availability[day].pop();
+                if (employeeState.availability[day].length === 0) {
+                    delete employeeState.availability[day];
+                }
+                renderAvailabilityTable();
+                updateAvailabilityStats();
+            }
         });
-    });
-}
-
-function showClearDayConfirm(day) {
-    const dayName = DAY_NAMES[day];
-    
-    // Create confirmation popup
-    const popup = document.createElement('div');
-    popup.className = 'avail-confirm-popup';
-    popup.innerHTML = `
-        <div class="avail-confirm-content">
-            <p>Clear all availability for <strong>${dayName}</strong>?</p>
-            <div class="avail-confirm-actions">
-                <button class="btn btn-secondary avail-confirm-cancel">Cancel</button>
-                <button class="btn btn-danger avail-confirm-yes">Clear</button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(popup);
-    
-    // Add event listeners
-    popup.querySelector('.avail-confirm-cancel').addEventListener('click', () => {
-        popup.remove();
-    });
-    
-    popup.querySelector('.avail-confirm-yes').addEventListener('click', () => {
-        if (employeeState.availability[day]) {
-            delete employeeState.availability[day];
-        }
-        renderAvailabilityTable();
-        updateAvailabilityStats();
-        popup.remove();
-    });
-    
-    // Close on backdrop click
-    popup.addEventListener('click', (e) => {
-        if (e.target === popup) {
-            popup.remove();
-        }
     });
 }
 
