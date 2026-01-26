@@ -7156,63 +7156,67 @@ function timePartsToDecimalManager(hour, min, ampm) {
 
 function setupManagerAvailTableListeners(emp) {
     const container = document.getElementById('managerAvailTableView');
+    if (!container) return;
+    
+    // Use event delegation for better reliability
+    container.onclick = (e) => {
+        const target = e.target;
         
-    // Custom dropdown handlers
-    container.querySelectorAll('.custom-select').forEach(select => {
-        const valueEl = select.querySelector('.custom-select-value');
-        const dropdown = select.querySelector('.custom-select-dropdown');
-        
-        valueEl.addEventListener('click', (e) => {
+        // Handle remove button click
+        if (target.classList.contains('avail-remove-row-btn')) {
             e.stopPropagation();
-            document.querySelectorAll('.custom-select.open').forEach(s => {
-                if (s !== select) s.classList.remove('open');
-            });
-            select.classList.toggle('open');
-        });
-        
-        dropdown.querySelectorAll('.custom-select-option').forEach(option => {
-            option.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const value = option.dataset.value;
-                select.dataset.value = value;
-                valueEl.textContent = option.textContent;
-                dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
-                option.classList.add('selected');
-                select.classList.remove('open');
-                updateManagerTimeFromInputs(select.closest('.time-input-group'), emp);
-            });
-        });
-    });
-    
-    // Close dropdowns when clicking outside
-    document.addEventListener('click', () => {
-        document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
-    });
-    
-    // Add button
-    container.querySelectorAll('.avail-add-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const dataDay = parseInt(btn.dataset.day);
-            if (!managerAvailEdits[dataDay]) {
-                managerAvailEdits[dataDay] = [];
-            }
-            // Add default 9am-5pm range
-            managerAvailEdits[dataDay].push([state.startHour, state.endHour]);
-            renderManagerAvailabilityTable(emp);
-        });
-    });
-    
-    // Remove button
-    container.querySelectorAll('.avail-remove-row-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const dataDay = parseInt(btn.dataset.day);
-            const idx = parseInt(btn.dataset.idx);
+            const dataDay = parseInt(target.dataset.day);
+            const idx = parseInt(target.dataset.idx);
             if (managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay].splice(idx, 1);
                 renderManagerAvailabilityTable(emp);
             }
-        });
+            return;
+        }
+        
+        // Handle add button click
+        if (target.classList.contains('avail-add-btn')) {
+            const dataDay = parseInt(target.dataset.day);
+            if (!managerAvailEdits[dataDay]) {
+                managerAvailEdits[dataDay] = [];
+            }
+            managerAvailEdits[dataDay].push([state.startHour, state.endHour]);
+            renderManagerAvailabilityTable(emp);
+            return;
+        }
+        
+        // Handle custom select value click (open dropdown)
+        if (target.classList.contains('custom-select-value')) {
+            e.stopPropagation();
+            const select = target.closest('.custom-select');
+            document.querySelectorAll('.custom-select.open').forEach(s => {
+                if (s !== select) s.classList.remove('open');
+            });
+            select.classList.toggle('open');
+            return;
+        }
+        
+        // Handle custom select option click
+        if (target.classList.contains('custom-select-option')) {
+            e.stopPropagation();
+            const select = target.closest('.custom-select');
+            const valueEl = select.querySelector('.custom-select-value');
+            const value = target.dataset.value;
+            
+            select.dataset.value = value;
+            valueEl.textContent = target.textContent;
+            select.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+            target.classList.add('selected');
+            select.classList.remove('open');
+            
+            updateManagerTimeFromInputs(select.closest('.time-input-group'), emp);
+            return;
+        }
+    };
+    
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.custom-select.open').forEach(s => s.classList.remove('open'));
     });
 }
 

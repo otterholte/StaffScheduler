@@ -1935,10 +1935,10 @@ function renderAvailabilityTable() {
                 
                 html += `
                     <div class="avail-time-row" data-day="${day}" data-idx="${idx}">
+                        <button class="avail-remove-row-btn" data-day="${day}" data-idx="${idx}" title="Remove">−</button>
                         ${renderTimeInput('start', day, idx, startParts)}
                         <span class="avail-time-sep">to</span>
                         ${renderTimeInput('end', day, idx, endParts)}
-                        <button class="avail-remove-row-btn" data-day="${day}" data-idx="${idx}" title="Remove">−</button>
                     </div>
                 `;
             });
