@@ -1897,22 +1897,30 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function initAvailabilityEditor() {
+    console.log('[EmployeeAvail] initAvailabilityEditor called');
+    console.log('[EmployeeAvail] Raw EMPLOYEE_DATA.availability:', EMPLOYEE_DATA.availability);
+    console.log('[EmployeeAvail] employeeState.availability before normalize:', JSON.stringify(employeeState.availability));
+    
     // Normalize availability keys to integers if they are strings from JSON
     if (employeeState.availability && typeof employeeState.availability === 'object') {
         const normalized = {};
         Object.entries(employeeState.availability).forEach(([day, ranges]) => {
             normalized[parseInt(day)] = ranges;
+            console.log(`[EmployeeAvail] Day ${day} ranges:`, ranges);
         });
         employeeState.availability = normalized;
     }
 
     // Initialize with default "All Day" if no availability exists
     if (!employeeState.availability || Object.keys(employeeState.availability).length === 0) {
+        console.log('[EmployeeAvail] No availability found, using defaults');
         employeeState.availability = {};
         for (let day = 0; day < 7; day++) {
             employeeState.availability[day] = [[employeeState.startHour, employeeState.endHour]];
         }
     }
+    
+    console.log('[EmployeeAvail] Final availability:', JSON.stringify(employeeState.availability));
     renderAvailabilityTable();
     setupSaveButton();
     updateAvailabilityStats();
