@@ -31,6 +31,22 @@ function getLocationSlug() {
     return businessData?.slug || state.business.slug || slugify(state.business.name);
 }
 
+function getLocationSlugSafe() {
+    try {
+        return getLocationSlug();
+    } catch (err) {
+        return null;
+    }
+}
+
+function getAvailabilityApiUrl(empId) {
+    const locationSlug = getLocationSlugSafe();
+    if (locationSlug) {
+        return `/api/${locationSlug}/employees/${empId}/availability`;
+    }
+    return `/api/employees/${empId}/availability`;
+}
+
 function getCurrentUrlPath() {
     const locationSlug = getLocationSlug();
     const pageSlug = TAB_TO_SLUG[state.currentTab] || 'schedule';
@@ -6353,7 +6369,7 @@ async function saveAvailability() {
     }
     
     try {
-        const response = await fetch(`/api/employees/${empId}/availability`, {
+        const response = await fetch(getAvailabilityApiUrl(empId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ availability, preferences: [], time_off: [] })
@@ -7407,7 +7423,7 @@ async function saveSettingsAvailability() {
     // which accepts range-based availability format
     
     try {
-        const response = await fetch(`/api/employees/${emp.id}/availability`, {
+        const response = await fetch(getAvailabilityApiUrl(emp.id), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -7709,7 +7725,7 @@ async function saveFullAvailability(empId) {
     });
     
     try {
-        const response = await fetch(`/api/employees/${empId}/availability`, {
+        const response = await fetch(getAvailabilityApiUrl(empId), {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ availability, preferences: [], time_off: [] })
