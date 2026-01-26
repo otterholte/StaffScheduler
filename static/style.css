@@ -8314,13 +8314,24 @@ body[data-theme="light"] .footer-bottom {
     border-radius: 2px;
 }
 
-/* Read-only grid styling */
-.availability-table.readonly .avail-cell {
-    cursor: default;
+/* Availability save bar */
+.availability-save-bar {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
 }
 
-.availability-table.readonly .avail-cell:hover {
-    transform: none;
+.availability-save-bar .btn {
+    min-width: 140px;
+}
+
+/* Modal availability instructions */
+.availability-instructions-modal {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
 }
 
 .availability-emp-info {

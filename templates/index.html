@@ -609,6 +609,9 @@
                             <div class="availability-table-view manager-avail-table" id="managerAvailTableView">
                                 <!-- Dynamically generated -->
                             </div>
+                            <div class="availability-save-bar">
+                                <button type="button" class="btn btn-primary" id="settingsSaveAvailBtn">Save Changes</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1046,40 +1049,10 @@
                 <button class="modal-close" data-close>&times;</button>
             </div>
             <div class="modal-body">
-                <div class="availability-legend">
-                    <div class="legend-item">
-                        <span class="legend-box unavailable"></span>
-                        <span>Not Available</span>
-                    </div>
-                    <div class="legend-item">
-                        <span class="legend-box available"></span>
-                        <span>Available</span>
-                    </div>
-                </div>
-                <p class="availability-instructions">Click and drag to select available times</p>
-                <div class="availability-grid-wrapper">
-                    <table class="availability-grid" id="availabilityGrid">
-                        <thead>
-                            <tr>
-                                <th>Time</th>
-                                <th>Mon</th>
-                                <th>Tue</th>
-                                <th>Wed</th>
-                                <th>Thu</th>
-                                <th>Fri</th>
-                                <th>Sat</th>
-                                <th>Sun</th>
-                            </tr>
-                        </thead>
-                        <tbody id="availabilityBody">
-                            <!-- Dynamically generated -->
-                        </tbody>
-                    </table>
-                </div>
-                <div class="availability-actions">
-                    <button class="btn btn-sm btn-ghost" id="clearAvailability">Clear All</button>
-                    <button class="btn btn-sm btn-ghost" id="fillWeekdays">Fill Weekdays</button>
-                    <button class="btn btn-sm btn-ghost" id="fillAll">Fill All</button>
+                <p class="availability-instructions-modal">Set the hours this employee is available to work each day</p>
+                <!-- Table View for Modal -->
+                <div class="availability-table-view manager-avail-table" id="modalAvailTableView">
+                    <!-- Dynamically generated -->
                 </div>
                 
                 <!-- PTO Requests Section (Manager View) -->
