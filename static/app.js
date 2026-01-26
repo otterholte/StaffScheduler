@@ -103,6 +103,20 @@ const state = {
 };
 
 // ==================== LOCAL STORAGE PERSISTENCE ====================
+const DEBUG_SCHEDULE = (() => {
+    try {
+        return localStorage.getItem('debugSchedule') === 'true';
+    } catch (err) {
+        return false;
+    }
+})();
+
+function debugSchedule(...args) {
+    if (DEBUG_SCHEDULE) {
+        console.debug('[ScheduleDebug]', ...args);
+    }
+}
+
 function getScheduleStorageKey() {
     return `schedule_${state.business.id}_week_${state.weekOffset}`;
 }
@@ -112,8 +126,15 @@ function saveScheduleToStorage() {
     try {
         const key = getScheduleStorageKey();
         localStorage.setItem(key, JSON.stringify(state.currentSchedule));
+        debugSchedule('Saved schedule to localStorage', {
+            key,
+            hasShiftTimes: !!state.currentSchedule.shift_times,
+            shiftTimesCount: state.currentSchedule.shift_times ? Object.keys(state.currentSchedule.shift_times).length : 0,
+            slotAssignmentsCount: state.currentSchedule.slot_assignments ? Object.keys(state.currentSchedule.slot_assignments).length : 0
+        });
     } catch (e) {
         console.warn('Failed to save schedule to localStorage:', e);
+        debugSchedule('Save schedule to localStorage failed', e);
     }
 }
 
@@ -122,10 +143,19 @@ function loadScheduleFromStorage() {
         const key = getScheduleStorageKey();
         const saved = localStorage.getItem(key);
         if (saved) {
-            return JSON.parse(saved);
+            const parsed = JSON.parse(saved);
+            debugSchedule('Loaded schedule from localStorage', {
+                key,
+                hasShiftTimes: !!parsed?.shift_times,
+                shiftTimesCount: parsed?.shift_times ? Object.keys(parsed.shift_times).length : 0,
+                slotAssignmentsCount: parsed?.slot_assignments ? Object.keys(parsed.slot_assignments).length : 0
+            });
+            return parsed;
         }
+        debugSchedule('No schedule found in localStorage', { key });
     } catch (e) {
         console.warn('Failed to load schedule from localStorage:', e);
+        debugSchedule('Load schedule from localStorage failed', e);
     }
     return null;
 }
@@ -134,9 +164,85 @@ function clearScheduleFromStorage() {
     try {
         const key = getScheduleStorageKey();
         localStorage.removeItem(key);
+        debugSchedule('Cleared schedule from localStorage', { key });
     } catch (e) {
         console.warn('Failed to clear schedule from localStorage:', e);
+        debugSchedule('Clear schedule from localStorage failed', e);
     }
+}
+
+function isEmpScheduledOnDay(slotAssignments, empId, dayIdx) {
+    if (!slotAssignments) return false;
+    const dayPrefix = `${dayIdx},`;
+    for (const [key, assignments] of Object.entries(slotAssignments)) {
+        if (!key.startsWith(dayPrefix)) continue;
+        if (assignments?.some(a => a.employee_id === empId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function mergeShiftTimesFromLocal(schedule) {
+    const savedSchedule = loadScheduleFromStorage();
+    if (!savedSchedule?.shift_times || !schedule?.slot_assignments) {
+        debugSchedule('mergeShiftTimesFromLocal skipped', {
+            hasSavedShiftTimes: !!savedSchedule?.shift_times,
+            hasSlotAssignments: !!schedule?.slot_assignments
+        });
+        return;
+    }
+
+    if (!schedule.shift_times) {
+        schedule.shift_times = {};
+    }
+
+    const stats = {
+        total: 0,
+        merged: 0,
+        skippedExisting: 0,
+        skippedInvalid: 0,
+        skippedKey: 0,
+        skippedNotScheduled: 0
+    };
+
+    for (const [key, times] of Object.entries(savedSchedule.shift_times)) {
+        stats.total += 1;
+        if (schedule.shift_times[key]) {
+            stats.skippedExisting += 1;
+            continue;
+        }
+        if (!times || typeof times.start !== 'number' || typeof times.end !== 'number') {
+            stats.skippedInvalid += 1;
+            continue;
+        }
+
+        const separatorIdx = key.lastIndexOf('_');
+        if (separatorIdx === -1) {
+            stats.skippedKey += 1;
+            continue;
+        }
+        const empId = key.slice(0, separatorIdx);
+        const dayIdx = parseInt(key.slice(separatorIdx + 1), 10);
+        if (Number.isNaN(dayIdx)) {
+            stats.skippedKey += 1;
+            continue;
+        }
+
+        if (!isEmpScheduledOnDay(schedule.slot_assignments, empId, dayIdx)) {
+            stats.skippedNotScheduled += 1;
+            continue;
+        }
+
+        schedule.shift_times[key] = {
+            start: times.start,
+            end: times.end,
+            roleId: times.roleId
+        };
+        stats.merged += 1;
+    }
+
+    debugSchedule('mergeShiftTimesFromLocal summary', stats);
 }
 
 async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
@@ -153,6 +259,7 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
         
         if (data.success && data.schedule) {
             state.currentSchedule = data.schedule;
+            mergeShiftTimesFromLocal(state.currentSchedule);
             // Update employees if returned from server (ensures consistency)
             if (data.employees) {
                 state.employees = data.employees;
