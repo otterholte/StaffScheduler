@@ -8380,7 +8380,7 @@ body[data-theme="light"] .footer-bottom {
 }
 
 .highlight-pulse {
-    animation: highlightPulse 1.5s ease-in-out 4;
+    animation: highlightPulse 1.75s ease-in-out 4;
     background: var(--accent-primary) !important;
     color: white !important;
 }
