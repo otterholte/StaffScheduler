@@ -1392,9 +1392,19 @@ body.menu-open {
 
 /* Dark mode dropdown options */
 .time-input-group select option {
-    background: #1a1a2e;
-    color: var(--text-primary);
-    padding: 0.5rem;
+    background: #252540;
+    color: #f1f5f9;
+    padding: 0.75rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.time-input-group select option:hover,
+.time-input-group select option:focus,
+.time-input-group select option:checked {
+    background: #10b981;
+    color: white;
 }
 
 .time-input-group .time-hour {
