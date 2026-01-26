@@ -1352,32 +1352,86 @@ body.menu-open {
     gap: 0.5rem;
 }
 
-.avail-time-select {
-    padding: 0.4rem 0.5rem;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    color: var(--text-primary);
-    font-size: 0.85rem;
-    min-width: 80px;
-    cursor: pointer;
-}
-
-.avail-time-select:focus {
-    outline: none;
-    border-color: var(--employee-accent);
-}
-
 .avail-time-sep {
     color: var(--text-muted);
     font-size: 0.8rem;
+    padding: 0 0.25rem;
 }
 
-.avail-day-actions {
+/* Time Input Group (Hour : Min AM/PM) */
+.time-input-group {
     display: flex;
-    gap: 0.35rem;
-    flex-shrink: 0;
-    margin-top: 0.35rem;
+    align-items: center;
+    gap: 0;
+}
+
+.time-input-group select {
+    padding: 0.4rem 0.35rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.time-input-group select:focus {
+    outline: none;
+    border-color: var(--employee-accent);
+    z-index: 1;
+}
+
+.time-input-group .time-hour {
+    border-radius: 6px 0 0 6px;
+    min-width: 42px;
+    text-align: center;
+    border-right: none;
+}
+
+.time-input-group .time-colon {
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.4rem 0.15rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.time-input-group .time-min {
+    border-radius: 0;
+    min-width: 42px;
+    text-align: center;
+    border-left: none;
+    border-right: none;
+}
+
+.time-input-group .time-ampm {
+    border-radius: 0 6px 6px 0;
+    min-width: 48px;
+    text-align: center;
+    border-left: none;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.avail-remove-row-btn {
+    padding: 0.3rem 0.5rem;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 1rem;
+    opacity: 0.5;
+    transition: all 0.15s ease;
+    margin-left: 0.5rem;
+}
+
+.avail-remove-row-btn:hover {
+    opacity: 1;
+    color: #94a3b8;
+    background: rgba(100, 116, 139, 0.15);
 }
 
 .avail-add-btn {
@@ -1402,26 +1456,6 @@ body.menu-open {
     color: white;
 }
 
-.avail-remove-btn {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(100, 116, 139, 0.15);
-    border: 1px solid rgba(100, 116, 139, 0.3);
-    border-radius: 6px;
-    color: #94a3b8;
-    font-size: 1.2rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.avail-remove-btn:hover {
-    background: rgba(100, 116, 139, 0.3);
-    color: #cbd5e1;
-}
 
 .avail-not-set {
     color: var(--text-muted);
@@ -1434,6 +1468,7 @@ body.menu-open {
 @media (max-width: 768px) {
     .avail-day-row {
         padding: 0.625rem 0.75rem;
+        flex-wrap: wrap;
     }
     
     .avail-day-name {
@@ -1441,21 +1476,33 @@ body.menu-open {
         font-size: 0.8rem;
     }
     
-    .avail-time-select {
-        min-width: 72px;
-        padding: 0.45rem 0.4rem;
+    .avail-day-times {
+        flex: 1;
+        min-width: calc(100% - 80px);
+    }
+    
+    .time-input-group select {
+        padding: 0.45rem 0.3rem;
         font-size: 0.8rem;
     }
     
-    .avail-remove-btn {
-        padding: 0.4rem;
+    .time-input-group .time-hour,
+    .time-input-group .time-min {
         min-width: 36px;
-        min-height: 36px;
+    }
+    
+    .time-input-group .time-ampm {
+        min-width: 40px;
+        font-size: 0.7rem;
     }
     
     .avail-add-btn {
         width: 32px;
         height: 32px;
+    }
+    
+    .avail-remove-row-btn {
+        padding: 0.4rem;
     }
 }
 

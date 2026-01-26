@@ -1930,15 +1930,15 @@ function renderAvailabilityTable() {
         if (hasRanges) {
             dayRanges.forEach((range, idx) => {
                 const [start, end] = range;
+                const startParts = decimalToTimeParts(start);
+                const endParts = decimalToTimeParts(end);
+                
                 html += `
                     <div class="avail-time-row" data-day="${day}" data-idx="${idx}">
-                        <select class="avail-time-select avail-start" data-day="${day}" data-idx="${idx}">
-                            ${generateTimeOptions(start)}
-                        </select>
+                        ${renderTimeInput('start', day, idx, startParts)}
                         <span class="avail-time-sep">to</span>
-                        <select class="avail-time-select avail-end" data-day="${day}" data-idx="${idx}">
-                            ${generateTimeOptions(end)}
-                        </select>
+                        ${renderTimeInput('end', day, idx, endParts)}
+                        <button class="avail-remove-row-btn" data-day="${day}" data-idx="${idx}" title="Remove">−</button>
                     </div>
                 `;
             });
@@ -1948,10 +1948,7 @@ function renderAvailabilityTable() {
         
         html += `
                 </div>
-                <div class="avail-day-actions">
-                    ${hasRanges ? `<button class="avail-remove-btn" data-day="${day}" title="Remove last">−</button>` : ''}
-                    <button class="avail-add-btn" data-day="${day}" title="Add time range">+</button>
-                </div>
+                <button class="avail-add-btn" data-day="${day}" title="Add time range">+</button>
             </div>
         `;
     }
@@ -1963,14 +1960,52 @@ function renderAvailabilityTable() {
     setupAvailabilityTableListeners();
 }
 
-function generateTimeOptions(selectedTime) {
-    let options = '';
-    // Generate options in 15-minute increments
-    for (let h = employeeState.startHour; h <= employeeState.endHour; h += 0.25) {
-        const selected = h === selectedTime ? 'selected' : '';
-        options += `<option value="${h}" ${selected}>${formatTime12(h)}</option>`;
+function renderTimeInput(type, day, idx, parts) {
+    const hourOptions = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map(h => 
+        `<option value="${h}" ${h === parts.hour ? 'selected' : ''}>${h}</option>`
+    ).join('');
+    
+    const minOptions = ['00', '15', '30', '45'].map(m => 
+        `<option value="${m}" ${m === parts.min ? 'selected' : ''}>${m}</option>`
+    ).join('');
+    
+    return `
+        <div class="time-input-group" data-type="${type}" data-day="${day}" data-idx="${idx}">
+            <select class="time-hour" data-field="hour">${hourOptions}</select>
+            <span class="time-colon">:</span>
+            <select class="time-min" data-field="min">${minOptions}</select>
+            <select class="time-ampm" data-field="ampm">
+                <option value="am" ${parts.ampm === 'am' ? 'selected' : ''}>AM</option>
+                <option value="pm" ${parts.ampm === 'pm' ? 'selected' : ''}>PM</option>
+            </select>
+        </div>
+    `;
+}
+
+function decimalToTimeParts(decimal) {
+    const hour24 = Math.floor(decimal);
+    const minutes = Math.round((decimal - hour24) * 60);
+    
+    let hour12 = hour24 % 12;
+    if (hour12 === 0) hour12 = 12;
+    
+    const ampm = hour24 < 12 ? 'am' : 'pm';
+    const min = minutes.toString().padStart(2, '0');
+    
+    return { hour: hour12, min, ampm };
+}
+
+function timePartsToDecimal(hour, min, ampm) {
+    let hour24 = parseInt(hour);
+    const minutes = parseInt(min);
+    
+    if (ampm === 'am') {
+        if (hour24 === 12) hour24 = 0;
+    } else {
+        if (hour24 !== 12) hour24 += 12;
     }
-    return options;
+    
+    return hour24 + (minutes / 60);
 }
 
 function formatTime12(time) {
@@ -1985,37 +2020,24 @@ function formatTime12(time) {
 }
 
 function setupAvailabilityTableListeners() {
-    // Time select changes
-    document.querySelectorAll('.avail-time-select').forEach(select => {
-        select.addEventListener('change', (e) => {
-            const day = parseInt(select.dataset.day);
-            const idx = parseInt(select.dataset.idx);
-            const isStart = select.classList.contains('avail-start');
-            const value = parseFloat(select.value);
-            
-            if (!employeeState.availability[day]) return;
-            
-            if (isStart) {
-                employeeState.availability[day][idx][0] = value;
-            } else {
-                employeeState.availability[day][idx][1] = value;
-            }
-            
-            // Validate: end must be after start
-            const [start, end] = employeeState.availability[day][idx];
-            if (end <= start) {
-                if (isStart) {
-                    // Set end to 15 min after start, or end of day
-                    employeeState.availability[day][idx][1] = Math.min(start + 0.25, employeeState.endHour);
-                } else {
-                    // Set start to 15 min before end, or start of day
-                    employeeState.availability[day][idx][0] = Math.max(end - 0.25, employeeState.startHour);
-                }
-                renderAvailabilityTable();
-            }
-            
-            updateAvailabilityStats();
+    // Time input group changes
+    document.querySelectorAll('.time-input-group select').forEach(select => {
+        select.addEventListener('change', () => {
+            updateTimeFromInputs(select.closest('.time-input-group'));
         });
+        
+        // Handle keyboard shortcuts for AM/PM
+        if (select.classList.contains('time-ampm')) {
+            select.addEventListener('keydown', (e) => {
+                if (e.key.toLowerCase() === 'a') {
+                    select.value = 'am';
+                    updateTimeFromInputs(select.closest('.time-input-group'));
+                } else if (e.key.toLowerCase() === 'p') {
+                    select.value = 'pm';
+                    updateTimeFromInputs(select.closest('.time-input-group'));
+                }
+            });
+        }
     });
     
     // Add button
@@ -2032,13 +2054,13 @@ function setupAvailabilityTableListeners() {
         });
     });
     
-    // Remove last time range button
-    document.querySelectorAll('.avail-remove-btn').forEach(btn => {
+    // Remove individual row button
+    document.querySelectorAll('.avail-remove-row-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const day = parseInt(btn.dataset.day);
-            if (employeeState.availability[day] && employeeState.availability[day].length > 0) {
-                // Remove the last time range
-                employeeState.availability[day].pop();
+            const idx = parseInt(btn.dataset.idx);
+            if (employeeState.availability[day]) {
+                employeeState.availability[day].splice(idx, 1);
                 if (employeeState.availability[day].length === 0) {
                     delete employeeState.availability[day];
                 }
@@ -2047,6 +2069,40 @@ function setupAvailabilityTableListeners() {
             }
         });
     });
+}
+
+function updateTimeFromInputs(inputGroup) {
+    const type = inputGroup.dataset.type;
+    const day = parseInt(inputGroup.dataset.day);
+    const idx = parseInt(inputGroup.dataset.idx);
+    
+    const hour = inputGroup.querySelector('.time-hour').value;
+    const min = inputGroup.querySelector('.time-min').value;
+    const ampm = inputGroup.querySelector('.time-ampm').value;
+    
+    const decimal = timePartsToDecimal(hour, min, ampm);
+    
+    if (!employeeState.availability[day]) return;
+    
+    const isStart = type === 'start';
+    if (isStart) {
+        employeeState.availability[day][idx][0] = decimal;
+    } else {
+        employeeState.availability[day][idx][1] = decimal;
+    }
+    
+    // Validate: end must be after start
+    const [start, end] = employeeState.availability[day][idx];
+    if (end <= start) {
+        if (isStart) {
+            employeeState.availability[day][idx][1] = Math.min(start + 0.25, employeeState.endHour);
+        } else {
+            employeeState.availability[day][idx][0] = Math.max(end - 0.25, employeeState.startHour);
+        }
+        renderAvailabilityTable();
+    }
+    
+    updateAvailabilityStats();
 }
 
 function isHourAvailable(day, hour) {
