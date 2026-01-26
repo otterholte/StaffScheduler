@@ -15,7 +15,8 @@ from models import (
 )
 from scheduler.models import (
     BusinessScenario, Employee, Role, TimeSlot, EmployeeClassification,
-    ShiftTemplate, ShiftRoleRequirement, CoverageMode, Schedule, ShiftAssignment
+    ShiftTemplate, ShiftRoleRequirement, CoverageMode, Schedule, ShiftAssignment,
+    AvailabilityRange
 )
 
 
@@ -281,8 +282,13 @@ def _save_single_employee_to_db(business_db_id: int, emp: Employee):
     db_emp.hourly_rate = emp.hourly_rate
     db_emp.weekend_shifts_worked = emp.weekend_shifts_worked
     
-    # Save availability
+    # Save availability - include both ranges (with 15-min precision) and slots (for compatibility)
     avail_data = {
+        # New range-based format (preserves 15-min precision)
+        'availability_ranges': [r.to_dict() for r in emp.availability_ranges],
+        'preference_ranges': [r.to_dict() for r in emp.preference_ranges],
+        'time_off_ranges': [r.to_dict() for r in emp.time_off_ranges],
+        # Legacy slot-based format (for backward compatibility)
         'availability': [{'day': s.day, 'hour': s.hour} for s in emp.availability],
         'preferences': [{'day': s.day, 'hour': s.hour} for s in emp.preferences],
         'time_off': [{'day': s.day, 'hour': s.hour} for s in emp.time_off]
@@ -300,9 +306,38 @@ def _db_employee_to_model(db_emp: DBEmployee) -> Employee:
     
     # Parse availability
     avail_data = db_emp.get_availability_data()
+    
+    # Load ranges if available (new format with 15-min precision)
+    availability_ranges = [
+        AvailabilityRange.from_dict(r) for r in avail_data.get('availability_ranges', [])
+    ]
+    preference_ranges = [
+        AvailabilityRange.from_dict(r) for r in avail_data.get('preference_ranges', [])
+    ]
+    time_off_ranges = [
+        AvailabilityRange.from_dict(r) for r in avail_data.get('time_off_ranges', [])
+    ]
+    
+    # Load legacy slot-based availability
     availability = {TimeSlot(s['day'], s['hour']) for s in avail_data.get('availability', [])}
     preferences = {TimeSlot(s['day'], s['hour']) for s in avail_data.get('preferences', [])}
     time_off = {TimeSlot(s['day'], s['hour']) for s in avail_data.get('time_off', [])}
+    
+    # If we have ranges but no slots, generate slots from ranges
+    if availability_ranges and not availability:
+        for r in availability_ranges:
+            for slot in r.to_time_slots():
+                availability.add(slot)
+    
+    if preference_ranges and not preferences:
+        for r in preference_ranges:
+            for slot in r.to_time_slots():
+                preferences.add(slot)
+    
+    if time_off_ranges and not time_off:
+        for r in time_off_ranges:
+            for slot in r.to_time_slots():
+                time_off.add(slot)
     
     return Employee(
         id=db_emp.employee_id,
@@ -314,6 +349,9 @@ def _db_employee_to_model(db_emp: DBEmployee) -> Employee:
         min_hours=db_emp.min_hours,
         max_hours=db_emp.max_hours,
         roles=db_emp.get_roles_list(),
+        availability_ranges=availability_ranges,
+        preference_ranges=preference_ranges,
+        time_off_ranges=time_off_ranges,
         availability=availability,
         preferences=preferences,
         time_off=time_off,

@@ -36,6 +36,61 @@ class TimeSlot:
 
 
 @dataclass
+class AvailabilityRange:
+    """Represents a time range with 15-minute precision.
+    
+    Times are stored as decimal hours (e.g., 9.25 = 9:15 AM, 17.5 = 5:30 PM).
+    """
+    day: int  # 0=Monday, 6=Sunday
+    start_time: float  # Decimal hours (9.25 = 9:15 AM)
+    end_time: float    # Decimal hours (17.5 = 5:30 PM)
+    
+    def __hash__(self):
+        return hash((self.day, self.start_time, self.end_time))
+    
+    def __eq__(self, other):
+        if not isinstance(other, AvailabilityRange):
+            return False
+        return (self.day == other.day and 
+                self.start_time == other.start_time and 
+                self.end_time == other.end_time)
+    
+    @property
+    def duration_hours(self) -> float:
+        """Get the duration in hours."""
+        return self.end_time - self.start_time
+    
+    def contains_hour(self, hour: int) -> bool:
+        """Check if this range covers a given whole hour slot."""
+        # A range covers an hour if any part of the hour is within the range
+        return self.start_time < (hour + 1) and self.end_time > hour
+    
+    def to_dict(self) -> dict:
+        return {
+            "day": self.day,
+            "start": self.start_time,
+            "end": self.end_time
+        }
+    
+    @staticmethod
+    def from_dict(data: dict) -> 'AvailabilityRange':
+        return AvailabilityRange(
+            day=data['day'],
+            start_time=data['start'],
+            end_time=data['end']
+        )
+    
+    def to_time_slots(self) -> List['TimeSlot']:
+        """Convert this range to a list of hour-based TimeSlots (for solver compatibility)."""
+        slots = []
+        start_hour = int(self.start_time)
+        end_hour = int(self.end_time) if self.end_time == int(self.end_time) else int(self.end_time) + 1
+        for hour in range(start_hour, end_hour):
+            slots.append(TimeSlot(self.day, hour))
+        return slots
+
+
+@dataclass
 class Role:
     """Represents a job role/position."""
     id: str
@@ -230,7 +285,12 @@ class Employee:
     # Roles this employee can fill
     roles: List[str] = field(default_factory=list)
     
-    # Availability and preferences
+    # Availability stored as ranges (with 15-minute precision)
+    availability_ranges: List[AvailabilityRange] = field(default_factory=list)
+    preference_ranges: List[AvailabilityRange] = field(default_factory=list)
+    time_off_ranges: List[AvailabilityRange] = field(default_factory=list)
+    
+    # Legacy slot-based availability (auto-generated from ranges for solver compatibility)
     availability: Set[TimeSlot] = field(default_factory=set)  # Hard: can work
     preferences: Set[TimeSlot] = field(default_factory=set)   # Soft: wants to work
     time_off: Set[TimeSlot] = field(default_factory=set)      # Hard: blocked
@@ -256,6 +316,18 @@ class Employee:
         slot = TimeSlot(day, hour)
         return slot in self.availability and slot not in self.time_off
     
+    def is_available_at_time(self, day: int, time: float) -> bool:
+        """Check if employee is available at a specific time with 15-min precision."""
+        # Check if any availability range covers this time
+        for r in self.availability_ranges:
+            if r.day == day and r.start_time <= time < r.end_time:
+                # Check not blocked by time-off
+                for t in self.time_off_ranges:
+                    if t.day == day and t.start_time <= time < t.end_time:
+                        return False
+                return True
+        return False
+    
     def prefers(self, day: int, hour: int) -> bool:
         """Check if employee prefers to work at this time."""
         return TimeSlot(day, hour) in self.preferences
@@ -268,25 +340,85 @@ class Employee:
         """Check if employee can fill a specific role."""
         return role_id in self.roles
     
-    def add_availability(self, day: int, start_hour: int, end_hour: int):
-        """Add availability for a range of hours on a specific day."""
-        for hour in range(start_hour, end_hour):
-            self.availability.add(TimeSlot(day, hour))
+    def add_availability(self, day: int, start_time: float, end_time: float):
+        """Add availability for a time range on a specific day.
+        
+        Supports 15-minute precision (e.g., 9.25 for 9:15 AM).
+        Also updates the slot-based availability for solver compatibility.
+        """
+        # Add to ranges
+        new_range = AvailabilityRange(day, start_time, end_time)
+        self.availability_ranges.append(new_range)
+        
+        # Also add to slots for solver compatibility
+        for slot in new_range.to_time_slots():
+            self.availability.add(slot)
     
-    def add_preference(self, day: int, start_hour: int, end_hour: int):
-        """Add preferred hours for a specific day."""
-        for hour in range(start_hour, end_hour):
-            self.preferences.add(TimeSlot(day, hour))
+    def add_preference(self, day: int, start_time: float, end_time: float):
+        """Add preferred hours for a specific day with 15-min precision."""
+        new_range = AvailabilityRange(day, start_time, end_time)
+        self.preference_ranges.append(new_range)
+        
+        for slot in new_range.to_time_slots():
+            self.preferences.add(slot)
     
-    def add_time_off(self, day: int, start_hour: int = None, end_hour: int = None):
-        """Block time off. If no hours specified, blocks entire day."""
-        if start_hour is None or end_hour is None:
-            # Block all possible hours (0-23) for the day
+    def add_time_off(self, day: int, start_time: float = None, end_time: float = None):
+        """Block time off. If no times specified, blocks entire day."""
+        if start_time is None or end_time is None:
+            # Block all possible hours (0-24) for the day
+            new_range = AvailabilityRange(day, 0, 24)
+            self.time_off_ranges.append(new_range)
             for hour in range(24):
                 self.time_off.add(TimeSlot(day, hour))
         else:
-            for hour in range(start_hour, end_hour):
-                self.time_off.add(TimeSlot(day, hour))
+            new_range = AvailabilityRange(day, start_time, end_time)
+            self.time_off_ranges.append(new_range)
+            for slot in new_range.to_time_slots():
+                self.time_off.add(slot)
+    
+    def clear_availability(self):
+        """Clear all availability data."""
+        self.availability_ranges.clear()
+        self.availability.clear()
+    
+    def clear_preferences(self):
+        """Clear all preference data."""
+        self.preference_ranges.clear()
+        self.preferences.clear()
+    
+    def clear_time_off(self):
+        """Clear all time-off data."""
+        self.time_off_ranges.clear()
+        self.time_off.clear()
+    
+    def get_availability_for_day(self, day: int) -> List[AvailabilityRange]:
+        """Get all availability ranges for a specific day."""
+        return [r for r in self.availability_ranges if r.day == day]
+    
+    def get_total_available_hours(self) -> float:
+        """Calculate total available hours per week from ranges."""
+        total = 0.0
+        for r in self.availability_ranges:
+            total += r.duration_hours
+        return total
+    
+    def rebuild_slots_from_ranges(self):
+        """Rebuild slot-based availability from ranges (for solver compatibility)."""
+        self.availability.clear()
+        self.preferences.clear()
+        self.time_off.clear()
+        
+        for r in self.availability_ranges:
+            for slot in r.to_time_slots():
+                self.availability.add(slot)
+        
+        for r in self.preference_ranges:
+            for slot in r.to_time_slots():
+                self.preferences.add(slot)
+        
+        for r in self.time_off_ranges:
+            for slot in r.to_time_slots():
+                self.time_off.add(slot)
     
     @property
     def is_full_time(self) -> bool:
@@ -298,6 +430,13 @@ class Employee:
         return 5 if self.is_full_time else 3
     
     def to_dict(self) -> dict:
+        # Group ranges by day for easier frontend consumption
+        availability_by_day = {}
+        for r in self.availability_ranges:
+            if r.day not in availability_by_day:
+                availability_by_day[r.day] = []
+            availability_by_day[r.day].append([r.start_time, r.end_time])
+        
         return {
             "id": self.id,
             "name": self.name,
@@ -307,7 +446,9 @@ class Employee:
             "min_hours": self.min_hours,
             "max_hours": self.max_hours,
             "roles": self.roles,
+            # Include both formats for compatibility
             "availability": [slot.to_dict() for slot in sorted(self.availability, key=lambda s: (s.day, s.hour))],
+            "availability_ranges": availability_by_day,
             "preferences": [slot.to_dict() for slot in sorted(self.preferences, key=lambda s: (s.day, s.hour))],
             "time_off": [slot.to_dict() for slot in sorted(self.time_off, key=lambda s: (s.day, s.hour))],
             "needs_supervision": self.needs_supervision,

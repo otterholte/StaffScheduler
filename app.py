@@ -679,10 +679,16 @@ def employee_availability(business_slug, employee_id):
             return redirect('/')
         print(f"[DEBUG] Employee model found: {employee.name}")
         
-        # Get availability data - convert TimeSlot set to dict of day -> [[start, end], ...]
+        # Get availability data - use availability_ranges if available (preserves 15-min precision)
         availability_data = {}
-        if hasattr(employee, 'availability') and employee.availability:
-            # Group by day
+        if hasattr(employee, 'availability_ranges') and employee.availability_ranges:
+            # Use the new range-based format with 15-minute precision
+            for r in employee.availability_ranges:
+                if r.day not in availability_data:
+                    availability_data[r.day] = []
+                availability_data[r.day].append([r.start_time, r.end_time])
+        elif hasattr(employee, 'availability') and employee.availability:
+            # Fall back to converting from slot-based availability
             from collections import defaultdict
             day_hours = defaultdict(list)
             for slot in employee.availability:
@@ -782,7 +788,11 @@ def get_employee_schedule(business_slug, employee_id):
 
 @app.route('/api/employee/<int:employee_id>/availability', methods=['PUT'])
 def employee_update_availability(employee_id):
-    """Employee API to update their own availability (no login required for testing)."""
+    """Employee API to update their own availability with 15-minute precision.
+    
+    Accepts range format: {"availability": {"0": [[9, 17], [18.5, 21]], ...}}
+    Times are decimal hours (9.25 = 9:15 AM, 17.5 = 5:30 PM).
+    """
     global _solver
     data = request.json
     business_id = data.get('business_id')
@@ -809,40 +819,24 @@ def employee_update_availability(employee_id):
     if not employee:
         return jsonify({'success': False, 'error': 'Employee not found in business'}), 404
     
-    # Clear existing availability (it's a set, not a dict)
-    employee.availability.clear()
+    # Clear existing availability (both ranges and slots)
+    employee.clear_availability()
     
-    # Add new availability
-    for day_str, slots in new_availability.items():
+    # Add new availability with 15-minute precision
+    for day_str, ranges in new_availability.items():
         day = int(day_str)
-        for start, end in slots:
-            employee.add_availability(day, start, end)
+        for start, end in ranges:
+            employee.add_availability(day, float(start), float(end))
     
     # Reset solver since availability changed
     _solver = None
     
-    # Return serializable availability data
+    # Return the availability ranges (preserving 15-min precision)
     avail_data = {}
-    from collections import defaultdict
-    day_hours = defaultdict(list)
-    for slot in employee.availability:
-        day_hours[slot.day].append(slot.hour)
-    
-    for day, hours in day_hours.items():
-        hours = sorted(hours)
-        ranges = []
-        if hours:
-            start = hours[0]
-            end = hours[0] + 1
-            for h in hours[1:]:
-                if h == end:
-                    end = h + 1
-                else:
-                    ranges.append([start, end])
-                    start = h
-                    end = h + 1
-            ranges.append([start, end])
-        avail_data[day] = ranges
+    for r in employee.availability_ranges:
+        if r.day not in avail_data:
+            avail_data[r.day] = []
+        avail_data[r.day].append([r.start_time, r.end_time])
     
     # Sync to database for persistence (get owner_id from DB)
     try:
@@ -3264,11 +3258,13 @@ def email_status():
 @app.route('/api/employees/<emp_id>/availability', methods=['PUT'])
 @login_required
 def update_availability(emp_id):
-    """Update an employee's availability.
+    """Update an employee's availability with 15-minute precision support.
     
     Accepts either:
     - Individual slots: {"availability": [{"day": 0, "hour": 9}, ...]}
     - Range format: {"availability": {"0": [[9, 17], [18.5, 21]], ...}}
+    
+    Range format preserves 15-minute precision (e.g., 9.25 = 9:15 AM).
     """
     global _solver
     business = get_current_business()
@@ -3287,36 +3283,53 @@ def update_availability(emp_id):
             'message': 'Employee not found'
         }), 404
     
-    # Clear existing
-    employee.availability.clear()
-    employee.preferences.clear()
-    employee.time_off.clear()
+    # Clear existing availability (both ranges and slots)
+    employee.clear_availability()
+    employee.clear_preferences()
+    employee.clear_time_off()
     
     availability_data = data.get('availability', [])
     
     # Check if availability is in range format (dict) or slot format (list)
     if isinstance(availability_data, dict):
         # Range format: {"0": [[9, 17.5], [18, 21]], "1": [[9.25, 17]], ...}
+        # This preserves 15-minute precision
         for day_str, ranges in availability_data.items():
             day = int(day_str)
             for start, end in ranges:
-                # Add slots for each hour in the range (handles decimals)
-                # For 15-min granularity, we still need to store the decimal values somewhere
-                # For now, store whole hours but round appropriately
-                start_hour = int(start)
-                end_hour = int(end) if end == int(end) else int(end) + 1
-                for hour in range(start_hour, end_hour):
-                    employee.availability.add(TimeSlot(day, hour))
+                # Use add_availability which stores both ranges and slots
+                employee.add_availability(day, float(start), float(end))
     else:
         # Slot format: [{"day": 0, "hour": 9}, ...]
+        # Group by day and create ranges from consecutive hours
+        from collections import defaultdict
+        day_hours = defaultdict(list)
         for slot in availability_data:
-            employee.availability.add(TimeSlot(slot['day'], slot['hour']))
+            day_hours[slot['day']].append(slot['hour'])
+        
+        for day, hours in day_hours.items():
+            hours = sorted(set(hours))
+            if not hours:
+                continue
+            # Convert to ranges
+            start = hours[0]
+            end = hours[0] + 1
+            for h in hours[1:]:
+                if h == end:
+                    end = h + 1
+                else:
+                    employee.add_availability(day, float(start), float(end))
+                    start = h
+                    end = h + 1
+            employee.add_availability(day, float(start), float(end))
     
+    # Handle preferences (slot format only for now)
     for slot in data.get('preferences', []):
-        employee.preferences.add(TimeSlot(slot['day'], slot['hour']))
+        employee.add_preference(slot['day'], float(slot['hour']), float(slot['hour'] + 1))
     
+    # Handle time-off (slot format only for now)
     for slot in data.get('time_off', []):
-        employee.time_off.add(TimeSlot(slot['day'], slot['hour']))
+        employee.add_time_off(slot['day'], float(slot['hour']), float(slot['hour'] + 1))
     
     _solver = None  # Reset solver
     

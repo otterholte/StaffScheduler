@@ -7443,7 +7443,13 @@ function calculateAvailableHoursFromRanges(rangesObj) {
 }
 
 function getAvailabilityRangesForDay(emp, dataDay) {
-    // Get all availability slots for this day
+    // First, check if we have availability_ranges (new format with 15-min precision)
+    if (emp.availability_ranges && emp.availability_ranges[dataDay]) {
+        // availability_ranges is { day: [[start, end], ...] }
+        return emp.availability_ranges[dataDay].map(r => [r[0], r[1]]);
+    }
+    
+    // Fall back to converting from slot-based availability
     const slots = emp.availability.filter(s => s.day === dataDay).map(s => s.hour);
     if (slots.length === 0) return [];
     
