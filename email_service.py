@@ -168,7 +168,9 @@ class EmailService:
         to_email: str,
         employee_name: str,
         business_name: str,
-        portal_url: str
+        portal_url: str,
+        login_url: Optional[str] = None,
+        temp_password: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
         Send a portal invitation email to an employee.
@@ -178,11 +180,59 @@ class EmailService:
             employee_name: Employee's name
             business_name: Name of the business
             portal_url: Full URL to the employee portal
+            login_url: URL to the login page (optional)
+            temp_password: Temporary password for first login (optional, if None user already has account)
             
         Returns:
             Tuple of (success: bool, message: str)
         """
         subject = f"You're invited to view your schedule at {business_name}"
+        
+        # Build login credentials section if temp_password provided
+        if temp_password and login_url:
+            credentials_html = f"""
+                        <div style="background-color: #f0f4ff; border: 1px solid #467df6; border-radius: 10px; padding: 20px; margin: 20px 0;">
+                            <h3 style="margin: 0 0 15px; font-size: 16px; color: #1a1a2e;">
+                                🔐 Your Login Credentials
+                            </h3>
+                            <p style="margin: 0 0 10px; font-size: 14px; color: #5a5a70;">
+                                <strong>Email:</strong> {to_email}
+                            </p>
+                            <p style="margin: 0 0 15px; font-size: 14px; color: #5a5a70;">
+                                <strong>Temporary Password:</strong> <code style="background: #e0e0e0; padding: 2px 8px; border-radius: 4px; font-family: monospace;">{temp_password}</code>
+                            </p>
+                            <p style="margin: 0; font-size: 13px; color: #e74c3c;">
+                                ⚠️ You'll be asked to change your password on first login.
+                            </p>
+                        </div>
+                        
+                        <!-- Login Button -->
+                        <div style="text-align: center; margin: 25px 0;">
+                            <a href="{login_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #467df6 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                Log In Now
+                            </a>
+                        </div>
+"""
+            credentials_text = f"""
+YOUR LOGIN CREDENTIALS
+----------------------
+Email: {to_email}
+Temporary Password: {temp_password}
+
+⚠️ You'll be asked to change your password on first login.
+
+Log in here: {login_url}
+"""
+        else:
+            credentials_html = """
+                        <!-- CTA Button -->
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{portal_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #467df6 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                View My Schedule
+                            </a>
+                        </div>
+""".format(portal_url=portal_url)
+            credentials_text = ""
         
         html_body = f"""
 <!DOCTYPE html>
@@ -221,14 +271,11 @@ class EmailService:
                             <li>View your weekly schedule</li>
                             <li>See who you're working with</li>
                             <li>Update your availability</li>
+                            <li>Request time off</li>
+                            <li>Request shift swaps</li>
                         </ul>
                         
-                        <!-- CTA Button -->
-                        <div style="text-align: center; margin: 30px 0;">
-                            <a href="{portal_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #467df6 0%, #a855f7 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
-                                View My Schedule
-                            </a>
-                        </div>
+                        {credentials_html}
                         
                         <p style="margin: 25px 0 0; font-size: 14px; color: #9090a0; line-height: 1.6;">
                             Or copy and paste this link into your browser:<br>
@@ -257,7 +304,9 @@ From the portal, you can:
 - View your weekly schedule
 - See who you're working with
 - Update your availability
-
+- Request time off
+- Request shift swaps
+{credentials_text}
 Click here to view your schedule:
 {portal_url}
 

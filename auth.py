@@ -50,16 +50,42 @@ def login():
             user.last_login = datetime.utcnow()
             db.session.commit()
             
+            # Check if user needs to change password (temp password on first login)
+            if user.must_change_password:
+                if request.is_json:
+                    return jsonify({
+                        'success': True, 
+                        'user': user.to_dict(),
+                        'redirect': '/auth/change-password',
+                        'must_change_password': True
+                    })
+                return redirect(url_for('auth.change_password'))
+            
+            # Determine redirect based on user type
+            if user.is_employee and user.linked_employee:
+                # Employee user - redirect to their portal
+                db_employee = user.linked_employee
+                # Get the business slug from the employee's business
+                from models import BusinessSettings
+                business_setting = BusinessSettings.query.filter_by(id=db_employee.business_db_id).first()
+                if business_setting:
+                    redirect_url = f'/employee/{business_setting.business_id.replace("user_", "").replace("_", "-")}/{db_employee.id}/schedule'
+                else:
+                    redirect_url = '/login'  # Fallback
+            else:
+                # Manager user - redirect to their business
+                redirect_url = '/sunrise-coffee/schedule'  # Default, will be updated with proper business
+            
             if request.is_json:
                 return jsonify({
                     'success': True, 
                     'user': user.to_dict(),
-                    'redirect': '/sunrise-coffee/schedule'
+                    'redirect': redirect_url
                 })
             
-            # Redirect to next page or home
+            # Redirect to next page or determined destination
             next_page = request.args.get('next')
-            return redirect(next_page if next_page else '/sunrise-coffee/schedule')
+            return redirect(next_page if next_page else redirect_url)
         else:
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Invalid username/email or password.'}), 401
@@ -270,6 +296,77 @@ def delete_user_account():
         'success': True,
         'message': f'Account "{username}" has been deleted.'
     })
+
+
+@auth_bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Force password change for users with temporary passwords."""
+    # If user doesn't need to change password, redirect to appropriate page
+    if not current_user.must_change_password:
+        if current_user.is_employee and current_user.linked_employee:
+            db_employee = current_user.linked_employee
+            from models import BusinessSettings
+            business_setting = BusinessSettings.query.filter_by(id=db_employee.business_db_id).first()
+            if business_setting:
+                return redirect(f'/employee/{business_setting.business_id.replace("user_", "").replace("_", "-")}/{db_employee.id}/schedule')
+        return redirect('/sunrise-coffee/schedule')
+    
+    if request.method == 'POST':
+        # Handle both form and JSON submissions
+        if request.is_json:
+            data = request.get_json()
+            new_password = data.get('new_password', '')
+            confirm_password = data.get('confirm_password', '')
+        else:
+            new_password = request.form.get('new_password', '')
+            confirm_password = request.form.get('confirm_password', '')
+        
+        errors = []
+        
+        if not new_password:
+            errors.append('New password is required.')
+        elif len(new_password) < 8:
+            errors.append('Password must be at least 8 characters.')
+        
+        if new_password != confirm_password:
+            errors.append('Passwords do not match.')
+        
+        if errors:
+            if request.is_json:
+                return jsonify({'success': False, 'errors': errors}), 400
+            for error in errors:
+                flash(error, 'error')
+            return render_template('change_password.html')
+        
+        # Update password and clear the flag
+        current_user.set_password(new_password)
+        current_user.must_change_password = False
+        db.session.commit()
+        
+        # Determine redirect URL
+        if current_user.is_employee and current_user.linked_employee:
+            db_employee = current_user.linked_employee
+            from models import BusinessSettings
+            business_setting = BusinessSettings.query.filter_by(id=db_employee.business_db_id).first()
+            if business_setting:
+                redirect_url = f'/employee/{business_setting.business_id.replace("user_", "").replace("_", "-")}/{db_employee.id}/schedule'
+            else:
+                redirect_url = '/login'
+        else:
+            redirect_url = '/sunrise-coffee/schedule'
+        
+        if request.is_json:
+            return jsonify({
+                'success': True,
+                'message': 'Password changed successfully.',
+                'redirect': redirect_url
+            })
+        
+        flash('Password changed successfully!', 'success')
+        return redirect(redirect_url)
+    
+    return render_template('change_password.html')
 
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])

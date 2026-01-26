@@ -17,7 +17,7 @@ def generate_uuid():
 
 
 class User(db.Model, UserMixin):
-    """User model for authentication."""
+    """User model for authentication (managers and employees)."""
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -28,18 +28,35 @@ class User(db.Model, UserMixin):
     # Profile info
     first_name = db.Column(db.String(50), nullable=True)
     last_name = db.Column(db.String(50), nullable=True)
-    company_name = db.Column(db.String(100), nullable=True)
+    company_name = db.Column(db.String(100), nullable=True)  # Set for managers only
+    
+    # Employee linking (set for employee users, NULL for managers)
+    linked_employee_id = db.Column(db.Integer, db.ForeignKey('db_employees.id'), nullable=True)
     
     # Account status
     is_active = db.Column(db.Boolean, default=True)
     is_verified = db.Column(db.Boolean, default=False)
+    must_change_password = db.Column(db.Boolean, default=False)  # True for temp passwords
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     
+    # Relationship to linked employee
+    linked_employee = db.relationship('DBEmployee', backref='user_account', foreign_keys=[linked_employee_id])
+    
     def __repr__(self):
         return f'<User {self.username}>'
+    
+    @property
+    def is_employee(self):
+        """Check if this user is an employee (has linked employee record)."""
+        return self.linked_employee_id is not None
+    
+    @property
+    def is_manager(self):
+        """Check if this user is a manager (has company_name set)."""
+        return self.company_name is not None and self.company_name.strip() != ''
     
     def set_password(self, password):
         """Hash and set the user's password."""
@@ -59,6 +76,10 @@ class User(db.Model, UserMixin):
             'last_name': self.last_name,
             'company_name': self.company_name,
             'is_verified': self.is_verified,
+            'is_employee': self.is_employee,
+            'is_manager': self.is_manager,
+            'linked_employee_id': self.linked_employee_id,
+            'must_change_password': self.must_change_password,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
         }

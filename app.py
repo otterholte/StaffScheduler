@@ -15,6 +15,8 @@ import uuid
 import json
 import os
 import re
+import secrets
+import string
 from scheduler import (
     AdvancedScheduleSolver,
     get_all_businesses,
@@ -47,6 +49,75 @@ def get_site_url():
         return site_url.rstrip('/')
     # Fall back to request host for local development
     return request.host_url.rstrip('/')
+
+
+def generate_temp_password(length=10):
+    """Generate a random temporary password."""
+    # Use letters and digits, avoiding confusing characters like 0/O, 1/l
+    alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def create_or_get_employee_user(db_employee, employee_email, employee_name):
+    """Create a User account for an employee or return existing one.
+    
+    Returns:
+        tuple: (user, temp_password) - temp_password is None if user already exists
+    """
+    # Check if user already exists with this email
+    existing_user = User.query.filter_by(email=employee_email.lower()).first()
+    
+    if existing_user:
+        # User exists - check if it's linked to this employee
+        if existing_user.linked_employee_id == db_employee.id:
+            # Already linked to this employee, no new password needed
+            return existing_user, None
+        elif existing_user.linked_employee_id is None:
+            # User exists but not linked to any employee - link them
+            existing_user.linked_employee_id = db_employee.id
+            db.session.commit()
+            return existing_user, None
+        else:
+            # User is linked to a different employee - this email is already taken
+            print(f"[EMPLOYEE_USER] Email {employee_email} is already linked to another employee", flush=True)
+            return None, None
+    
+    # Create new user account for employee
+    temp_password = generate_temp_password()
+    
+    # Generate username from email (before the @)
+    base_username = employee_email.split('@')[0].lower()
+    # Sanitize username - only allow alphanumeric and underscore
+    base_username = re.sub(r'[^a-z0-9_]', '', base_username)
+    if len(base_username) < 3:
+        base_username = 'employee_' + base_username
+    
+    # Ensure username is unique
+    username = base_username
+    counter = 1
+    while User.query.filter_by(username=username).first():
+        username = f"{base_username}{counter}"
+        counter += 1
+    
+    # Create the user
+    new_user = User(
+        email=employee_email.lower(),
+        username=username,
+        first_name=employee_name.split()[0] if employee_name else '',
+        last_name=' '.join(employee_name.split()[1:]) if employee_name and len(employee_name.split()) > 1 else '',
+        linked_employee_id=db_employee.id,
+        must_change_password=True,
+        is_active=True,
+        is_verified=True  # Consider them verified since manager invited them
+    )
+    new_user.set_password(temp_password)
+    
+    db.session.add(new_user)
+    db.session.commit()
+    
+    print(f"[EMPLOYEE_USER] Created user account for {employee_email} (username: {username})", flush=True)
+    
+    return new_user, temp_password
 
 
 def create_app():
@@ -410,8 +481,9 @@ def demo_page(page_slug='schedule'):
 
 
 @app.route('/<location_slug>/<page_slug>')
+@login_required
 def app_page(location_slug, page_slug):
-    """Render the main app with specified location and page."""
+    """Render the main app with specified location and page (manager view)."""
     global _current_business, _solver
     
     # Exclude reserved prefixes - these are handled by other routes
@@ -420,8 +492,7 @@ def app_page(location_slug, page_slug):
         abort(404)
     
     # Ensure user's business exists if they have one (in case server restarted)
-    if current_user.is_authenticated:
-        ensure_user_business_exists(current_user)
+    ensure_user_business_exists(current_user)
     
     # Force reload businesses from database to ensure we have the latest
     load_businesses_from_db(force_reload=True)
@@ -440,15 +511,22 @@ def app_page(location_slug, page_slug):
         location_slug = get_business_slug(default_business.id)
         return redirect(f'/{location_slug}/{page_slug}')
     
+    # Built-in demo business IDs - accessible to all authenticated users
+    DEMO_BUSINESS_IDS = {'coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'}
+    
+    # Authorization check: user must own the business OR it must be a demo business
+    is_demo_business = business.id in DEMO_BUSINESS_IDS
+    is_business_owner = business.id.startswith(f'user_{current_user.id}_')
+    
+    if not is_demo_business and not is_business_owner:
+        return render_template('403.html', message="You don't have permission to manage this business."), 403
+    
     # Set this as the current business
     if _current_business is None or _current_business.id != business.id:
         _current_business = business
         _solver = None  # Reset solver when business changes
     
     businesses = get_all_businesses()
-    
-    # Built-in demo business IDs
-    DEMO_BUSINESS_IDS = {'coffee_shop', 'retail_store', 'restaurant', 'call_center', 'warehouse'}
     
     # Default emoji/color mapping for built-in businesses
     business_meta = {
@@ -586,6 +664,7 @@ def contact_page():
 # ==================== EMPLOYEE PORTAL ====================
 
 @app.route('/employee/<business_slug>/<int:employee_id>/schedule')
+@login_required
 def employee_schedule(business_slug, employee_id):
     """Employee schedule view - read-only view of their shifts."""
     # Force reload from database to ensure we have latest employee data
@@ -603,6 +682,13 @@ def employee_schedule(business_slug, employee_id):
             'message': f"Employee not found for {business_slug}",
             'employee_id': employee_id
         }), 404
+    
+    # Authorization check: user must be the employee OR the business manager
+    is_the_employee = (current_user.linked_employee_id == employee_id)
+    is_business_manager = (current_user.is_manager and business.id.startswith(f'user_{current_user.id}_'))
+    
+    if not is_the_employee and not is_business_manager:
+        return render_template('403.html', message="You don't have permission to view this employee's schedule."), 403
     
     # Find the matching Employee model object using the employee_id string
     employee = None
@@ -655,6 +741,7 @@ def employee_schedule(business_slug, employee_id):
 
 
 @app.route('/employee/<business_slug>/<int:employee_id>/availability')
+@login_required
 def employee_availability(business_slug, employee_id):
     """Employee availability editor - edit their own availability."""
     import traceback
@@ -676,6 +763,13 @@ def employee_availability(business_slug, employee_id):
             print(f"[DEBUG] DBEmployee not found for id={employee_id}")
             return redirect('/')
         print(f"[DEBUG] DBEmployee found: name={db_employee.name}, employee_id={db_employee.employee_id}")
+        
+        # Authorization check: user must be the employee OR the business manager
+        is_the_employee = (current_user.linked_employee_id == employee_id)
+        is_business_manager = (current_user.is_manager and business.id.startswith(f'user_{current_user.id}_'))
+        
+        if not is_the_employee and not is_business_manager:
+            return render_template('403.html', message="You don't have permission to edit this employee's availability."), 403
         
         # Find the matching Employee model object
         print(f"[DEBUG] Searching for Employee model with id={db_employee.employee_id} among {len(business.employees)} employees")
@@ -2960,6 +3054,7 @@ def add_employee():
             if not db_emp:
                 raise ValueError("Employee not found in database for invitation URL")
             portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
+            login_url = f"{base_url}/login"
             
             # Get custom business name if available
             business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
@@ -2967,24 +3062,31 @@ def add_employee():
             print(f"[INVITE] portal_url={portal_url}, business_name={business_name}", flush=True)
             
             if data.get('invite_by_email') and employee.email:
-                email_service = get_email_service()
-                print(f"[INVITE] email_service.is_configured()={email_service.is_configured()}", flush=True)
-                if email_service.is_configured():
-                    success, msg = email_service.send_portal_invitation(
-                        to_email=employee.email,
-                        employee_name=employee.name,
-                        business_name=business_name,
-                        portal_url=portal_url
-                    )
-                    print(f"[INVITE] send_portal_invitation result: success={success}, msg={msg}", flush=True)
-                    if success:
-                        invitation_methods.append('email')
-                        invitation_sent = True
-                    else:
-                        invitation_errors.append(f"Email: {msg}")
+                # Create or get employee user account
+                emp_user, temp_password = create_or_get_employee_user(db_emp, employee.email, employee.name)
+                if emp_user is None:
+                    invitation_errors.append("Email is already associated with another account")
                 else:
-                    invitation_errors.append("Email service not configured")
-                    print(f"[INVITE] Email service NOT configured - MAIL_USERNAME={email_service.username}, has_password={bool(email_service.password)}", flush=True)
+                    email_service = get_email_service()
+                    print(f"[INVITE] email_service.is_configured()={email_service.is_configured()}", flush=True)
+                    if email_service.is_configured():
+                        success, msg = email_service.send_portal_invitation(
+                            to_email=employee.email,
+                            employee_name=employee.name,
+                            business_name=business_name,
+                            portal_url=portal_url,
+                            login_url=login_url,
+                            temp_password=temp_password
+                        )
+                        print(f"[INVITE] send_portal_invitation result: success={success}, msg={msg}", flush=True)
+                        if success:
+                            invitation_methods.append('email')
+                            invitation_sent = True
+                        else:
+                            invitation_errors.append(f"Email: {msg}")
+                    else:
+                        invitation_errors.append("Email service not configured")
+                        print(f"[INVITE] Email service NOT configured - MAIL_USERNAME={email_service.username}, has_password={bool(email_service.password)}", flush=True)
             elif data.get('invite_by_email') and not employee.email:
                 invitation_errors.append("No email address provided")
             
@@ -2995,6 +3097,8 @@ def add_employee():
             # Don't fail the whole request if email fails
             invitation_errors.append(f"Failed to send invitation: {str(e)}")
             print(f"[INVITE] Exception: {str(e)}", flush=True)
+            import traceback
+            traceback.print_exc()
     
     response_data = {
         'success': True,
@@ -3082,6 +3186,7 @@ def update_employee(emp_id):
             if not db_emp:
                 raise ValueError("Employee not found in database for invitation URL")
             portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
+            login_url = f"{base_url}/login"
             
             # Get custom business name if available
             business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
@@ -3089,24 +3194,31 @@ def update_employee(emp_id):
             print(f"[INVITE-UPDATE] portal_url={portal_url}, business_name={business_name}", flush=True)
             
             if data.get('invite_by_email') and employee.email:
-                email_service = get_email_service()
-                print(f"[INVITE-UPDATE] email_service.is_configured()={email_service.is_configured()}", flush=True)
-                if email_service.is_configured():
-                    success, msg = email_service.send_portal_invitation(
-                        to_email=employee.email,
-                        employee_name=employee.name,
-                        business_name=business_name,
-                        portal_url=portal_url
-                    )
-                    print(f"[INVITE-UPDATE] send_portal_invitation result: success={success}, msg={msg}", flush=True)
-                    if success:
-                        invitation_methods.append('email')
-                        invitation_sent = True
-                    else:
-                        invitation_errors.append(f"Email: {msg}")
+                # Create or get employee user account
+                emp_user, temp_password = create_or_get_employee_user(db_emp, employee.email, employee.name)
+                if emp_user is None:
+                    invitation_errors.append("Email is already associated with another account")
                 else:
-                    invitation_errors.append("Email service not configured")
-                    print(f"[INVITE-UPDATE] Email service NOT configured - MAIL_USERNAME={email_service.username}, has_password={bool(email_service.password)}", flush=True)
+                    email_service = get_email_service()
+                    print(f"[INVITE-UPDATE] email_service.is_configured()={email_service.is_configured()}", flush=True)
+                    if email_service.is_configured():
+                        success, msg = email_service.send_portal_invitation(
+                            to_email=employee.email,
+                            employee_name=employee.name,
+                            business_name=business_name,
+                            portal_url=portal_url,
+                            login_url=login_url,
+                            temp_password=temp_password
+                        )
+                        print(f"[INVITE-UPDATE] send_portal_invitation result: success={success}, msg={msg}", flush=True)
+                        if success:
+                            invitation_methods.append('email')
+                            invitation_sent = True
+                        else:
+                            invitation_errors.append(f"Email: {msg}")
+                    else:
+                        invitation_errors.append("Email service not configured")
+                        print(f"[INVITE-UPDATE] Email service NOT configured - MAIL_USERNAME={email_service.username}, has_password={bool(email_service.password)}", flush=True)
             elif data.get('invite_by_email') and not employee.email:
                 invitation_errors.append("No email address provided")
             
@@ -3117,6 +3229,8 @@ def update_employee(emp_id):
             # Don't fail the whole request if email fails
             invitation_errors.append(f"Failed to send invitation: {str(e)}")
             print(f"[INVITE-UPDATE] Exception: {str(e)}", flush=True)
+            import traceback
+            traceback.print_exc()
     
     response_data = {
         'success': True,
@@ -3206,6 +3320,7 @@ def send_employee_invitation(emp_id):
             'message': 'Employee not found in database'
         }), 404
     portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
+    login_url = f"{base_url}/login"
     
     # Get custom business name if available
     business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
@@ -3220,6 +3335,14 @@ def send_employee_invitation(emp_id):
                 'message': 'Employee does not have an email address'
             }), 400
         
+        # Create or get employee user account
+        emp_user, temp_password = create_or_get_employee_user(db_emp, employee.email, employee.name)
+        if emp_user is None:
+            return jsonify({
+                'success': False,
+                'message': 'Email is already associated with another account'
+            }), 400
+        
         email_service = get_email_service()
         if not email_service.is_configured():
             return jsonify({
@@ -3231,7 +3354,9 @@ def send_employee_invitation(emp_id):
             to_email=employee.email,
             employee_name=employee.name,
             business_name=business_name,
-            portal_url=portal_url
+            portal_url=portal_url,
+            login_url=login_url,
+            temp_password=temp_password
         )
         
         if success:
