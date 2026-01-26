@@ -80,6 +80,18 @@ def create_app():
 app = create_app()
 
 
+# Prevent browser caching of HTML pages so regular refresh gets fresh data
+@app.after_request
+def add_cache_control_headers(response):
+    """Add cache control headers to prevent browser caching of HTML pages."""
+    # Only for HTML responses (not static files like JS/CSS/images)
+    if response.content_type and 'text/html' in response.content_type:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+
+
 # ==================== URL SLUG HELPERS ====================
 
 # Valid page slugs and their internal tab IDs
