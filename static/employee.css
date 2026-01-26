@@ -4318,3 +4318,151 @@ body.menu-open {
     }
 }
 
+/* ==================== SWAP MODAL - Compact on Mobile ==================== */
+.swap-modal {
+    max-width: 480px;
+    background: #1a1a2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.swap-modal .modal-header {
+    background: #1a1a2e;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1rem 1.25rem;
+}
+
+.swap-modal .modal-body {
+    background: #1a1a2e;
+    padding: 1rem 1.25rem;
+}
+
+.swap-modal .modal-footer {
+    background: #1a1a2e;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.75rem 1.25rem;
+}
+
+/* Swap Modal - Compact on mobile (not full screen) */
+@media (max-width: 768px) {
+    .swap-modal {
+        max-height: 90vh !important;
+        height: auto !important;
+        max-width: calc(100vw - 2rem) !important;
+        width: calc(100vw - 2rem) !important;
+        margin: 1rem !important;
+        border-radius: 16px !important;
+    }
+    
+    .swap-modal .modal-header {
+        padding: 0.875rem 1rem;
+    }
+    
+    .swap-modal .modal-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    .swap-modal .modal-body {
+        padding: 0.875rem 1rem;
+        max-height: calc(90vh - 140px);
+        overflow-y: auto;
+    }
+    
+    .swap-modal .modal-footer {
+        padding: 0.75rem 1rem;
+    }
+    
+    .swap-modal .swap-shift-details {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .swap-modal .swap-form-group {
+        margin-bottom: 0.75rem;
+    }
+    
+    .swap-modal .swap-form-group label {
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .swap-modal .swap-form-group textarea {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .swap-modal .eligible-staff-section h4 {
+        font-size: 0.85rem;
+        margin-bottom: 0.375rem;
+    }
+    
+    .swap-modal .eligible-staff-section p {
+        font-size: 0.8rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .swap-modal .quick-select-buttons {
+        gap: 0.375rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .swap-modal .quick-select-buttons .btn {
+        padding: 0.375rem 0.625rem;
+        font-size: 0.75rem;
+    }
+    
+    .swap-modal .eligible-staff-list {
+        max-height: 180px;
+    }
+    
+    .swap-modal .eligible-item {
+        padding: 0.625rem 0.75rem;
+        min-height: auto;
+    }
+    
+    .swap-modal .eligible-item .staff-avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 0.75rem;
+    }
+    
+    .swap-modal .eligible-item .staff-name {
+        font-size: 0.875rem;
+    }
+    
+    .swap-modal .eligible-item .staff-status {
+        font-size: 0.75rem;
+    }
+}
+
+/* Swap Response Modal - Also compact on mobile */
+.swap-response-modal {
+    max-width: 480px;
+    background: #1a1a2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+    .swap-response-modal {
+        max-height: 90vh !important;
+        height: auto !important;
+        max-width: calc(100vw - 2rem) !important;
+        width: calc(100vw - 2rem) !important;
+        margin: 1rem !important;
+        border-radius: 16px !important;
+    }
+    
+    .swap-response-modal .modal-header {
+        padding: 0.875rem 1rem;
+    }
+    
+    .swap-response-modal .modal-body {
+        padding: 0.875rem 1rem;
+        max-height: calc(90vh - 140px);
+        overflow-y: auto;
+    }
+    
+    .swap-response-modal .modal-footer {
+        padding: 0.75rem 1rem;
+    }
+}
+
