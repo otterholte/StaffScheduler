@@ -113,7 +113,7 @@ const DEBUG_SCHEDULE = (() => {
 
 function debugSchedule(...args) {
     if (DEBUG_SCHEDULE) {
-        console.debug('[ScheduleDebug]', ...args);
+        console.log('[ScheduleDebug]', ...args);
     }
 }
 
