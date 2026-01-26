@@ -7161,76 +7161,70 @@ function timePartsToDecimalManager(hour, min, ampm) {
 function setupManagerAvailTableListeners(emp) {
     const container = document.getElementById('managerAvailTableView');
     console.log('[ManagerAvail] setupManagerAvailTableListeners called, container:', container);
-    console.log('[ManagerAvail] emp:', emp);
-    console.log('[ManagerAvail] managerAvailEdits:', managerAvailEdits);
     if (!container) {
         console.log('[ManagerAvail] Container not found!');
         return;
     }
     
-    // Use event delegation for better reliability
-    container.onclick = (e) => {
-        const target = e.target;
-        console.log('[ManagerAvail] Click detected on:', target);
-        console.log('[ManagerAvail] Target classes:', target.classList);
-        
-        // Handle remove button click
-        if (target.classList.contains('avail-remove-row-btn')) {
+    // Remove button - attach directly to each button
+    container.querySelectorAll('.avail-remove-row-btn').forEach(btn => {
+        console.log('[ManagerAvail] Attaching listener to remove btn:', btn);
+        btn.addEventListener('click', function(e) {
             console.log('[ManagerAvail] Remove button clicked!');
+            e.preventDefault();
             e.stopPropagation();
-            const dataDay = parseInt(target.dataset.day);
-            const idx = parseInt(target.dataset.idx);
+            const dataDay = parseInt(this.dataset.day);
+            const idx = parseInt(this.dataset.idx);
             console.log('[ManagerAvail] dataDay:', dataDay, 'idx:', idx);
-            console.log('[ManagerAvail] managerAvailEdits[dataDay]:', managerAvailEdits[dataDay]);
+            console.log('[ManagerAvail] managerAvailEdits:', managerAvailEdits);
             if (managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay].splice(idx, 1);
                 console.log('[ManagerAvail] After splice:', managerAvailEdits[dataDay]);
                 renderManagerAvailabilityTable(emp);
-            } else {
-                console.log('[ManagerAvail] No edits found for day', dataDay);
             }
-            return;
-        }
-        
-        // Handle add button click
-        if (target.classList.contains('avail-add-btn')) {
-            const dataDay = parseInt(target.dataset.day);
+        });
+    });
+    
+    // Add button
+    container.querySelectorAll('.avail-add-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            console.log('[ManagerAvail] Add button clicked!');
+            e.preventDefault();
+            const dataDay = parseInt(this.dataset.day);
             if (!managerAvailEdits[dataDay]) {
                 managerAvailEdits[dataDay] = [];
             }
             managerAvailEdits[dataDay].push([state.startHour, state.endHour]);
             renderManagerAvailabilityTable(emp);
-            return;
-        }
+        });
+    });
+    
+    // Custom dropdown handlers
+    container.querySelectorAll('.custom-select').forEach(select => {
+        const valueEl = select.querySelector('.custom-select-value');
+        const dropdown = select.querySelector('.custom-select-dropdown');
         
-        // Handle custom select value click (open dropdown)
-        if (target.classList.contains('custom-select-value')) {
+        valueEl.addEventListener('click', (e) => {
             e.stopPropagation();
-            const select = target.closest('.custom-select');
             document.querySelectorAll('.custom-select.open').forEach(s => {
                 if (s !== select) s.classList.remove('open');
             });
             select.classList.toggle('open');
-            return;
-        }
+        });
         
-        // Handle custom select option click
-        if (target.classList.contains('custom-select-option')) {
-            e.stopPropagation();
-            const select = target.closest('.custom-select');
-            const valueEl = select.querySelector('.custom-select-value');
-            const value = target.dataset.value;
-            
-            select.dataset.value = value;
-            valueEl.textContent = target.textContent;
-            select.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
-            target.classList.add('selected');
-            select.classList.remove('open');
-            
-            updateManagerTimeFromInputs(select.closest('.time-input-group'), emp);
-            return;
-        }
-    };
+        dropdown.querySelectorAll('.custom-select-option').forEach(option => {
+            option.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const value = option.dataset.value;
+                select.dataset.value = value;
+                valueEl.textContent = option.textContent;
+                dropdown.querySelectorAll('.custom-select-option').forEach(o => o.classList.remove('selected'));
+                option.classList.add('selected');
+                select.classList.remove('open');
+                updateManagerTimeFromInputs(select.closest('.time-input-group'), emp);
+            });
+        });
+    });
     
     // Close dropdowns when clicking outside
     document.addEventListener('click', () => {
