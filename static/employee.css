@@ -1359,7 +1359,7 @@ body.menu-open {
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 0.85rem;
-    min-width: 70px;
+    min-width: 80px;
     cursor: pointer;
 }
 
@@ -1497,7 +1497,7 @@ body.menu-open {
     }
     
     .avail-time-select {
-        min-width: 62px;
+        min-width: 72px;
         padding: 0.45rem 0.4rem;
         font-size: 0.8rem;
     }

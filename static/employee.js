@@ -1963,20 +1963,25 @@ function renderAvailabilityTable() {
     setupAvailabilityTableListeners();
 }
 
-function generateTimeOptions(selectedHour) {
+function generateTimeOptions(selectedTime) {
     let options = '';
-    for (let h = employeeState.startHour; h <= employeeState.endHour; h++) {
-        const selected = h === selectedHour ? 'selected' : '';
+    // Generate options in 15-minute increments
+    for (let h = employeeState.startHour; h <= employeeState.endHour; h += 0.25) {
+        const selected = h === selectedTime ? 'selected' : '';
         options += `<option value="${h}" ${selected}>${formatTime12(h)}</option>`;
     }
     return options;
 }
 
-function formatTime12(hour) {
-    if (hour === 0) return '12am';
-    if (hour === 12) return '12pm';
-    if (hour < 12) return `${hour}am`;
-    return `${hour - 12}pm`;
+function formatTime12(time) {
+    const hour = Math.floor(time);
+    const minutes = Math.round((time - hour) * 60);
+    const minuteStr = minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : '';
+    
+    if (hour === 0) return `12${minuteStr}am`;
+    if (hour === 12) return `12${minuteStr}pm`;
+    if (hour < 12) return `${hour}${minuteStr}am`;
+    return `${hour - 12}${minuteStr}pm`;
 }
 
 function setupAvailabilityTableListeners() {
@@ -1986,7 +1991,7 @@ function setupAvailabilityTableListeners() {
             const day = parseInt(select.dataset.day);
             const idx = parseInt(select.dataset.idx);
             const isStart = select.classList.contains('avail-start');
-            const value = parseInt(select.value);
+            const value = parseFloat(select.value);
             
             if (!employeeState.availability[day]) return;
             
@@ -2000,9 +2005,11 @@ function setupAvailabilityTableListeners() {
             const [start, end] = employeeState.availability[day][idx];
             if (end <= start) {
                 if (isStart) {
-                    employeeState.availability[day][idx][1] = Math.min(start + 1, employeeState.endHour);
+                    // Set end to 15 min after start, or end of day
+                    employeeState.availability[day][idx][1] = Math.min(start + 0.25, employeeState.endHour);
                 } else {
-                    employeeState.availability[day][idx][0] = Math.max(end - 1, employeeState.startHour);
+                    // Set start to 15 min before end, or start of day
+                    employeeState.availability[day][idx][0] = Math.max(end - 0.25, employeeState.startHour);
                 }
                 renderAvailabilityTable();
             }
@@ -2104,7 +2111,10 @@ function updateAvailabilityStats() {
     const hoursEl = document.getElementById('totalAvailableHours');
     const daysEl = document.getElementById('daysAvailable');
     
-    if (hoursEl) hoursEl.textContent = totalHours;
+    // Format hours nicely (e.g., 8.5 -> "8.5", 8 -> "8")
+    const hoursDisplay = totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1);
+    
+    if (hoursEl) hoursEl.textContent = hoursDisplay;
     if (daysEl) daysEl.textContent = daysAvailable;
 }
 
