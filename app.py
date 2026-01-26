@@ -419,8 +419,9 @@ def app_page(location_slug, page_slug):
         # Try to redirect to schedule for this location
         return redirect(f'/{location_slug}/schedule')
     
-    # Find business by slug
-    business = get_business_by_slug(location_slug)
+    # Find business by slug - force reload from DB to ensure fresh data
+    # (important for multi-worker environments like Railway/Gunicorn)
+    business = get_business_by_slug(location_slug, force_reload=True)
     if not business:
         # Business not found, redirect to default
         default_business = get_current_business()
@@ -3270,6 +3271,9 @@ def update_availability(emp_id):
     business = get_current_business()
     data = request.json
     
+    print(f"[DEBUG update_availability] emp_id={emp_id}", flush=True)
+    print(f"[DEBUG update_availability] Received data: {data}", flush=True)
+    
     # Find employee
     employee = None
     for emp in business.employees:
@@ -3289,6 +3293,8 @@ def update_availability(emp_id):
     employee.clear_time_off()
     
     availability_data = data.get('availability', [])
+    print(f"[DEBUG update_availability] availability_data type: {type(availability_data)}", flush=True)
+    print(f"[DEBUG update_availability] availability_data: {availability_data}", flush=True)
     
     # Check if availability is in range format (dict) or slot format (list)
     if isinstance(availability_data, dict):
@@ -3297,6 +3303,7 @@ def update_availability(emp_id):
         for day_str, ranges in availability_data.items():
             day = int(day_str)
             for start, end in ranges:
+                print(f"[DEBUG update_availability] Adding range: day={day}, start={start} ({type(start)}), end={end} ({type(end)})", flush=True)
                 # Use add_availability which stores both ranges and slots
                 employee.add_availability(day, float(start), float(end))
     else:
@@ -3331,15 +3338,22 @@ def update_availability(emp_id):
     for slot in data.get('time_off', []):
         employee.add_time_off(slot['day'], float(slot['hour']), float(slot['hour'] + 1))
     
+    print(f"[DEBUG update_availability] After adding, availability_ranges: {[r.to_dict() for r in employee.availability_ranges]}", flush=True)
+    
     _solver = None  # Reset solver
     
     # Sync to database for persistence
     if current_user.is_authenticated:
+        print(f"[DEBUG update_availability] Syncing to database...", flush=True)
         sync_business_to_db(business.id, current_user.id, business_obj=business)
+        print(f"[DEBUG update_availability] Synced!", flush=True)
+    
+    emp_dict = employee.to_dict()
+    print(f"[DEBUG update_availability] Returning employee.to_dict()['availability_ranges']: {emp_dict.get('availability_ranges')}", flush=True)
     
     return jsonify({
         'success': True,
-        'employee': employee.to_dict(),
+        'employee': emp_dict,
         'availability': availability_data if isinstance(availability_data, dict) else None,
         'message': 'Availability updated successfully'
     })

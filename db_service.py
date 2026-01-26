@@ -306,11 +306,14 @@ def _db_employee_to_model(db_emp: DBEmployee) -> Employee:
     
     # Parse availability
     avail_data = db_emp.get_availability_data()
+    print(f"[DEBUG _db_employee_to_model] Loading employee {db_emp.name} (id={db_emp.employee_id})", flush=True)
+    print(f"[DEBUG _db_employee_to_model] avail_data: {avail_data}", flush=True)
     
     # Load ranges if available (new format with 15-min precision)
     availability_ranges = [
         AvailabilityRange.from_dict(r) for r in avail_data.get('availability_ranges', [])
     ]
+    print(f"[DEBUG _db_employee_to_model] Loaded availability_ranges: {[r.to_dict() for r in availability_ranges]}", flush=True)
     preference_ranges = [
         AvailabilityRange.from_dict(r) for r in avail_data.get('preference_ranges', [])
     ]
