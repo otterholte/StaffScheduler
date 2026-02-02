@@ -182,6 +182,12 @@ def not_found_error(error):
 @app.errorhandler(Exception)
 def handle_exception(error):
     """Handle unexpected exceptions with detailed logging."""
+    from werkzeug.exceptions import HTTPException
+    
+    # Pass through HTTP exceptions to their specific handlers
+    if isinstance(error, HTTPException):
+        return error
+    
     import traceback
     print("=" * 60, flush=True)
     print(f"[UNHANDLED EXCEPTION] {type(error).__name__}", flush=True)

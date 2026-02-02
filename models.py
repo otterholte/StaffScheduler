@@ -718,3 +718,56 @@ def init_db(app):
     
     with app.app_context():
         db.create_all()
+        
+        # Run migrations to add any missing columns
+        _run_migrations(app)
+
+
+def _run_migrations(app):
+    """Run database migrations to add missing columns.
+    
+    This handles the case where the code has new columns that don't exist
+    in the production database yet.
+    """
+    from sqlalchemy import text, inspect
+    
+    try:
+        inspector = inspect(db.engine)
+        
+        # Check if users table exists
+        if 'users' not in inspector.get_table_names():
+            return  # Table doesn't exist yet, create_all will handle it
+        
+        existing_columns = [col['name'] for col in inspector.get_columns('users')]
+        
+        migrations_run = []
+        
+        # Migration: Add linked_employee_id column
+        if 'linked_employee_id' not in existing_columns:
+            try:
+                db.session.execute(text(
+                    'ALTER TABLE users ADD COLUMN linked_employee_id INTEGER REFERENCES db_employees(id)'
+                ))
+                db.session.commit()
+                migrations_run.append('linked_employee_id')
+            except Exception as e:
+                db.session.rollback()
+                print(f"Migration warning (linked_employee_id): {e}")
+        
+        # Migration: Add must_change_password column
+        if 'must_change_password' not in existing_columns:
+            try:
+                db.session.execute(text(
+                    'ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE'
+                ))
+                db.session.commit()
+                migrations_run.append('must_change_password')
+            except Exception as e:
+                db.session.rollback()
+                print(f"Migration warning (must_change_password): {e}")
+        
+        if migrations_run:
+            print(f"[DB MIGRATION] Added columns to users table: {migrations_run}", flush=True)
+    
+    except Exception as e:
+        print(f"[DB MIGRATION] Warning during migration check: {e}", flush=True)
