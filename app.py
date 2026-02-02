@@ -151,6 +151,52 @@ def create_app():
 app = create_app()
 
 
+# ==================== ERROR HANDLERS ====================
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Handle internal server errors with logging."""
+    import traceback
+    print("=" * 60, flush=True)
+    print("[500 ERROR] Internal Server Error", flush=True)
+    print(f"Error: {error}", flush=True)
+    print(f"URL: {request.url if request else 'Unknown'}", flush=True)
+    print(f"Method: {request.method if request else 'Unknown'}", flush=True)
+    traceback.print_exc()
+    print("=" * 60, flush=True)
+    
+    # Return a JSON error for API routes, HTML for regular pages
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Internal server error', 'message': str(error)}), 500
+    return render_template('features.html', user=None, error_message="Something went wrong. Please try again."), 500
+
+
+@app.errorhandler(404)
+def not_found_error(error):
+    """Handle 404 not found errors."""
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Not found', 'message': 'The requested resource was not found'}), 404
+    return redirect('/')
+
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    """Handle unexpected exceptions with detailed logging."""
+    import traceback
+    print("=" * 60, flush=True)
+    print(f"[UNHANDLED EXCEPTION] {type(error).__name__}", flush=True)
+    print(f"Error: {error}", flush=True)
+    print(f"URL: {request.url if request else 'Unknown'}", flush=True)
+    print(f"Method: {request.method if request else 'Unknown'}", flush=True)
+    traceback.print_exc()
+    print("=" * 60, flush=True)
+    
+    # Return a JSON error for API routes, HTML for regular pages
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Server error', 'message': 'An unexpected error occurred'}), 500
+    return render_template('features.html', user=None, error_message="Something went wrong. Please try again."), 500
+
+
 # Prevent browser caching of HTML pages so regular refresh gets fresh data
 @app.after_request
 def add_cache_control_headers(response):
