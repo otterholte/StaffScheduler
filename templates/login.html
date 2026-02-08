@@ -70,7 +70,7 @@
                 {% endif %}
             {% endwith %}
 
-            <form method="POST" action="{{ url_for('auth.login') }}" class="auth-form" id="loginForm">
+            <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next', '')) }}" class="auth-form" id="loginForm">
                 <div class="form-group">
                     <label for="email">Email or Username</label>
                     <div class="input-wrapper">

@@ -364,6 +364,15 @@ body.menu-open {
     font-weight: 500;
 }
 
+.slide-menu-item-danger {
+    color: #f87171 !important;
+}
+
+.slide-menu-item-danger:hover {
+    background: rgba(248, 113, 113, 0.1) !important;
+    color: #fca5a5 !important;
+}
+
 /* Hide desktop nav elements on mobile when using hamburger */
 .employee-nav {
     display: none;
