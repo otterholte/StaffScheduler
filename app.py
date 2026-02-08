@@ -3056,14 +3056,14 @@ def add_employee():
     business = get_current_business()
     data = request.json
     
-    # Early check: if sending invite by email, verify the email isn't already linked to another employee
+    # Check if email is already in use by another employee
     employee_email = (data.get('email') or '').strip().lower()
-    if data.get('send_invite') and data.get('invite_by_email') and employee_email:
+    if employee_email:
         existing_user = User.query.filter_by(email=employee_email).first()
         if existing_user and existing_user.linked_employee_id is not None:
             return jsonify({
                 'success': False,
-                'message': f'The email "{employee_email}" is already linked to another employee account. Please use a different email address.'
+                'message': f'An employee account already exists with the email "{employee_email}". Please use a different email address.'
             }), 400
     
     # Generate unique ID
@@ -3317,7 +3317,7 @@ def delete_employee(emp_id):
     global _solver
     business = get_current_business()
     
-    # Find and remove employee
+    # Find and remove employee from in-memory list
     employee = None
     for i, emp in enumerate(business.employees):
         if emp.id == emp_id:
@@ -3325,12 +3325,57 @@ def delete_employee(emp_id):
             break
     
     if not employee:
+        # Employee not in memory — may be a multi-worker sync issue.
+        # Try to reload business from DB and retry.
+        try:
+            from scheduler.businesses import get_business_by_id as _get_biz
+            reloaded = _get_biz(business.id, force_reload=True)
+            if reloaded:
+                business = reloaded
+                for i, emp in enumerate(business.employees):
+                    if emp.id == emp_id:
+                        employee = business.employees.pop(i)
+                        break
+        except Exception as e:
+            print(f"[DELETE] Reload attempt failed: {e}", flush=True)
+    
+    if not employee:
+        # Still not found — try deleting directly from DB as last resort
+        try:
+            db_emp = DBEmployee.query.filter_by(employee_id=emp_id).first()
+            if db_emp:
+                emp_name = db_emp.name
+                # Also clean up any linked user account
+                linked_user = User.query.filter_by(linked_employee_id=db_emp.id).first()
+                if linked_user:
+                    linked_user.linked_employee_id = None
+                db.session.delete(db_emp)
+                db.session.commit()
+                _solver = None
+                return jsonify({
+                    'success': True,
+                    'message': f'{emp_name} removed successfully'
+                })
+        except Exception as e:
+            print(f"[DELETE] Direct DB delete failed: {e}", flush=True)
+        
         return jsonify({
             'success': False,
-            'message': 'Employee not found'
+            'message': 'Employee not found. Please refresh the page and try again.'
         }), 404
     
     _solver = None  # Reset solver
+    
+    # Also clean up any linked user account in the DB
+    try:
+        db_emp = DBEmployee.query.filter_by(employee_id=emp_id).first()
+        if db_emp:
+            linked_user = User.query.filter_by(linked_employee_id=db_emp.id).first()
+            if linked_user:
+                linked_user.linked_employee_id = None
+                db.session.commit()
+    except Exception as e:
+        print(f"[DELETE] User cleanup warning: {e}", flush=True)
     
     # Sync to database for persistence
     if current_user.is_authenticated:

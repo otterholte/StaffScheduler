@@ -6230,17 +6230,20 @@ async function handleEmployeeSubmit(e) {
                 const methods = data.invitation_methods.join(' & ');
                 showToast(`${isNew ? 'Employee added' : 'Employee updated'} — invitation sent via ${methods}`, 'success');
             } else if (data.invitation_errors && data.invitation_errors.length > 0) {
-                // Show warning if invitation was requested but failed
-                const errors = data.invitation_errors.join(', ');
-                showToast(`${isNew ? 'Employee added' : 'Employee updated'} — invitation failed: ${errors}`, 'warning');
+                // Employee was created but invitation had issues — show clear message
+                showToast(isNew ? 'Employee added successfully' : 'Employee updated successfully', 'success');
+                // Show invitation issue separately so it's clear the employee was saved
+                const errors = data.invitation_errors.join('. ');
+                showToast(`Could not send invitation: ${errors}`, 'warning');
             } else {
                 showToast(isNew ? 'Employee added' : 'Employee updated', 'success');
             }
         } else {
-            showToast(data.message || 'Failed to save employee', 'error');
+            // Employee was NOT created — show the error clearly
+            showToast(data.message || 'Could not save employee. Please try again.', 'error');
         }
     } catch (error) {
-        showToast('Error saving employee', 'error');
+        showToast('Connection error — please check your internet and try again.', 'error');
     } finally {
         // Restore button state
         saveBtn.disabled = false;
@@ -6273,12 +6276,12 @@ async function deleteEmployee(empId) {
             delete employeeMap[empId];
             renderEmployeesGrid();
             renderEmployeeHoursList();
-            showToast('Employee removed', 'success');
+            showToast(data.message || 'Employee removed', 'success');
         } else {
-            showToast(data.message || 'Failed to delete employee', 'error');
+            showToast(data.message || 'Could not remove employee. Please refresh and try again.', 'error');
         }
     } catch (error) {
-        showToast('Error deleting employee', 'error');
+        showToast('Connection error — please check your internet and try again.', 'error');
     }
 }
 
