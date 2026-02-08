@@ -9723,3 +9723,360 @@ body[data-theme="light"] .theme-slider {
 .simple-schedule-table .pto-shift .pto-emoji {
     margin-right: 0.25rem;
 }
+
+/* ==================== MANAGER MOBILE SLIDE MENU ==================== */
+
+/* Body scroll lock when menu is open */
+body.manager-menu-open {
+    position: fixed;
+    overflow: hidden;
+    width: 100%;
+}
+
+/* Hamburger button - hidden on desktop */
+.manager-hamburger-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+}
+
+.manager-hamburger-btn:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
+}
+
+.manager-hamburger-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Slide Menu Overlay */
+.manager-slide-menu-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.manager-slide-menu-overlay.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Slide Menu Panel */
+.manager-slide-menu {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100vh;
+    height: 100dvh;
+    width: 300px;
+    max-width: 85vw;
+    background: #1a1a2e;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 10000;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+    visibility: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.manager-slide-menu.visible {
+    transform: translateX(0);
+    visibility: visible;
+}
+
+.manager-slide-menu-header {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 1.25rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    background: #252540;
+    z-index: 1;
+}
+
+.slide-menu-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.slide-menu-title .logo-icon {
+    width: 24px;
+    height: 24px;
+    color: var(--accent-primary);
+}
+
+.slide-menu-title span {
+    font-size: 1.1rem;
+    font-weight: 700;
+    background: var(--accent-gradient);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.manager-slide-menu-close {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.manager-slide-menu-close:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+/* Slide Menu Navigation */
+.manager-slide-menu-nav {
+    flex: 1;
+    padding: 1rem 0;
+    overflow-y: auto;
+}
+
+.manager-slide-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.5rem;
+    color: #cbd5e1;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    border: none;
+    background: transparent;
+    width: 100%;
+    cursor: pointer;
+    font-size: 1rem;
+    font-family: inherit;
+    margin: 0.25rem 0.75rem;
+    border-radius: 8px;
+    width: calc(100% - 1.5rem);
+}
+
+.manager-slide-menu-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: white;
+}
+
+.manager-slide-menu-item.active {
+    background: rgba(70, 125, 246, 0.15);
+    color: var(--accent-primary);
+}
+
+.manager-slide-menu-item svg {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    stroke: currentColor;
+}
+
+.manager-slide-menu-item span {
+    font-weight: 500;
+}
+
+.slide-menu-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 0.75rem 1.25rem;
+}
+
+.manager-slide-menu-item.settings-link {
+    color: #94a3b8;
+}
+
+.manager-slide-menu-item.settings-link:hover {
+    color: white;
+}
+
+/* PTO Notification close button - mobile */
+.pto-notification-close-mobile {
+    display: none;
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+    /* Show hamburger, hide desktop nav elements */
+    .manager-hamburger-btn {
+        display: flex;
+    }
+    
+    /* Hide the regular navigation tabs */
+    .header-center {
+        display: none !important;
+    }
+    
+    /* Hide settings button on mobile (it's in slide menu) */
+    .settings-btn-desktop {
+        display: none !important;
+    }
+    
+    /* Adjust header layout */
+    .app-header {
+        height: 64px !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        flex-wrap: nowrap !important;
+    }
+    
+    .header-right {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    /* Make PTO notification dropdown full screen on mobile */
+    .pto-notification-dropdown {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        margin: 0 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        border: none !important;
+        z-index: 10001;
+        box-shadow: none;
+        background: #12121f;
+        display: none;
+        flex-direction: column;
+    }
+    
+    .pto-notification-dropdown.visible {
+        display: flex !important;
+    }
+    
+    .pto-notification-header {
+        padding: 1.25rem 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #1a1a2e;
+        flex-shrink: 0;
+    }
+    
+    .pto-notification-close-mobile {
+        display: flex;
+        width: 44px;
+        height: 44px;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        border-radius: 10px;
+        color: white;
+        cursor: pointer;
+        font-size: 1.75rem;
+        font-weight: 300;
+        transition: background 0.2s ease;
+    }
+    
+    .pto-notification-close-mobile:active {
+        background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .pto-notification-list {
+        flex: 1;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 1rem;
+    }
+    
+    /* Scale hamburger button */
+    .manager-hamburger-btn {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .manager-hamburger-btn svg {
+        width: 22px;
+        height: 22px;
+    }
+    
+    /* Scale notification bell */
+    .pto-notification-bell {
+        padding: 0.5rem;
+    }
+    
+    .pto-notification-bell svg {
+        width: 24px;
+        height: 24px;
+    }
+    
+    /* Business selector adjustments */
+    .business-selector {
+        margin-left: 0.75rem;
+        padding-left: 0.75rem;
+    }
+    
+    .business-btn {
+        padding: 0.4rem 0.6rem;
+    }
+    
+    .business-btn .business-name {
+        max-width: 100px;
+        font-size: 0.8rem;
+    }
+    
+    .business-btn .business-icon {
+        width: 16px;
+        height: 16px;
+    }
+    
+    .business-btn .chevron-icon {
+        width: 14px;
+        height: 14px;
+    }
+}
+
+/* Small mobile screens */
+@media (max-width: 480px) {
+    .business-btn .business-name {
+        max-width: 70px;
+    }
+    
+    .logo-text {
+        font-size: 1rem;
+    }
+    
+    .logo-icon {
+        width: 20px;
+        height: 20px;
+    }
+}

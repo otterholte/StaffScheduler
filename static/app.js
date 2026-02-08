@@ -9708,5 +9708,98 @@ async function deletePeakPeriod(index) {
     }
 }
 
+// ==================== MOBILE SLIDE MENU (Manager View) ====================
+
+function setupMobileSlideMenu() {
+    const hamburgerBtn = document.getElementById('managerHamburgerBtn');
+    const slideMenuOverlay = document.getElementById('managerSlideMenuOverlay');
+    const slideMenu = document.getElementById('managerSlideMenu');
+    const slideMenuClose = document.getElementById('managerSlideMenuClose');
+    const slideMenuItems = document.querySelectorAll('.manager-slide-menu-item[data-tab]');
+    
+    // Also handle PTO notification dropdown close on mobile
+    const closePtoNotificationsMobile = document.getElementById('closePtoNotificationsMobile');
+    const ptoNotificationDropdown = document.getElementById('ptoNotificationDropdown');
+    
+    if (!hamburgerBtn || !slideMenu) return;
+    
+    function openMenu() {
+        slideMenuOverlay.classList.add('visible');
+        slideMenu.classList.add('visible');
+        document.body.classList.add('manager-menu-open');
+    }
+    
+    function closeMenu() {
+        slideMenuOverlay.classList.remove('visible');
+        slideMenu.classList.remove('visible');
+        document.body.classList.remove('manager-menu-open');
+    }
+    
+    // Toggle menu
+    hamburgerBtn.addEventListener('click', openMenu);
+    
+    // Close menu
+    if (slideMenuClose) {
+        slideMenuClose.addEventListener('click', closeMenu);
+    }
+    
+    // Close on overlay click
+    if (slideMenuOverlay) {
+        slideMenuOverlay.addEventListener('click', closeMenu);
+    }
+    
+    // Handle menu item clicks
+    slideMenuItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const tabId = item.dataset.tab;
+            
+            // Update active state on slide menu items
+            slideMenuItems.forEach(mi => mi.classList.remove('active'));
+            item.classList.add('active');
+            
+            // Switch tab
+            switchTab(tabId);
+            
+            // Close menu
+            closeMenu();
+        });
+    });
+    
+    // Sync slide menu active state with main nav
+    function syncSlideMenuState() {
+        const activeTab = state.currentTab;
+        slideMenuItems.forEach(item => {
+            item.classList.toggle('active', item.dataset.tab === activeTab);
+        });
+    }
+    
+    // Observe tab changes
+    const originalSwitchTab = window.switchTab;
+    if (typeof originalSwitchTab === 'function') {
+        // Patch switchTab to also sync slide menu
+        const navTabs = document.querySelectorAll('.nav-tab');
+        navTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                setTimeout(syncSlideMenuState, 10);
+            });
+        });
+    }
+    
+    // Handle PTO notifications close button on mobile
+    if (closePtoNotificationsMobile && ptoNotificationDropdown) {
+        closePtoNotificationsMobile.addEventListener('click', () => {
+            ptoNotificationDropdown.classList.remove('visible');
+        });
+    }
+    
+    // Close menu on escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && slideMenu.classList.contains('visible')) {
+            closeMenu();
+        }
+    });
+}
+
 // ==================== START ====================
+setupMobileSlideMenu();
 init();
