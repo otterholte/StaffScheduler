@@ -6188,6 +6188,12 @@ async function handleEmployeeSubmit(e) {
         invite_by_sms: sendInvite && inviteBySMS
     };
     
+    // Show loading state on save button
+    const saveBtn = document.getElementById('saveEmployeeBtn');
+    const originalBtnText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="btn-spinner"></span>' + (isNew ? 'Adding...' : 'Saving...');
+    
     try {
         let response;
         if (isNew) {
@@ -6235,6 +6241,10 @@ async function handleEmployeeSubmit(e) {
         }
     } catch (error) {
         showToast('Error saving employee', 'error');
+    } finally {
+        // Restore button state
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalBtnText;
     }
 }
 

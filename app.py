@@ -3056,6 +3056,16 @@ def add_employee():
     business = get_current_business()
     data = request.json
     
+    # Early check: if sending invite by email, verify the email isn't already linked to another employee
+    employee_email = (data.get('email') or '').strip().lower()
+    if data.get('send_invite') and data.get('invite_by_email') and employee_email:
+        existing_user = User.query.filter_by(email=employee_email).first()
+        if existing_user and existing_user.linked_employee_id is not None:
+            return jsonify({
+                'success': False,
+                'message': f'The email "{employee_email}" is already linked to another employee account. Please use a different email address.'
+            }), 400
+    
     # Generate unique ID
     emp_id = f"emp_{uuid.uuid4().hex[:8]}"
     
