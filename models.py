@@ -31,7 +31,7 @@ class User(db.Model, UserMixin):
     company_name = db.Column(db.String(100), nullable=True)  # Set for managers only
     
     # Employee linking (set for employee users, NULL for managers)
-    linked_employee_id = db.Column(db.Integer, db.ForeignKey('db_employees.id'), nullable=True)
+    linked_employee_id = db.Column(db.Integer, db.ForeignKey('db_employees.id', ondelete='SET NULL'), nullable=True)
     
     # Account status
     is_active = db.Column(db.Boolean, default=True)
@@ -253,7 +253,7 @@ class DBRole(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     role_id = db.Column(db.String(50), nullable=False)  # e.g., "barista", "shift_lead"
-    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False)
     
     name = db.Column(db.String(100), nullable=False)
     color = db.Column(db.String(20), default='#4CAF50')
@@ -278,7 +278,7 @@ class DBEmployee(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     employee_id = db.Column(db.String(50), nullable=False)  # e.g., "emp_abc123"
-    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False)
     
     # Basic info
     name = db.Column(db.String(200), nullable=False)
@@ -374,7 +374,7 @@ class DBShiftTemplate(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     shift_id = db.Column(db.String(50), nullable=False)  # e.g., "morning", "afternoon"
-    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False)
     
     name = db.Column(db.String(100), nullable=False)
     start_hour = db.Column(db.Integer, nullable=False)
@@ -435,7 +435,7 @@ class DBSchedule(db.Model):
     __tablename__ = 'db_schedules'
     
     id = db.Column(db.Integer, primary_key=True)
-    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False)
     
     # Week identifier (ISO week format: YYYY-WNN)
     week_id = db.Column(db.String(20), nullable=False, index=True)
@@ -496,7 +496,7 @@ class DBShiftAssignment(db.Model):
     __tablename__ = 'db_shift_assignments'
     
     id = db.Column(db.Integer, primary_key=True)
-    schedule_id = db.Column(db.Integer, db.ForeignKey('db_schedules.id'), nullable=False)
+    schedule_id = db.Column(db.Integer, db.ForeignKey('db_schedules.id', ondelete='CASCADE'), nullable=False)
     
     employee_id = db.Column(db.String(50), nullable=False)
     employee_name = db.Column(db.String(200), nullable=False)
@@ -532,7 +532,7 @@ class ShiftSwapRequest(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     request_id = db.Column(db.String(20), unique=True, nullable=False, default=generate_uuid)
-    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False)
     requester_employee_id = db.Column(db.String(50), nullable=False)
     
     # The shift being offered (the one requester wants to give away)
@@ -605,7 +605,7 @@ class SwapRequestRecipient(db.Model):
     __tablename__ = 'swap_request_recipients'
     
     id = db.Column(db.Integer, primary_key=True)
-    swap_request_id = db.Column(db.Integer, db.ForeignKey('shift_swap_requests.id'), nullable=False)
+    swap_request_id = db.Column(db.Integer, db.ForeignKey('shift_swap_requests.id', ondelete='CASCADE'), nullable=False)
     employee_id = db.Column(db.String(50), nullable=False)
     
     # Eligibility type: 'pickup' (can just take it) or 'swap_only' (must swap)
@@ -664,7 +664,7 @@ class PTORequest(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     request_id = db.Column(db.String(20), unique=True, nullable=False, default=generate_uuid)
-    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id'), nullable=False)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False)
     employee_id = db.Column(db.String(50), nullable=False)
     
     # Date range for PTO (single day or multi-day)
@@ -768,6 +768,75 @@ def _run_migrations(app):
         
         if migrations_run:
             print(f"[DB MIGRATION] Added columns to users table: {migrations_run}", flush=True)
+        
+        # Migration: Add ON DELETE CASCADE to all foreign keys referencing businesses.id
+        # This allows deleting a business directly via SQL and having all child rows cleaned up
+        _migrate_cascade_foreign_keys(app)
     
     except Exception as e:
         print(f"[DB MIGRATION] Warning during migration check: {e}", flush=True)
+
+
+def _migrate_cascade_foreign_keys(app):
+    """Add ON DELETE CASCADE / SET NULL to existing foreign key constraints.
+    
+    SQLAlchemy's ondelete parameter only affects table creation, not existing tables.
+    This migration drops and recreates FK constraints with the proper ON DELETE behavior.
+    """
+    from sqlalchemy import text
+    
+    # Each entry: (constraint_name, table, column, references_table, references_column, on_delete)
+    fk_migrations = [
+        ('db_roles_business_db_id_fkey', 'db_roles', 'business_db_id', 'businesses', 'id', 'CASCADE'),
+        ('db_employees_business_db_id_fkey', 'db_employees', 'business_db_id', 'businesses', 'id', 'CASCADE'),
+        ('db_shift_templates_business_db_id_fkey', 'db_shift_templates', 'business_db_id', 'businesses', 'id', 'CASCADE'),
+        ('db_schedules_business_db_id_fkey', 'db_schedules', 'business_db_id', 'businesses', 'id', 'CASCADE'),
+        ('db_shift_assignments_schedule_id_fkey', 'db_shift_assignments', 'schedule_id', 'db_schedules', 'id', 'CASCADE'),
+        ('shift_swap_requests_business_db_id_fkey', 'shift_swap_requests', 'business_db_id', 'businesses', 'id', 'CASCADE'),
+        ('swap_request_recipients_swap_request_id_fkey', 'swap_request_recipients', 'swap_request_id', 'shift_swap_requests', 'id', 'CASCADE'),
+        ('pto_requests_business_db_id_fkey', 'pto_requests', 'business_db_id', 'businesses', 'id', 'CASCADE'),
+        ('users_linked_employee_id_fkey', 'users', 'linked_employee_id', 'db_employees', 'id', 'SET NULL'),
+    ]
+    
+    migrations_run = []
+    
+    for constraint_name, table, column, ref_table, ref_column, on_delete in fk_migrations:
+        try:
+            # Check if the constraint exists and what its current ON DELETE action is
+            result = db.session.execute(text("""
+                SELECT rc.delete_rule
+                FROM information_schema.referential_constraints rc
+                JOIN information_schema.table_constraints tc
+                    ON rc.constraint_name = tc.constraint_name
+                WHERE tc.table_name = :table_name
+                  AND tc.constraint_name = :constraint_name
+            """), {'table_name': table, 'constraint_name': constraint_name})
+            
+            row = result.fetchone()
+            if row is None:
+                # Constraint doesn't exist or has a different name, skip
+                continue
+            
+            current_action = row[0]  # e.g., 'NO ACTION', 'CASCADE', 'SET NULL'
+            expected_action = on_delete.replace(' ', ' ')  # 'CASCADE' or 'SET NULL'
+            
+            if current_action == expected_action:
+                continue  # Already correct
+            
+            # Drop old constraint and recreate with ON DELETE CASCADE/SET NULL
+            db.session.execute(text(
+                f'ALTER TABLE {table} DROP CONSTRAINT {constraint_name}'
+            ))
+            db.session.execute(text(
+                f'ALTER TABLE {table} ADD CONSTRAINT {constraint_name} '
+                f'FOREIGN KEY ({column}) REFERENCES {ref_table}({ref_column}) ON DELETE {on_delete}'
+            ))
+            db.session.commit()
+            migrations_run.append(f'{table}.{column} -> ON DELETE {on_delete}')
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"[DB MIGRATION] Warning updating FK {constraint_name}: {e}", flush=True)
+    
+    if migrations_run:
+        print(f"[DB MIGRATION] Updated foreign key cascades: {migrations_run}", flush=True)
