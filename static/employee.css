@@ -501,6 +501,41 @@ body.menu-open {
     opacity: 0.6;
 }
 
+/* Swap update detail text */
+.unified-notification-item .notif-detail {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #94a3b8);
+    margin-top: 0.15rem;
+}
+
+/* Swap update notification icons */
+.notif-icon.swap-update-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.notif-icon.swap-update-icon.accepted {
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.notif-icon.swap-update-icon.declined {
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.swap-update-declined .notif-title {
+    color: #f87171;
+}
+
+.swap-update-accepted .notif-title {
+    color: #34d399;
+}
+
 /* Chevron arrow on swap notifications */
 .unified-notification-item .notif-chevron {
     font-size: 1.2rem;
@@ -669,9 +704,9 @@ body.menu-open {
     left: 0;
     right: 0;
     z-index: 9999;
-    background: var(--bg-secondary, #1e293b);
-    border-top: 1px solid var(--border-color, #374151);
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+    background: #0f172a;
+    border-top: 2px solid #334155;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.8);
     padding: 0.75rem 1rem;
     display: flex;
     align-items: center;

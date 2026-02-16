@@ -2651,10 +2651,16 @@ function updateUnifiedNotificationBadge() {
     // Get PTO count
     const ptoCount = (employeeState.ptoNotifications || []).filter(req => !seenPTOUpdates.has(req.id)).length;
     
-    // Get swap count
+    // Get incoming swap count
     const swapCount = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').length;
     
-    const totalCount = ptoCount + swapCount;
+    // Get outgoing swap update count (accepted/declined that haven't been seen)
+    const swapUpdateCount = (employeeState.swapRequests.outgoing || []).filter(r => 
+        (r.status === 'accepted' || r.status === 'declined') && 
+        !seenSwapUpdates.has(r.id) && !seenSwapUpdates.has(String(r.id))
+    ).length;
+    
+    const totalCount = ptoCount + swapCount + swapUpdateCount;
     
     // Update main badge
     if (badge) {
@@ -2728,6 +2734,49 @@ function renderUnifiedNotificationList() {
         });
     });
     
+    // Add outgoing swap updates (accepted/declined) as notifications for the requester
+    (employeeState.swapRequests.outgoing || []).forEach(swap => {
+        if (swap.status !== 'accepted' && swap.status !== 'declined') return;
+        // Skip if already seen
+        if (seenSwapUpdates.has(swap.id) || seenSwapUpdates.has(String(swap.id))) return;
+        
+        const dayName = dayNamesShort[swap.original_day] || '?';
+        const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
+        
+        let shiftDateStr = dayName;
+        if (swap.week_start_date) {
+            const ws = new Date(swap.week_start_date + 'T00:00:00');
+            const shiftDate = new Date(ws);
+            shiftDate.setDate(ws.getDate() + swap.original_day);
+            shiftDateStr = `${dayName} ${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
+        }
+        
+        // Find who responded
+        let responderName = 'Someone';
+        if (swap.status === 'accepted' && swap.recipients) {
+            const accepter = swap.recipients.find(r => r.response === 'accepted');
+            if (accepter) responderName = accepter.employee_name || 'Someone';
+        } else if (swap.status === 'declined' && swap.recipients) {
+            const allDeclined = swap.recipients.every(r => r.response === 'declined');
+            if (allDeclined) responderName = 'Everyone';
+        }
+        
+        const isAccepted = swap.status === 'accepted';
+        
+        notifications.push({
+            type: 'swap_update',
+            id: swap.id,
+            title: isAccepted ? 'Swap Accepted!' : 'Swap Declined',
+            subtitle: `${shiftDateStr} ${timeRange}`,
+            detail: isAccepted 
+                ? `${responderName} accepted your swap request`
+                : `${responderName} declined your swap request`,
+            isAccepted: isAccepted,
+            date: new Date(swap.resolved_at || swap.created_at),
+            swap: swap,
+        });
+    });
+    
     // Sort by date (newest first)
     notifications.sort((a, b) => b.date - a.date);
     
@@ -2784,6 +2833,26 @@ function renderUnifiedNotificationList() {
             item.addEventListener('click', () => {
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                 showSwapNotificationDetail(notif.swap);
+            });
+        } else if (notif.type === 'swap_update') {
+            const icon = notif.isAccepted ? '✅' : '❌';
+            const statusClass = notif.isAccepted ? 'accepted' : 'declined';
+            item.classList.add(`swap-update-${statusClass}`);
+            item.innerHTML = `
+                <div class="notif-icon swap-update-icon ${statusClass}">${icon}</div>
+                <div class="notif-content">
+                    <div class="notif-title">${notif.title}</div>
+                    <div class="notif-subtitle">${notif.subtitle}</div>
+                    <div class="notif-detail">${notif.detail}</div>
+                </div>
+            `;
+            item.style.cursor = 'pointer';
+            
+            // Click to dismiss
+            item.addEventListener('click', () => {
+                markSwapUpdateSeen(notif.id);
+                updateUnifiedNotificationBadge();
+                renderUnifiedNotificationList();
             });
         }
         
@@ -3288,46 +3357,9 @@ async function handleSwapFromNotification(swapId, action) {
 function scrollToAndHighlightSwappedShift(swap) {
     if (!swap) return;
     
-    // Wait for the schedule to re-render
+    // Just highlight the day on the schedule so the user can see it was added
     setTimeout(() => {
-        const dayIdx = swap.original_day;
-        
-        // Look for the shift in the upcoming shifts section
-        const upcomingItems = document.querySelectorAll('.upcoming-shift-item');
-        let targetElement = null;
-        
-        upcomingItems.forEach(item => {
-            const itemDay = parseInt(item.dataset.day);
-            if (itemDay === dayIdx) {
-                targetElement = item;
-            }
-        });
-        
-        // Also try finding it in the table view
-        if (!targetElement) {
-            const shiftBlocks = document.querySelectorAll('.table-shift-clickable');
-            shiftBlocks.forEach(block => {
-                const blockDay = parseInt(block.dataset.day);
-                const blockStart = parseInt(block.dataset.start);
-                if (blockDay === dayIdx && blockStart === swap.original_start_hour) {
-                    targetElement = block;
-                }
-            });
-        }
-        
-        if (targetElement) {
-            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            targetElement.classList.add('highlight-pulse');
-            setTimeout(() => {
-                targetElement.classList.remove('highlight-pulse');
-            }, 2500);
-        } else {
-            // Scroll to the schedule section at minimum
-            const scheduleSection = document.querySelector('.employee-schedule-layout');
-            if (scheduleSection) {
-                scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }
+        highlightScheduleDay(swap.original_day);
     }, 400);
 }
 
@@ -4596,6 +4628,15 @@ function capitalizeFirst(str) {
 
 // Track PTO requests the employee has seen
 const seenPTOUpdates = new Set(JSON.parse(localStorage.getItem('seenPTOUpdates') || '[]'));
+
+// Track swap request updates (accepted/declined) the requester has seen
+const seenSwapUpdates = new Set(JSON.parse(localStorage.getItem('seenSwapUpdates') || '[]'));
+
+function markSwapUpdateSeen(swapId) {
+    seenSwapUpdates.add(swapId);
+    seenSwapUpdates.add(String(swapId));
+    localStorage.setItem('seenSwapUpdates', JSON.stringify([...seenSwapUpdates]));
+}
 
 function initPTONotifications() {
     // Load PTO notifications
