@@ -2835,14 +2835,26 @@ function renderUnifiedNotificationList() {
                     <div class="notif-title">${notif.title}</div>
                     <div class="notif-subtitle">${notif.subtitle}</div>
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
-                    <div class="notif-tap-hint">Tap to view on schedule</div>
+                    <div class="notif-actions">
+                        <button class="notif-btn notif-btn-decline" data-swap-id="${notif.swap.id}" data-action="decline">Decline</button>
+                        <button class="notif-btn notif-btn-accept" data-swap-id="${notif.swap.id}" data-action="accept">Accept</button>
+                        <button class="notif-btn notif-btn-view" data-swap-id="${notif.swap.id}">View on Schedule</button>
+                    </div>
                 </div>
-                <div class="notif-chevron">›</div>
             `;
-            item.style.cursor = 'pointer';
             
-            // Click to go straight to schedule with expanded sticky bar
-            item.addEventListener('click', () => {
+            item.querySelector('.notif-btn-accept').addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+                handleSwapFromNotification(notif.swap.id, 'accept');
+            });
+            item.querySelector('.notif-btn-decline').addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+                handleSwapFromNotification(notif.swap.id, 'decline');
+            });
+            item.querySelector('.notif-btn-view').addEventListener('click', (e) => {
+                e.stopPropagation();
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                 navigateToSwapOnSchedule(notif.swap);
             });

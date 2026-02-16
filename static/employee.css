@@ -501,6 +501,53 @@ body.menu-open {
     opacity: 0.6;
 }
 
+.notif-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+}
+
+.notif-btn {
+    border: none;
+    border-radius: 6px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.notif-btn-accept {
+    background: var(--employee-accent, #10b981);
+    color: white;
+}
+
+.notif-btn-accept:hover {
+    background: #059669;
+}
+
+.notif-btn-decline {
+    background: var(--bg-tertiary, #334155);
+    color: var(--text-secondary, #94a3b8);
+}
+
+.notif-btn-decline:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.notif-btn-view {
+    background: transparent;
+    color: var(--text-muted, #94a3b8);
+    border: 1px solid var(--border-color, #334155);
+}
+
+.notif-btn-view:hover {
+    background: var(--bg-tertiary, #1e293b);
+    color: var(--text-primary, #f1f5f9);
+}
+
 /* Swap update detail text */
 .unified-notification-item .notif-detail {
     font-size: 0.75rem;
