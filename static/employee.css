@@ -2898,8 +2898,9 @@ body.menu-open {
     bottom: 0;
     z-index: 10000;
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
+    padding: 1rem;
     opacity: 0;
     transition: opacity 0.25s;
 }
@@ -2914,7 +2915,7 @@ body.menu-open {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
 }
 
 .swap-picker-sheet {
@@ -2922,19 +2923,23 @@ body.menu-open {
     width: 100%;
     max-width: 500px;
     max-height: 70vh;
-    background: var(--bg-primary, #0f172a);
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
-    padding: 1.25rem;
+    background: #0f172a;
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin: auto;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    transform: translateY(100%);
-    transition: transform 0.3s ease;
+    transform: scale(0.95);
+    opacity: 0;
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    border: 1px solid #1e293b;
 }
 
 #swapOfferPicker.visible .swap-picker-sheet {
-    transform: translateY(0);
+    transform: scale(1);
+    opacity: 1;
 }
 
 .swap-picker-header {
