@@ -85,6 +85,9 @@ function getShiftColor(employeeId, roleIds) {
 // ==================== UTILITIES ====================
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+// Schedule day indices: 0=Monday, 1=Tuesday, ..., 6=Sunday
+const SCHED_DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const SCHED_DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 function formatHour(hour) {
     if (hour === 0 || hour === 24) return '12am';
@@ -103,6 +106,13 @@ function formatTime(hour) {
 
 function formatTimeRange(startHour, endHour) {
     return `${formatTime(startHour)} - ${formatTime(endHour)}`;
+}
+
+function formatDateLocal(d) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 function getWeekDates(offset = 0) {
@@ -1829,7 +1839,7 @@ function renderUpcomingShifts() {
         
             html += `<div class="upcoming-shift-item ${item.viaSwap ? 'via-swap' : ''}" ${dataAttrs}>
             <div class="shift-date-badge">
-                    <span class="day-name">${DAYS_SHORT[item.dayIdx]}</span>
+                    <span class="day-name">${SCHED_DAYS_SHORT[item.dayIdx]}</span>
                     <span class="day-num">${item.date.getDate()}</span>
             </div>
             <div class="shift-details shift-clickable" title="Click to view details">
@@ -1860,7 +1870,7 @@ function renderUpcomingShifts() {
             
             html += `<div class="upcoming-pto-item ${isOtherPerson ? 'other-pto' : ''}">
                 <div class="pto-date-badge" style="${isOtherPerson ? `background: ${item.employee_color || '#8b5cf6'}` : ''}">
-                    <span class="day-name">${DAYS_SHORT[item.dayIdx]}</span>
+                    <span class="day-name">${SCHED_DAYS_SHORT[item.dayIdx]}</span>
                     <span class="day-num">${item.date.getDate()}</span>
             </div>
             <div class="pto-details">
@@ -2934,10 +2944,13 @@ async function handleSwapFromNotification(swapId, action) {
     // For swap-only requests, need to open the modal to select a shift
     if (action === 'accept' && swap.my_eligibility_type === 'swap_only') {
         employeeState.currentSwapRequest = swap;
-        showSwapResponseModal(swap);
         document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+        showSwapResponseModal(swap.id);
         return;
     }
+    
+    // Close dropdown immediately
+    document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
     
     // Direct accept/decline via API
     try {
@@ -2955,19 +2968,69 @@ async function handleSwapFromNotification(swapId, action) {
         
         if (data.success) {
             showToast(action === 'accept' ? 'Swap request accepted!' : 'Swap request declined', action === 'accept' ? 'success' : 'info');
-            // Reload swap requests
+            // Reload swap requests and schedule
             await loadSwapRequests();
             updateUnifiedNotificationBadge();
+            
+            if (action === 'accept') {
+                // Reload schedule to show the updated shifts
+                await loadScheduleData();
+                // Navigate to and highlight the accepted shift on the schedule
+                scrollToAndHighlightSwappedShift(swap);
+            }
         } else {
-            showToast(data.error || 'Failed to respond to swap request', 'error');
+            showToast(data.message || 'Failed to respond to swap request', 'error');
         }
     } catch (error) {
         console.error('Error responding to swap:', error);
         showToast('Failed to respond to swap request', 'error');
     }
+}
+
+function scrollToAndHighlightSwappedShift(swap) {
+    if (!swap) return;
     
-    // Close dropdown
-    document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+    // Wait for the schedule to re-render
+    setTimeout(() => {
+        const dayIdx = swap.original_day;
+        
+        // Look for the shift in the upcoming shifts section
+        const upcomingItems = document.querySelectorAll('.upcoming-shift-item');
+        let targetElement = null;
+        
+        upcomingItems.forEach(item => {
+            const itemDay = parseInt(item.dataset.day);
+            if (itemDay === dayIdx) {
+                targetElement = item;
+            }
+        });
+        
+        // Also try finding it in the table view
+        if (!targetElement) {
+            const shiftBlocks = document.querySelectorAll('.table-shift-clickable');
+            shiftBlocks.forEach(block => {
+                const blockDay = parseInt(block.dataset.day);
+                const blockStart = parseInt(block.dataset.start);
+                if (blockDay === dayIdx && blockStart === swap.original_start_hour) {
+                    targetElement = block;
+                }
+            });
+        }
+        
+        if (targetElement) {
+            targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetElement.classList.add('highlight-pulse');
+            setTimeout(() => {
+                targetElement.classList.remove('highlight-pulse');
+            }, 2500);
+        } else {
+            // Scroll to the schedule section at minimum
+            const scheduleSection = document.querySelector('.employee-schedule-layout');
+            if (scheduleSection) {
+                scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    }, 400);
 }
 
 function initNotificationBell() {
@@ -3145,7 +3208,7 @@ async function loadEligibleStaff(shift) {
     
     try {
         const dates = getWeekDates(employeeState.weekOffset);
-        const weekStart = dates[0].toISOString().split('T')[0];
+        const weekStart = formatDateLocal(dates[0]);
         
         const params = new URLSearchParams({
             day: shift.dayIdx,
@@ -3566,7 +3629,7 @@ async function submitSwapRequest() {
     
     try {
         const dates = getWeekDates(employeeState.weekOffset);
-        const weekStart = dates[0].toISOString().split('T')[0];
+        const weekStart = formatDateLocal(dates[0]);
         
         const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(
@@ -3591,7 +3654,8 @@ async function submitSwapRequest() {
         const data = await response.json();
         
         if (data.success) {
-            showToast(`Swap request sent! ${data.notifications_sent} notification(s) sent.`, 'success');
+            const count = data.eligible_count || 0;
+            showToast(`Swap request sent to ${count} staff member${count !== 1 ? 's' : ''}!`, 'success');
             hideSwapModal();
             loadSwapRequests();
         } else {
@@ -3818,10 +3882,12 @@ async function acceptSwapRequest() {
                 ? 'Counter offer sent! Waiting for their response.' 
                 : 'Swap accepted! The schedule has been updated.';
             showToast(message, 'success');
+            const swapRequest = employeeState.currentSwapRequest;
             hideSwapResponseModal();
             loadSwapRequests();
             if (!isCounterOffer) {
-                await loadScheduleData(); // Only reload schedule if accepted (not counter offer)
+                await loadScheduleData();
+                scrollToAndHighlightSwappedShift(swapRequest);
             }
         } else {
             showToast(data.message || 'Failed to process request', 'error');

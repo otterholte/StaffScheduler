@@ -3246,6 +3246,43 @@ body.menu-open {
         padding: 0.5rem;
     }
     
+    /* === TABLE SHIFT BLOCKS - Larger touch targets on mobile === */
+    .simple-schedule-table .shift-times .shift-block {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.75rem;
+        margin: 2px 1px;
+        min-height: 30px;
+        display: inline-flex;
+        align-items: center;
+    }
+    
+    /* === UNIFIED NOTIFICATION BUTTONS - Larger touch targets === */
+    .unified-notification-item .notif-actions {
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+    }
+    
+    .unified-notification-item .notif-btn {
+        padding: 0.6rem 1rem;
+        font-size: 0.85rem;
+        min-height: 44px;
+        min-width: 80px;
+        font-weight: 600;
+        border-radius: 8px;
+    }
+    
+    .unified-notification-item {
+        padding: 1rem;
+    }
+    
+    .unified-notification-item .notif-title {
+        font-size: 0.95rem;
+    }
+    
+    .unified-notification-item .notif-subtitle {
+        font-size: 0.8rem;
+    }
+    
     /* === NOTIFICATIONS - Full screen on mobile === */
     .notification-dropdown {
         position: fixed !important;
