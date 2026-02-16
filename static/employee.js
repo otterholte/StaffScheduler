@@ -2713,9 +2713,10 @@ function renderUnifiedNotificationList() {
         const requesterName = swap.requester_name || 'Someone';
         const dayName = dayNamesShort[swap.original_day] || '?';
         const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
-        const notePreview = swap.note ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
         const isOpenForSwaps = swap.open_for_swaps;
         const isCounterOffer = swap.is_counter_offer;
+        // Don't show auto-generated note for counter offers (it's redundant)
+        const notePreview = (swap.note && !isCounterOffer) ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
         let actionType = 'give away';
         let title = requesterName;
         if (isCounterOffer) {
@@ -3151,6 +3152,7 @@ function showStickySwapAction(swap) {
     const timeRange = `${formatTime(swap.original_start_hour)} – ${formatTime(swap.original_end_hour)}`;
     const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
     const isCounterOffer = swap.is_counter_offer;
+    const isOpenForSwaps = swap.open_for_swaps;
     
     // Build the date string
     let dateStr = '';
@@ -3161,35 +3163,26 @@ function showStickySwapAction(swap) {
         dateStr = `${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
     }
     
-    // Eligibility info
-    let eligibilityHtml = '';
-    if (swap.my_eligibility_type === 'swap_only') {
-        eligibilityHtml = '<div class="sticky-swap-elig swap-only">⚠ Must offer a shift in exchange</div>';
-    } else {
-        eligibilityHtml = '<div class="sticky-swap-elig pickup">✓ Can pick up without swapping</div>';
-    }
-    
-    // Note
-    const noteHtml = swap.note 
-        ? `<div class="sticky-swap-note">"${swap.note}"</div>` 
-        : '';
-    
     // Short eligibility label
     const eligLabel = swap.my_eligibility_type === 'swap_only' 
         ? '<span class="sticky-elig-tag swap-only">⚠ Must swap</span>'
         : '<span class="sticky-elig-tag pickup">✓ Pickup OK</span>';
     
-    // Truncate note for inline display
+    // For counter offers, don't show the auto-generated note (it's redundant)
+    // For regular requests, show a truncated user-written note
     let noteSnippet = '';
-    if (swap.note) {
+    if (swap.note && !isCounterOffer) {
         noteSnippet = swap.note.length > 60 ? swap.note.substring(0, 60) + '…' : swap.note;
     }
     
-    const isOpenForSwaps = swap.open_for_swaps;
-    
     // Build buttons based on swap type
     let buttonsHtml = '';
-    if (isOpenForSwaps) {
+    if (isCounterOffer) {
+        buttonsHtml = `
+            <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
+            <button class="sticky-swap-btn accept" id="stickyAccept">Accept Trade</button>
+        `;
+    } else if (isOpenForSwaps) {
         buttonsHtml = `
             <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
             <button class="sticky-swap-btn offer-swap" id="stickyOfferSwap">Offer Swap</button>
@@ -3202,15 +3195,23 @@ function showStickySwapAction(swap) {
         `;
     }
     
+    // Label and tag based on type
+    let whoText = `<strong>${requesterName}</strong> · ${isOpenForSwaps ? 'open for swaps' : actionType}`;
+    let tagHtml = isOpenForSwaps ? '<span class="sticky-elig-tag swap-open">🔄 Swap</span>' : eligLabel;
+    if (isCounterOffer) {
+        whoText = `<strong>${requesterName}</strong> · offering a trade`;
+        tagHtml = '<span class="sticky-elig-tag swap-open">⇄ Swap Offer</span>';
+    }
+    
     const sticky = document.createElement('div');
     sticky.id = 'stickySwapAction';
     sticky.innerHTML = `
         <div class="sticky-swap-row">
             <div class="sticky-swap-info">
-                <span class="sticky-swap-who"><strong>${requesterName}</strong> · ${isOpenForSwaps ? 'open for swaps' : actionType}</span>
+                <span class="sticky-swap-who">${whoText}</span>
                 <span class="sticky-swap-sep">│</span>
                 <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
-                ${isOpenForSwaps ? '<span class="sticky-elig-tag swap-open">🔄 Swap</span>' : eligLabel}
+                ${tagHtml}
                 ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
             </div>
             <div class="sticky-swap-btns">
