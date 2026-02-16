@@ -28,6 +28,7 @@ from scheduler import (
 from scheduler.businesses import sync_business_to_db, load_businesses_from_db
 from db_service import save_schedule_to_db, get_schedule_from_db, get_schedule_with_status_from_db, publish_schedule_in_db, get_published_schedule_from_db
 from datetime import date, datetime, timedelta
+import threading
 from scheduler.models import (
     Employee, Role, TimeSlot, EmployeeClassification,
     PeakPeriod, RoleCoverageConfig, CoverageRequirement,
@@ -2071,6 +2072,8 @@ def create_swap_request(business_slug, employee_id):
         notifications_sent = 0
         notification_errors = []
         
+        # Build recipient records (but don't send emails yet - do that in background)
+        email_tasks = []
         for eligible in eligible_to_notify:
             recipient = SwapRequestRecipient(
                 swap_request_id=swap_request.id,
@@ -2080,45 +2083,65 @@ def create_swap_request(business_slug, employee_id):
             )
             db.session.add(recipient)
             
-            # Send email notification if employee has email
+            # Queue email for background sending
             if eligible.get('employee_email'):
-                try:
-                    email_service = get_email_service()
-                    if email_service.is_configured():
-                        # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
-                        db_emp = DBEmployee.query.filter_by(employee_id=eligible['employee_id']).first()
-                        if not db_emp:
-                            notification_errors.append(f"{eligible['employee_name']}: Employee not found in database")
-                            continue
-                        portal_url = f"{base_url}/employee/{business_slug}/{db_emp.id}/schedule"
-                        success, msg = email_service.send_swap_request_notification(
-                            to_email=eligible['employee_email'],
-                            recipient_name=eligible['employee_name'],
-                            requester_name=requester_name,
-                            business_name=business_name,
-                            shift_details=shift_details,
-                            eligibility_type=eligible['eligibility_type'],
-                            portal_url=portal_url
-                        )
-                        if success:
-                            recipient.notified_at = datetime.utcnow()
-                            recipient.notification_method = 'email'
-                            notifications_sent += 1
-                        else:
-                            notification_errors.append(f"{eligible['employee_name']}: {msg}")
-                except Exception as e:
-                    notification_errors.append(f"{eligible['employee_name']}: {str(e)}")
+                email_tasks.append({
+                    'employee_id': eligible['employee_id'],
+                    'employee_email': eligible['employee_email'],
+                    'employee_name': eligible['employee_name'],
+                    'eligibility_type': eligible['eligibility_type'],
+                })
         
         db.session.commit()
         
-        print(f"[DEBUG] Swap request created successfully, {notifications_sent} notifications sent")
+        # Send emails in background thread
+        if email_tasks:
+            create_email_data = {
+                'business_slug': business_slug,
+                'requester_name': requester_name,
+                'business_name': business_name,
+                'base_url': base_url,
+                'shift_details': shift_details,
+                'tasks': email_tasks,
+            }
+            
+            def send_create_emails_bg(data):
+                try:
+                    from app import app as flask_app
+                    with flask_app.app_context():
+                        email_service = get_email_service()
+                        if not email_service.is_configured():
+                            return
+                        for task in data['tasks']:
+                            try:
+                                db_emp = DBEmployee.query.filter_by(employee_id=task['employee_id']).first()
+                                if not db_emp:
+                                    continue
+                                portal_url = f"{data['base_url']}/employee/{data['business_slug']}/{db_emp.id}/schedule"
+                                email_service.send_swap_request_notification(
+                                    to_email=task['employee_email'],
+                                    recipient_name=task['employee_name'],
+                                    requester_name=data['requester_name'],
+                                    business_name=data['business_name'],
+                                    shift_details=data['shift_details'],
+                                    eligibility_type=task['eligibility_type'],
+                                    portal_url=portal_url
+                                )
+                                print(f"[SWAP] Create notification sent to {task['employee_email']}")
+                            except Exception as e:
+                                print(f"[SWAP] Warning: Could not send notification to {task['employee_name']}: {e}")
+                except Exception as e:
+                    print(f"[SWAP] Background create email thread error: {e}")
+            
+            threading.Thread(target=send_create_emails_bg, args=(create_email_data,), daemon=True).start()
+        
+        print(f"[DEBUG] Swap request created successfully, {len(email_tasks)} email(s) queued")
         return jsonify({
             'success': True,
             'swap_request': swap_request.to_dict(),
             'eligible_count': len(eligible_to_notify),
-            'notifications_sent': notifications_sent,
-            'notification_errors': notification_errors if notification_errors else None,
-            'message': f'Swap request created. {notifications_sent} notification(s) sent.'
+            'notifications_sent': len(email_tasks),
+            'message': f'Swap request created and sent to {len(eligible_to_notify)} staff member(s).'
         })
     except Exception as e:
         print(f"[ERROR] create_swap_request crashed: {e}")
@@ -2217,12 +2240,10 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         recipient.responded_at = datetime.utcnow()
         db.session.commit()
         
-        # Send decline notification to requester
+        # Send decline notification in background
         day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
         shift_details = f"{day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)}"
         
-        # Get requester and decliner info
-        # requester_employee_id could be DB ID (string) or model ID - handle both
         db_requester, requester_model_id = lookup_db_employee_by_any_id(swap_request.requester_employee_id)
         
         requester = None
@@ -2234,28 +2255,40 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                 decliner = emp
         
         if requester and requester.email:
-            try:
-                email_service = get_email_service()
-                if email_service.is_configured():
-                    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
-                    base_url = get_site_url()
-                    # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
-                    db_requester = DBEmployee.query.filter_by(employee_id=requester.id).first()
-                    if db_requester:
-                        portal_url = f"{base_url}/employee/{business_slug}/{db_requester.id}/schedule"
-                        
-                        email_service.send_swap_response_notification(
-                            to_email=requester.email,
-                            requester_name=requester.name,
-                            responder_name=decliner.name if decliner else 'A coworker',
-                            business_name=business_name,
-                            shift_details=shift_details,
-                            response='declined',
-                            swap_shift_details=None,
-                            portal_url=portal_url
-                        )
-            except Exception as e:
-                print(f"Warning: Could not send decline notification: {e}")
+            decline_email_data = {
+                'requester_email': requester.email,
+                'requester_name': requester.name,
+                'requester_model_id': requester.id,
+                'decliner_name': decliner.name if decliner else 'A coworker',
+                'business_name': _custom_businesses.get(business.id, {}).get('name', business.name),
+                'business_slug': business_slug,
+                'base_url': get_site_url(),
+                'shift_details': shift_details,
+            }
+            
+            def send_decline_email_bg(data):
+                try:
+                    from app import app as flask_app
+                    with flask_app.app_context():
+                        email_service = get_email_service()
+                        if email_service.is_configured():
+                            db_req = DBEmployee.query.filter_by(employee_id=data['requester_model_id']).first()
+                            if db_req:
+                                portal_url = f"{data['base_url']}/employee/{data['business_slug']}/{db_req.id}/schedule"
+                                email_service.send_swap_response_notification(
+                                    to_email=data['requester_email'],
+                                    requester_name=data['requester_name'],
+                                    responder_name=data['decliner_name'],
+                                    business_name=data['business_name'],
+                                    shift_details=data['shift_details'],
+                                    response='declined',
+                                    swap_shift_details=None,
+                                    portal_url=portal_url
+                                )
+                except Exception as e:
+                    print(f"[SWAP] Warning: Could not send decline notification: {e}")
+            
+            threading.Thread(target=send_decline_email_bg, args=(decline_email_data,), daemon=True).start()
         
         return jsonify({
             'success': True,
@@ -2292,38 +2325,39 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     
     # Update the schedule in database
     # This modifies slot_assignments to swap the employees
-    try:
-        from db_service import get_db_business
-        db_business = get_db_business(business.id)
-        if db_business:
-            week_id = swap_request.week_start_date.strftime('%Y-W%V')
-            db_schedule = DBSchedule.query.filter_by(
-                business_db_id=db_business.id,
-                week_id=week_id,
-                status='published'
-            ).first()
-            
-            if db_schedule:
+    schedule_updated = False
+    schedule_error = None
+    
+    from db_service import get_db_business
+    db_business = get_db_business(business.id)
+    if db_business:
+        week_id = swap_request.week_start_date.strftime('%Y-W%V')
+        print(f"[SWAP] Looking for schedule: business_db_id={db_business.id}, week_id={week_id}")
+        db_schedule = DBSchedule.query.filter_by(
+            business_db_id=db_business.id,
+            week_id=week_id,
+            status='published'
+        ).first()
+        
+        if not db_schedule:
+            print(f"[SWAP] ERROR: No published schedule found for week_id={week_id}")
+            schedule_error = f"No published schedule found for week {week_id}"
+        else:
+            try:
                 import json
                 schedule_data = json.loads(db_schedule.schedule_json) if db_schedule.schedule_json else {}
                 slot_assignments = schedule_data.get('slot_assignments', {})
                 
                 role_id = swap_request.original_role_id or 'staff'
+                print(f"[SWAP] Updating schedule: removing {requester_model_id}, adding {accepter_model_id}")
+                print(f"[SWAP] Original shift: day={swap_request.original_day}, hours={swap_request.original_start_hour}-{swap_request.original_end_hour}")
                 
                 # Remove requester from original shift, add accepter
-                # Use model IDs (string like "maria_0") for schedule, not DB IDs
                 for hour in range(swap_request.original_start_hour, swap_request.original_end_hour):
-                    # Try both key formats: string "day,hour" and list [day, hour]
                     slot_key = f"{swap_request.original_day},{hour}"
-                    list_key = [swap_request.original_day, hour]
                     
-                    # Check which format is used
-                    actual_key = None
                     if slot_key in slot_assignments:
-                        actual_key = slot_key
-                    
-                    if actual_key:
-                        current_assignments = slot_assignments[actual_key]
+                        current_assignments = slot_assignments[slot_key]
                         # Remove requester AND any existing accepter assignments (prevent duplicates)
                         new_assignments = []
                         for a in current_assignments:
@@ -2351,14 +2385,17 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                                     break
                             new_assignments.append(accepter_info)
                         
-                        slot_assignments[actual_key] = new_assignments
+                        slot_assignments[slot_key] = new_assignments
+                        print(f"[SWAP]   Updated slot {slot_key}: {len(new_assignments)} assignments")
                     else:
                         # Key doesn't exist, create new assignment
-                        slot_assignments[slot_key] = [[accepter_model_id, role_id]]
+                        slot_assignments[slot_key] = [{'employee_id': accepter_model_id, 'role_id': role_id, 'via_swap': True, 'swapped_from': requester_model_id}]
+                        print(f"[SWAP]   Created new slot {slot_key}")
                 
                 # If there's a swap shift, swap those too
                 if swap_shift:
                     swap_role_id = swap_shift.get('role_id') or 'staff'
+                    print(f"[SWAP] Also swapping reverse shift: day={swap_shift['day']}, hours={swap_shift['start_hour']}-{swap_shift['end_hour']}")
                     for hour in range(swap_shift['start_hour'], swap_shift['end_hour']):
                         slot_key = f"{swap_shift['day']},{hour}"
                         
@@ -2392,15 +2429,28 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                 schedule_data['slot_assignments'] = slot_assignments
                 db_schedule.schedule_json = json.dumps(schedule_data)
                 db.session.add(db_schedule)
-                print(f"Schedule updated: removed {requester_model_id}, added {accepter_model_id}")
-    except Exception as e:
-        import traceback
-        print(f"Warning: Could not update schedule: {e}")
-        traceback.print_exc()
+                schedule_updated = True
+                print(f"[SWAP] Schedule updated successfully")
+            except Exception as e:
+                import traceback
+                print(f"[SWAP] ERROR updating schedule: {e}")
+                traceback.print_exc()
+                schedule_error = str(e)
+    else:
+        schedule_error = "Business not found in database"
+    
+    if not schedule_updated:
+        # Roll back the status changes - don't mark as accepted if schedule wasn't updated
+        db.session.rollback()
+        print(f"[SWAP] Rolled back - schedule not updated. Error: {schedule_error}")
+        return jsonify({
+            'success': False,
+            'message': f'Failed to update schedule: {schedule_error}'
+        }), 500
     
     db.session.commit()
     
-    # Send notification to requester
+    # Send notifications in background thread (don't block the response)
     day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     shift_details = f"{day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)}"
     swap_shift_details = None
@@ -2416,55 +2466,79 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         if emp.id == accepter_model_id:
             accepter = emp
     
-    email_service = get_email_service()
-    business_name = _custom_businesses.get(business.id, {}).get('name', business.name)
-    base_url = get_site_url()
+    # Gather email data before spawning thread (avoid accessing Flask context in thread)
+    email_data = {
+        'business_slug': business_slug,
+        'business_name': _custom_businesses.get(business.id, {}).get('name', business.name),
+        'business_id': business.id,
+        'base_url': get_site_url(),
+        'shift_details': shift_details,
+        'swap_shift_details': swap_shift_details,
+        'requester_name': requester.name if requester else 'Unknown',
+        'requester_email': requester.email if requester else None,
+        'requester_model_id': requester.id if requester else None,
+        'accepter_name': accepter.name if accepter else 'Unknown',
+    }
     
-    # Send notification to requester
-    if requester and requester.email:
+    def send_swap_emails_background(email_data):
+        """Send swap notification emails in background."""
         try:
-            if email_service.is_configured():
-                # Get the database ID for the employee (the URL uses integer DB ID, not string model ID)
-                db_requester = DBEmployee.query.filter_by(employee_id=requester.id).first()
-                if db_requester:
-                    portal_url = f"{base_url}/employee/{business_slug}/{db_requester.id}/schedule"
-                    
-                    email_service.send_swap_response_notification(
-                        to_email=requester.email,
-                        requester_name=requester.name,
-                        responder_name=accepter.name if accepter else 'Unknown',
-                        business_name=business_name,
-                        shift_details=shift_details,
-                        response='accepted',
-                        swap_shift_details=swap_shift_details,
-                        portal_url=portal_url
-                    )
-        except Exception as e:
-            print(f"Warning: Could not send acceptance notification: {e}")
-    
-    # Send notification to manager (business owner)
-    try:
-        from db_service import get_db_business
-        db_business = get_db_business(business.id)
-        if db_business and db_business.owner and db_business.owner.email:
-            if email_service.is_configured():
-                schedule_url = f"{base_url}/{business_slug}/schedule"
-                manager_name = f"{db_business.owner.first_name or ''} {db_business.owner.last_name or ''}".strip()
-                if not manager_name:
-                    manager_name = db_business.owner.username
+            from app import app as flask_app
+            with flask_app.app_context():
+                email_service = get_email_service()
+                if not email_service.is_configured():
+                    return
                 
-                email_service.send_swap_completed_manager_notification(
-                    to_email=db_business.owner.email,
-                    manager_name=manager_name,
-                    requester_name=requester.name if requester else 'Unknown',
-                    accepter_name=accepter.name if accepter else 'Unknown',
-                    business_name=business_name,
-                    shift_details=shift_details,
-                    swap_shift_details=swap_shift_details,
-                    schedule_url=schedule_url
-                )
-    except Exception as e:
-        print(f"Warning: Could not send manager notification: {e}")
+                base_url = email_data['base_url']
+                
+                # Send to requester
+                if email_data['requester_email'] and email_data['requester_model_id']:
+                    try:
+                        db_req = DBEmployee.query.filter_by(employee_id=email_data['requester_model_id']).first()
+                        if db_req:
+                            portal_url = f"{base_url}/employee/{email_data['business_slug']}/{db_req.id}/schedule"
+                            email_service.send_swap_response_notification(
+                                to_email=email_data['requester_email'],
+                                requester_name=email_data['requester_name'],
+                                responder_name=email_data['accepter_name'],
+                                business_name=email_data['business_name'],
+                                shift_details=email_data['shift_details'],
+                                response='accepted',
+                                swap_shift_details=email_data['swap_shift_details'],
+                                portal_url=portal_url
+                            )
+                            print(f"[SWAP] Accept notification email sent to {email_data['requester_email']}")
+                    except Exception as e:
+                        print(f"[SWAP] Warning: Could not send acceptance notification: {e}")
+                
+                # Send to manager
+                try:
+                    from db_service import get_db_business
+                    db_biz = get_db_business(email_data['business_id'])
+                    if db_biz and db_biz.owner and db_biz.owner.email:
+                        schedule_url = f"{base_url}/{email_data['business_slug']}/schedule"
+                        manager_name = f"{db_biz.owner.first_name or ''} {db_biz.owner.last_name or ''}".strip()
+                        if not manager_name:
+                            manager_name = db_biz.owner.username
+                        
+                        email_service.send_swap_completed_manager_notification(
+                            to_email=db_biz.owner.email,
+                            manager_name=manager_name,
+                            requester_name=email_data['requester_name'],
+                            accepter_name=email_data['accepter_name'],
+                            business_name=email_data['business_name'],
+                            shift_details=email_data['shift_details'],
+                            swap_shift_details=email_data['swap_shift_details'],
+                            schedule_url=schedule_url
+                        )
+                        print(f"[SWAP] Manager notification email sent to {db_biz.owner.email}")
+                except Exception as e:
+                    print(f"[SWAP] Warning: Could not send manager notification: {e}")
+        except Exception as e:
+            print(f"[SWAP] Background email thread error: {e}")
+    
+    # Fire off emails in background - don't block the response
+    threading.Thread(target=send_swap_emails_background, args=(email_data,), daemon=True).start()
     
     return jsonify({
         'success': True,
