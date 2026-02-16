@@ -2717,7 +2717,17 @@ function renderUnifiedNotificationList() {
         const isCounterOffer = swap.is_counter_offer;
         // For counter offers, show note as tooltip; for regular, show inline preview
         const notePreview = (swap.note && !isCounterOffer) ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
-        const counterOfferContext = (isCounterOffer && swap.note) ? swap.note : '';
+        // For counter offers, reformat the note to use 12hr time
+        let counterOfferContext = '';
+        if (isCounterOffer && swap.note) {
+            counterOfferContext = swap.note.replace(/(\d{1,2}):00/g, (match, h) => {
+                const hour = parseInt(h);
+                if (hour === 0) return '12am';
+                if (hour < 12) return hour + 'am';
+                if (hour === 12) return '12pm';
+                return (hour - 12) + 'pm';
+            });
+        }
         let actionType = 'give away';
         let title = requesterName;
         if (isCounterOffer) {
