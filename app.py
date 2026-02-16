@@ -1936,11 +1936,13 @@ def get_swap_requests(business_slug, employee_id):
         
         debug_step = "query_incoming"
         # Get incoming requests (where this employee is a recipient)
-        # Recipients store string model IDs like "maria_0"
-        print(f"[DEBUG] Querying incoming recipients with employee_id='{employee_model_id}'")
-        incoming_recipients = SwapRequestRecipient.query.filter_by(
-            employee_id=employee_model_id
-        ).all() if employee_model_id else []
+        # Recipients may store model IDs like "maria_0" OR DB IDs as strings like "20"
+        print(f"[DEBUG] Querying incoming recipients with employee_id='{employee_model_id}' or '{employee_id}'")
+        from sqlalchemy import or_
+        possible_ids = [eid for eid in [employee_model_id, str(employee_id)] if eid]
+        incoming_recipients = SwapRequestRecipient.query.filter(
+            SwapRequestRecipient.employee_id.in_(possible_ids)
+        ).all() if possible_ids else []
         print(f"[DEBUG] Found {len(incoming_recipients)} incoming recipients")
         
         incoming = []
@@ -2233,11 +2235,17 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     db_employee = DBEmployee.query.get(employee_id)
     employee_model_id = db_employee.employee_id if db_employee else None
     
-    # Find this employee's recipient record - recipients store string model IDs
+    # Find this employee's recipient record - check both model ID and DB ID string
     recipient = SwapRequestRecipient.query.filter_by(
         swap_request_id=swap_request.id,
         employee_id=employee_model_id
     ).first()
+    if not recipient:
+        # Also try DB ID as string (counter offers may have stored it this way)
+        recipient = SwapRequestRecipient.query.filter_by(
+            swap_request_id=swap_request.id,
+            employee_id=str(employee_id)
+        ).first()
     
     if not recipient:
         return jsonify({'success': False, 'message': 'You are not a recipient of this swap request'}), 403
@@ -2276,12 +2284,14 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         db.session.add(counter_request)
         db.session.flush()
         
-        # Add original requester as recipient
+        # Add original requester as recipient - need to use model ID since that's how incoming queries work
+        requester_db_emp, requester_model_id = lookup_db_employee_by_any_id(swap_request.requester_employee_id)
         counter_recipient = SwapRequestRecipient(
             swap_request_id=counter_request.id,
-            employee_id=swap_request.requester_employee_id,
+            employee_id=requester_model_id or swap_request.requester_employee_id,
             eligibility_type='swap_only'  # They must accept the swap
         )
+        print(f"[SWAP] Counter offer recipient: requester_employee_id={swap_request.requester_employee_id} -> model_id={requester_model_id}")
         db.session.add(counter_recipient)
         db.session.commit()
         
