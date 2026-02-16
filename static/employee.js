@@ -2714,7 +2714,16 @@ function renderUnifiedNotificationList() {
         const dayName = dayNamesShort[swap.original_day] || '?';
         const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
         const notePreview = swap.note ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
-        const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
+        const isOpenForSwaps = swap.open_for_swaps;
+        const isCounterOffer = swap.is_counter_offer;
+        let actionType = 'give away';
+        let title = requesterName;
+        if (isCounterOffer) {
+            actionType = 'trade';
+            title = `⇄ ${requesterName}`;
+        } else if (isOpenForSwaps) {
+            actionType = 'swap';
+        }
         
         // Compute the actual date (e.g. "Mon Feb 16")
         let shiftDateStr = dayName;
@@ -2725,14 +2734,20 @@ function renderUnifiedNotificationList() {
             shiftDateStr = `${dayName} ${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
         }
         
+        const subtitle = isCounterOffer
+            ? `Offering their ${shiftDateStr} ${timeRange} shift for yours`
+            : `Wants to ${actionType}: ${shiftDateStr} ${timeRange}`;
+        
         notifications.push({
             type: 'swap',
             id: swap.id,
-            title: `${requesterName}`,
-            subtitle: `Wants to ${actionType}: ${shiftDateStr} ${timeRange}`,
+            title: title,
+            subtitle: subtitle,
             notePreview: notePreview,
             date: new Date(swap.created_at),
             swap: swap,
+            isOpenForSwaps: isOpenForSwaps,
+            isCounterOffer: isCounterOffer,
             seen: false
         });
     });
@@ -2837,7 +2852,8 @@ function renderUnifiedNotificationList() {
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
                     <div class="notif-actions">
                         <button class="notif-btn notif-btn-decline">Decline</button>
-                        <button class="notif-btn notif-btn-accept">Accept</button>
+                        ${notif.isOpenForSwaps && !notif.isCounterOffer ? `<button class="notif-btn notif-btn-offer-swap">Offer Swap</button>` : ''}
+                        <button class="notif-btn notif-btn-accept">${notif.isCounterOffer ? 'Accept Trade' : (notif.isOpenForSwaps ? 'Pick Up' : 'Accept')}</button>
                     </div>
                 </div>
                 <div class="notif-chevron">›</div>
@@ -2854,6 +2870,14 @@ function renderUnifiedNotificationList() {
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                 handleSwapFromNotification(notif.swap.id, 'decline');
             });
+            const offerSwapBtn = item.querySelector('.notif-btn-offer-swap');
+            if (offerSwapBtn) {
+                offerSwapBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+                    showSwapOfferPicker(notif.swap);
+                });
+            }
             // Clicking anywhere else on the notification navigates to schedule
             item.addEventListener('click', () => {
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
@@ -3161,20 +3185,36 @@ function showStickySwapAction(swap) {
         noteSnippet = swap.note.length > 60 ? swap.note.substring(0, 60) + '…' : swap.note;
     }
     
+    const isOpenForSwaps = swap.open_for_swaps;
+    
+    // Build buttons based on swap type
+    let buttonsHtml = '';
+    if (isOpenForSwaps) {
+        buttonsHtml = `
+            <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
+            <button class="sticky-swap-btn offer-swap" id="stickyOfferSwap">Offer Swap</button>
+            <button class="sticky-swap-btn accept" id="stickyAccept">Pick Up</button>
+        `;
+    } else {
+        buttonsHtml = `
+            <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
+            <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
+        `;
+    }
+    
     const sticky = document.createElement('div');
     sticky.id = 'stickySwapAction';
     sticky.innerHTML = `
         <div class="sticky-swap-row">
             <div class="sticky-swap-info">
-                <span class="sticky-swap-who"><strong>${requesterName}</strong> · ${actionType}</span>
+                <span class="sticky-swap-who"><strong>${requesterName}</strong> · ${isOpenForSwaps ? 'open for swaps' : actionType}</span>
                 <span class="sticky-swap-sep">│</span>
                 <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
-                ${eligLabel}
+                ${isOpenForSwaps ? '<span class="sticky-elig-tag swap-open">🔄 Swap</span>' : eligLabel}
                 ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
             </div>
             <div class="sticky-swap-btns">
-                <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
-                <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
+                ${buttonsHtml}
             </div>
             <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
         </div>
@@ -3203,7 +3243,151 @@ function showStickySwapAction(swap) {
         handleSwapFromNotification(swap.id, 'decline');
     });
     
+    const offerSwapBtn = sticky.querySelector('#stickyOfferSwap');
+    if (offerSwapBtn) {
+        offerSwapBtn.addEventListener('click', () => {
+            cleanup();
+            showSwapOfferPicker(swap);
+        });
+    }
+    
     sticky.querySelector('#stickyDismiss').addEventListener('click', cleanup);
+}
+
+function showSwapOfferPicker(swap) {
+    // Remove any existing picker
+    document.getElementById('swapOfferPicker')?.remove();
+    
+    const myShifts = getMyUpcomingShifts();
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dates = getWeekDates(employeeState.weekOffset);
+    const requesterName = swap.requester_name || 'Someone';
+    
+    let shiftsHtml = '';
+    if (myShifts.length === 0) {
+        shiftsHtml = '<div class="swap-picker-empty">You have no upcoming shifts to offer this week.</div>';
+    } else {
+        shiftsHtml = myShifts.map((shift, idx) => {
+            const dayName = dayNames[shift.dayIdx] || '?';
+            const shiftDate = dates[shift.dayIdx];
+            const dateStr = shiftDate ? `${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}` : '';
+            const timeStr = `${formatTime(shift.start)} – ${formatTime(shift.end)}`;
+            const role = roleMap[shift.role]?.name || '';
+            
+            return `
+                <label class="swap-picker-shift" data-idx="${idx}">
+                    <input type="radio" name="offerShift" value="${idx}">
+                    <div class="swap-picker-shift-info">
+                        <span class="swap-picker-day">${dayName}${dateStr ? ', ' + dateStr : ''}</span>
+                        <span class="swap-picker-time">${timeStr}</span>
+                        ${role ? `<span class="swap-picker-role">${role}</span>` : ''}
+                    </div>
+                </label>
+            `;
+        }).join('');
+    }
+    
+    const picker = document.createElement('div');
+    picker.id = 'swapOfferPicker';
+    picker.innerHTML = `
+        <div class="swap-picker-overlay"></div>
+        <div class="swap-picker-sheet">
+            <div class="swap-picker-header">
+                <h3>Offer a shift to ${requesterName}</h3>
+                <button class="swap-picker-close" id="swapPickerClose">✕</button>
+            </div>
+            <p class="swap-picker-hint">Choose one of your shifts to trade for their ${dayNames[swap.original_day] || ''} ${formatTime(swap.original_start_hour)}–${formatTime(swap.original_end_hour)} shift:</p>
+            <div class="swap-picker-list">
+                ${shiftsHtml}
+            </div>
+            <div class="swap-picker-footer">
+                <button class="btn btn-secondary" id="swapPickerCancel">Cancel</button>
+                <button class="btn btn-primary" id="swapPickerSubmit" disabled>Send Offer</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(picker);
+    
+    // Animate in
+    requestAnimationFrame(() => picker.classList.add('visible'));
+    
+    let selectedShift = null;
+    
+    // Handle shift selection
+    picker.querySelectorAll('.swap-picker-shift input').forEach((radio, idx) => {
+        radio.addEventListener('change', () => {
+            selectedShift = myShifts[idx];
+            picker.querySelectorAll('.swap-picker-shift').forEach(s => s.classList.remove('selected'));
+            radio.closest('.swap-picker-shift').classList.add('selected');
+            picker.querySelector('#swapPickerSubmit').disabled = false;
+        });
+    });
+    
+    // Make the whole label clickable
+    picker.querySelectorAll('.swap-picker-shift').forEach(label => {
+        label.addEventListener('click', () => {
+            const radio = label.querySelector('input');
+            if (radio) radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+        });
+    });
+    
+    const closePicker = () => {
+        picker.classList.remove('visible');
+        setTimeout(() => picker.remove(), 300);
+    };
+    
+    picker.querySelector('.swap-picker-overlay').addEventListener('click', closePicker);
+    picker.querySelector('#swapPickerClose').addEventListener('click', closePicker);
+    picker.querySelector('#swapPickerCancel').addEventListener('click', closePicker);
+    
+    picker.querySelector('#swapPickerSubmit').addEventListener('click', async () => {
+        if (!selectedShift) return;
+        
+        const submitBtn = picker.querySelector('#swapPickerSubmit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Sending...';
+        
+        try {
+            const empId = employeeState.employee.db_id || employeeState.employee.id;
+            const response = await fetch(
+                `/api/employee/${employeeState.businessSlug}/${empId}/swap-request/${swap.id}/respond`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        response: 'counter_offer',
+                        swap_shift: {
+                            day: selectedShift.dayIdx,
+                            start_hour: selectedShift.start,
+                            end_hour: selectedShift.end,
+                            role_id: selectedShift.role
+                        }
+                    })
+                }
+            );
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('Swap offer sent! Waiting for their response.', 'success');
+                closePicker();
+                await loadSwapRequests();
+                updateUnifiedNotificationBadge();
+            } else {
+                showToast(data.message || 'Failed to send swap offer', 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Send Offer';
+            }
+        } catch (error) {
+            console.error('Failed to send swap offer:', error);
+            showToast('Failed to send swap offer', 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Send Offer';
+        }
+    });
 }
 
 function formatPTODateRange(start, end) {
@@ -3401,8 +3585,8 @@ async function handleSwapFromNotification(swapId, action) {
     const swap = employeeState.swapRequests.incoming.find(r => r.id === swapId);
     if (!swap) return;
     
-    // For swap-only requests, need to open the modal to select a shift
-    if (action === 'accept' && swap.my_eligibility_type === 'swap_only') {
+    // For swap-only requests (not counter offers), need to open the modal to select a shift
+    if (action === 'accept' && swap.my_eligibility_type === 'swap_only' && !swap.is_counter_offer) {
         employeeState.currentSwapRequest = swap;
         document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
         showSwapResponseModal(swap.id);
@@ -3618,6 +3802,19 @@ function showSwapModal(shift) {
     if (eligibleList) {
         eligibleList.innerHTML = '<div class="loading-spinner">Checking eligible staff...</div>';
     }
+    
+    // Reset swap type toggle
+    employeeState.openForSwaps = false;
+    document.querySelectorAll('.swap-type-option').forEach(opt => {
+        opt.classList.toggle('active', opt.dataset.type === 'give_away');
+    });
+    document.querySelectorAll('.swap-type-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+            document.querySelectorAll('.swap-type-option').forEach(o => o.classList.remove('active'));
+            opt.classList.add('active');
+            employeeState.openForSwaps = opt.dataset.type === 'open_swap';
+        });
+    });
     
     modal.style.display = 'flex';
     
@@ -4067,6 +4264,7 @@ async function submitSwapRequest() {
                     role_id: shift.role,
                     week_start: weekStart,
                     note: noteField?.value || '',
+                    open_for_swaps: !!employeeState.openForSwaps,
                     recipients: employeeState.selectedRecipients.length > 0 
                         ? employeeState.selectedRecipients 
                         : undefined

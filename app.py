@@ -1545,6 +1545,43 @@ def get_approved_pto_for_week(business_slug):
 
 # ==================== DATABASE MIGRATION ====================
 
+@app.route('/api/admin/migrate-open-for-swaps')
+def migrate_open_for_swaps():
+    """One-time migration to add open_for_swaps column to shift_swap_requests table."""
+    try:
+        from sqlalchemy import text
+        
+        result = db.session.execute(text("""
+            SELECT column_name FROM information_schema.columns 
+            WHERE table_name = 'shift_swap_requests' AND column_name = 'open_for_swaps'
+        """))
+        exists = result.fetchone() is not None
+        
+        if exists:
+            return jsonify({
+                'success': True,
+                'message': 'open_for_swaps column already exists'
+            })
+        
+        db.session.execute(text("""
+            ALTER TABLE shift_swap_requests 
+            ADD COLUMN open_for_swaps BOOLEAN DEFAULT FALSE
+        """))
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Successfully added open_for_swaps column'
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+
 @app.route('/api/admin/migrate-swap-columns')
 def migrate_swap_columns():
     """One-time migration to add missing columns to shift_swap_requests table."""
@@ -2030,6 +2067,7 @@ def create_swap_request(business_slug, employee_id):
         # Optional fields
         shift_role = data.get('role_id')
         note = data.get('note', '')
+        open_for_swaps = data.get('open_for_swaps', False)
         specific_recipients = data.get('recipients', [])  # Optional: specific employee IDs to request
         
         # Create the swap request - use string model ID for consistency
@@ -2042,6 +2080,7 @@ def create_swap_request(business_slug, employee_id):
             original_role_id=shift_role,
             week_start_date=week_start,
             note=note,
+            open_for_swaps=bool(open_for_swaps),
             status='pending'
         )
         
@@ -2325,11 +2364,30 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     
     # Accept the swap
     # If employee must swap and didn't provide a shift, error
-    if recipient.eligibility_type == 'swap_only' and not swap_shift:
+    # For counter offers, the swap is implicit - the original shift is what's being traded
+    # So we don't require swap_shift for counter offer acceptance
+    if recipient.eligibility_type == 'swap_only' and not swap_shift and not swap_request.is_counter_offer:
         return jsonify({
             'success': False,
             'message': 'You must offer a shift to swap since picking up would exceed your max hours'
         }), 400
+    
+    # For counter offers, auto-populate swap_shift from the original request
+    # When A accepts B's counter offer, A gives up their original shift
+    if swap_request.is_counter_offer and not swap_shift and swap_request.counter_offer_for_id:
+        original_request = ShiftSwapRequest.query.get(swap_request.counter_offer_for_id)
+        if original_request:
+            swap_shift = {
+                'day': original_request.original_day,
+                'start_hour': original_request.original_start_hour,
+                'end_hour': original_request.original_end_hour,
+                'role_id': original_request.original_role_id
+            }
+            print(f"[SWAP] Counter offer: auto-populated swap_shift from original request {original_request.request_id}")
+            # Also mark the original request as resolved
+            original_request.status = 'accepted'
+            original_request.resolved_at = datetime.utcnow()
+            original_request.accepted_by_employee_id = swap_request.requester_employee_id
     
     # Update the swap request - store DB ID as string
     swap_request.status = 'accepted'

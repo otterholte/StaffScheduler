@@ -550,6 +550,9 @@ class ShiftSwapRequest(db.Model):
     # Note from requester
     note = db.Column(db.Text, nullable=True)
     
+    # Whether the requester is open to receiving shifts in return (swap) vs just giving away
+    open_for_swaps = db.Column(db.Boolean, default=False)
+    
     # Who accepted (if accepted)
     accepted_by_employee_id = db.Column(db.String(50), nullable=True)
     
@@ -586,6 +589,7 @@ class ShiftSwapRequest(db.Model):
             'week_start_date': self.week_start_date.isoformat() if self.week_start_date else None,
             'status': self.status,
             'note': self.note,
+            'open_for_swaps': self.open_for_swaps or False,
             'accepted_by_employee_id': self.accepted_by_employee_id,
             'swap_day': self.swap_day,
             'swap_start_hour': self.swap_start_hour,

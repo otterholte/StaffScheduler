@@ -377,6 +377,21 @@
                     <!-- Populated by JS -->
                 </div>
                 
+                <div class="swap-type-toggle">
+                    <label class="swap-type-option active" data-type="give_away">
+                        <input type="radio" name="swapType" value="give_away" checked>
+                        <div class="swap-type-icon">📤</div>
+                        <div class="swap-type-label">Give Away</div>
+                        <div class="swap-type-desc">Someone picks up your shift</div>
+                    </label>
+                    <label class="swap-type-option" data-type="open_swap">
+                        <input type="radio" name="swapType" value="open_swap">
+                        <div class="swap-type-icon">🔄</div>
+                        <div class="swap-type-label">Open for Swaps</div>
+                        <div class="swap-type-desc">Trade shifts with someone</div>
+                    </label>
+                </div>
+                
                 <div class="swap-form-group">
                     <label>Note (optional)</label>
                     <textarea id="swapNote" placeholder="Add a note explaining why you need to swap this shift..." rows="3"></textarea>
