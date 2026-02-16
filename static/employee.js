@@ -2850,8 +2850,8 @@ function renderUnifiedNotificationList() {
             item.innerHTML = `
                 <div class="notif-icon swap-icon">${notif.isCounterOffer ? '⇄' : '🔄'}</div>
                 <div class="notif-content">
-                    <div class="notif-title">${notif.title}${notif.counterOfferContext ? `<span class="notif-info-wrap"><span class="notif-info-icon" title="${notif.counterOfferContext}">ℹ</span><span class="notif-info-tooltip">${notif.counterOfferContext}</span></span>` : ''}</div>
-                    <div class="notif-subtitle">${notif.subtitle}</div>
+                    <div class="notif-title">${notif.title}</div>
+                    <div class="notif-subtitle">${notif.subtitle}${notif.counterOfferContext ? ` <span class="notif-info-wrap"><span class="notif-info-icon">ℹ</span><span class="notif-info-tooltip">${notif.counterOfferContext}</span></span>` : ''}</div>
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
                     <div class="notif-actions">
                         <button class="notif-btn notif-btn-decline">Decline</button>
@@ -2879,6 +2879,26 @@ function renderUnifiedNotificationList() {
                     e.stopPropagation();
                     document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                     showSwapOfferPicker(notif.swap);
+                });
+            }
+            // Position info tooltip with JS so it escapes the dropdown bounds
+            const infoIcon = item.querySelector('.notif-info-icon');
+            const infoTooltip = item.querySelector('.notif-info-tooltip');
+            if (infoIcon && infoTooltip) {
+                const showTip = (e) => {
+                    e.stopPropagation();
+                    const rect = infoIcon.getBoundingClientRect();
+                    infoTooltip.style.display = 'block';
+                    infoTooltip.style.top = (rect.top - infoTooltip.offsetHeight - 8) + 'px';
+                    infoTooltip.style.left = Math.min(rect.left, window.innerWidth - infoTooltip.offsetWidth - 12) + 'px';
+                };
+                const hideTip = () => { infoTooltip.style.display = 'none'; };
+                infoIcon.addEventListener('mouseenter', showTip);
+                infoIcon.addEventListener('mouseleave', hideTip);
+                infoIcon.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (infoTooltip.style.display === 'block') hideTip();
+                    else showTip(e);
                 });
             }
             // Clicking anywhere else on the notification navigates to schedule
@@ -3215,10 +3235,10 @@ function showStickySwapAction(swap) {
         <div class="sticky-swap-row">
             <div class="sticky-swap-info">
                 <span class="sticky-swap-who">${whoText}</span>
-                ${infoIconHtml}
                 <span class="sticky-swap-sep">│</span>
                 <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
                 ${tagHtml}
+                ${infoIconHtml}
                 ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
             </div>
             <div class="sticky-swap-btns">

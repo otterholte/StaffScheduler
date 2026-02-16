@@ -2869,7 +2869,6 @@ body.menu-open {
     position: relative;
     display: inline-flex;
     align-items: center;
-    margin-left: 0.3rem;
 }
 
 .notif-info-icon,
@@ -2877,12 +2876,12 @@ body.menu-open {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     background: var(--bg-tertiary, #334155);
     color: var(--text-muted, #94a3b8);
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-style: normal;
     cursor: pointer;
     flex-shrink: 0;
@@ -2895,26 +2894,40 @@ body.menu-open {
     color: white;
 }
 
-.notif-info-tooltip,
+/* Notification tooltip - use fixed positioning to escape dropdown bounds */
+.notif-info-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 99999;
+    background: #0f172a;
+    color: var(--text-primary, #f1f5f9);
+    font-size: 0.88rem;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    white-space: nowrap;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
+    border: 1px solid #334155;
+    pointer-events: none;
+}
+
+/* Sticky bar tooltip - absolute is fine here since it's not clipped */
 .sticky-info-tooltip {
     display: none;
     position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #1e293b;
+    bottom: calc(100% + 8px);
+    right: 0;
+    background: #0f172a;
     color: var(--text-primary, #f1f5f9);
-    font-size: 0.78rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
     border-radius: 8px;
     white-space: nowrap;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
     border: 1px solid #334155;
     z-index: 100;
     pointer-events: none;
 }
 
-.notif-info-wrap:hover .notif-info-tooltip,
 .sticky-info-wrap:hover .sticky-info-tooltip {
     display: block;
 }
@@ -2924,13 +2937,9 @@ body.menu-open {
     .notif-info-tooltip,
     .sticky-info-tooltip {
         white-space: normal;
-        max-width: 250px;
-        left: auto;
-        right: 0;
-        transform: none;
+        max-width: 280px;
     }
     
-    .notif-info-wrap:active .notif-info-tooltip,
     .sticky-info-wrap:active .sticky-info-tooltip {
         display: block;
     }
