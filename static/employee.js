@@ -2836,12 +2836,13 @@ function renderUnifiedNotificationList() {
                     <div class="notif-subtitle">${notif.subtitle}</div>
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
                     <div class="notif-actions">
-                        <button class="notif-btn notif-btn-decline" data-swap-id="${notif.swap.id}" data-action="decline">Decline</button>
-                        <button class="notif-btn notif-btn-accept" data-swap-id="${notif.swap.id}" data-action="accept">Accept</button>
-                        <button class="notif-btn notif-btn-view" data-swap-id="${notif.swap.id}">View on Schedule</button>
+                        <button class="notif-btn notif-btn-decline">Decline</button>
+                        <button class="notif-btn notif-btn-accept">Accept</button>
                     </div>
                 </div>
+                <div class="notif-chevron">›</div>
             `;
+            item.style.cursor = 'pointer';
             
             item.querySelector('.notif-btn-accept').addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -2853,8 +2854,8 @@ function renderUnifiedNotificationList() {
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                 handleSwapFromNotification(notif.swap.id, 'decline');
             });
-            item.querySelector('.notif-btn-view').addEventListener('click', (e) => {
-                e.stopPropagation();
+            // Clicking anywhere else on the notification navigates to schedule
+            item.addEventListener('click', () => {
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                 navigateToSwapOnSchedule(notif.swap);
             });
