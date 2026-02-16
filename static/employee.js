@@ -2698,13 +2698,20 @@ function renderUnifiedNotificationList() {
     });
     
     // Add swap notifications (pending incoming requests)
+    const dayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').forEach(swap => {
         const requesterName = swap.requester_name || 'Someone';
+        const dayName = dayNamesShort[swap.original_day] || '?';
+        const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
+        const notePreview = swap.note ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
+        const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
+        
         notifications.push({
             type: 'swap',
             id: swap.id,
-            title: `Shift Swap Request`,
-            subtitle: `${requesterName} wants to swap shifts`,
+            title: `${requesterName}`,
+            subtitle: `Wants to ${actionType}: ${dayName} ${timeRange}`,
+            notePreview: notePreview,
             date: new Date(swap.created_at),
             swap: swap,
             seen: false
@@ -2756,27 +2763,142 @@ function renderUnifiedNotificationList() {
                 <div class="notif-content">
                     <div class="notif-title">${notif.title}</div>
                     <div class="notif-subtitle">${notif.subtitle}</div>
-                    <div class="notif-actions">
-                        <button class="notif-btn accept" data-swap-id="${notif.id}">Accept</button>
-                        <button class="notif-btn decline" data-swap-id="${notif.id}">Decline</button>
-                    </div>
+                    ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
+                    <div class="notif-tap-hint">Tap for details</div>
                 </div>
+                <div class="notif-chevron">›</div>
             `;
+            item.style.cursor = 'pointer';
             
-            // Add event listeners after adding to DOM
-            setTimeout(() => {
-                item.querySelector('.notif-btn.accept')?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    handleSwapFromNotification(notif.id, 'accept');
-                });
-                item.querySelector('.notif-btn.decline')?.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    handleSwapFromNotification(notif.id, 'decline');
-                });
-            }, 0);
+            // Click to open detail popup
+            item.addEventListener('click', () => {
+                document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
+                showSwapNotificationDetail(notif.swap);
+            });
         }
         
         list.appendChild(item);
+    });
+}
+
+function showSwapNotificationDetail(swap) {
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const requesterName = swap.requester_name || 'Someone';
+    const dayName = dayNames[swap.original_day] || 'Unknown';
+    const timeRange = `${formatTime(swap.original_start_hour)} – ${formatTime(swap.original_end_hour)}`;
+    const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
+    const isCounterOffer = swap.is_counter_offer;
+    
+    // Compute the week date for the "View Schedule" link
+    let weekDateStr = '';
+    if (swap.week_start_date) {
+        const ws = new Date(swap.week_start_date + 'T00:00:00');
+        const shiftDate = new Date(ws);
+        shiftDate.setDate(ws.getDate() + swap.original_day);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        weekDateStr = `${months[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
+    }
+    
+    // Calculate the week offset needed to view this shift
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const currentMonday = new Date(today);
+    currentMonday.setDate(today.getDate() - daysToMonday);
+    
+    let targetWeekOffset = 0;
+    if (swap.week_start_date) {
+        const swapMonday = new Date(swap.week_start_date + 'T00:00:00');
+        targetWeekOffset = Math.round((swapMonday - currentMonday) / (7 * 24 * 60 * 60 * 1000));
+    }
+    
+    // Remove existing detail popup if any
+    document.getElementById('swapNotifDetailPopup')?.remove();
+    
+    const popup = document.createElement('div');
+    popup.id = 'swapNotifDetailPopup';
+    popup.className = 'modal-overlay';
+    popup.style.display = 'flex';
+    popup.innerHTML = `
+        <div class="modal-content swap-notif-detail-modal">
+            <div class="modal-header">
+                <h2>${isCounterOffer ? 'Counter Offer' : 'Shift Swap Request'}</h2>
+                <button class="modal-close" id="closeSwapNotifDetail">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="swap-detail-card">
+                    <div class="swap-detail-from">
+                        <span class="swap-detail-label">From</span>
+                        <span class="swap-detail-value">${requesterName}</span>
+                    </div>
+                    <div class="swap-detail-shift">
+                        <span class="swap-detail-label">${isCounterOffer ? 'Offering their shift' : `Wants to ${actionType}`}</span>
+                        <div class="swap-detail-day">${dayName}${weekDateStr ? ` · ${weekDateStr}` : ''}</div>
+                        <div class="swap-detail-time">${timeRange}</div>
+                        ${swap.original_role_id ? `<div class="swap-detail-role">${swap.original_role_id}</div>` : ''}
+                    </div>
+                    ${swap.note ? `
+                        <div class="swap-detail-note">
+                            <span class="swap-detail-label">Note</span>
+                            <p>${swap.note}</p>
+                        </div>
+                    ` : ''}
+                    ${swap.my_eligibility_type === 'swap_only' ? `
+                        <div class="swap-detail-info">
+                            <span class="swap-info-badge">⚠ You'll need to offer one of your shifts in exchange</span>
+                        </div>
+                    ` : `
+                        <div class="swap-detail-info">
+                            <span class="swap-info-badge pickup">✓ You can pick this up without swapping</span>
+                        </div>
+                    `}
+                </div>
+            </div>
+            <div class="modal-footer swap-detail-footer">
+                <button class="btn btn-outline" id="swapDetailViewSchedule">View My Schedule</button>
+                <div class="swap-detail-actions">
+                    <button class="btn btn-secondary" id="swapDetailDecline">Decline</button>
+                    <button class="btn btn-success" id="swapDetailAccept">Accept</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(popup);
+    
+    // Close button
+    popup.querySelector('#closeSwapNotifDetail').addEventListener('click', () => popup.remove());
+    popup.addEventListener('click', (e) => {
+        if (e.target === popup) popup.remove();
+    });
+    
+    // View Schedule button - navigate to the week containing this shift
+    popup.querySelector('#swapDetailViewSchedule').addEventListener('click', () => {
+        popup.remove();
+        if (targetWeekOffset !== employeeState.weekOffset) {
+            employeeState.weekOffset = targetWeekOffset;
+            updateURLWeek(employeeState.weekOffset);
+            updateWeekDisplay();
+            loadScheduleData();
+        }
+        // Scroll to the schedule section
+        const scheduleSection = document.getElementById('scheduleSection') || document.querySelector('.schedule-container');
+        if (scheduleSection) {
+            scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    });
+    
+    // Accept button
+    popup.querySelector('#swapDetailAccept').addEventListener('click', () => {
+        popup.remove();
+        handleSwapFromNotification(swap.id, 'accept');
+    });
+    
+    // Decline button
+    popup.querySelector('#swapDetailDecline').addEventListener('click', () => {
+        popup.remove();
+        handleSwapFromNotification(swap.id, 'decline');
     });
 }
 
