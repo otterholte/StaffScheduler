@@ -903,6 +903,32 @@ def employee_availability(business_slug, employee_id):
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
 
+def deduplicate_slot_assignments(slot_assignments):
+    """Remove duplicate employee entries from slot assignments.
+    
+    Each slot (day,hour) should have at most one assignment per employee.
+    Keeps the first occurrence (which may have the original role).
+    """
+    cleaned = {}
+    for key, assignments in slot_assignments.items():
+        seen_employees = set()
+        unique_assignments = []
+        for a in assignments:
+            if isinstance(a, dict):
+                emp_id = a.get('employee_id')
+            elif isinstance(a, (list, tuple)):
+                emp_id = a[0]
+            else:
+                unique_assignments.append(a)
+                continue
+            
+            if emp_id not in seen_employees:
+                seen_employees.add(emp_id)
+                unique_assignments.append(a)
+        cleaned[key] = unique_assignments
+    return cleaned
+
+
 @app.route('/api/employee/<business_slug>/<int:employee_id>/schedule', methods=['GET'])
 def get_employee_schedule(business_slug, employee_id):
     """Get the published schedule for an employee (no login required - public for employees)."""
@@ -927,11 +953,15 @@ def get_employee_schedule(business_slug, employee_id):
                 a.to_dict() for a in schedule.assignments 
                 if a.employee_id == employee_id
             ]
+            # Deduplicate slot_assignments to fix any corruption from previous swap bugs
+            raw_slot_assignments = schedule.to_dict().get('slot_assignments', {})
+            slot_assignments = deduplicate_slot_assignments(raw_slot_assignments)
+            
             return jsonify({
                 'success': True,
                 'schedule': {
                     'assignments': [a.to_dict() for a in schedule.assignments],
-                    'slot_assignments': schedule.to_dict().get('slot_assignments', {}),
+                    'slot_assignments': slot_assignments,
                     'employee_shifts': employee_shifts
                 },
                 'week_start': week_start.isoformat(),
@@ -2294,14 +2324,14 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                     
                     if actual_key:
                         current_assignments = slot_assignments[actual_key]
-                        # Remove requester - handle both tuple and dict formats
+                        # Remove requester AND any existing accepter assignments (prevent duplicates)
                         new_assignments = []
                         for a in current_assignments:
                             if isinstance(a, (list, tuple)):
-                                if a[0] != requester_model_id:
+                                if a[0] != requester_model_id and a[0] != accepter_model_id:
                                     new_assignments.append(a)
                             elif isinstance(a, dict):
-                                if a.get('employee_id') != requester_model_id:
+                                if a.get('employee_id') != requester_model_id and a.get('employee_id') != accepter_model_id:
                                     new_assignments.append(a)
                         
                         # Add accepter in the same format, with swap marker
@@ -2334,13 +2364,14 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
                         
                         if slot_key in slot_assignments:
                             current_assignments = slot_assignments[slot_key]
+                            # Remove accepter AND any existing requester (prevent duplicates)
                             new_assignments = []
                             for a in current_assignments:
                                 if isinstance(a, (list, tuple)):
-                                    if a[0] != accepter_model_id:
+                                    if a[0] != accepter_model_id and a[0] != requester_model_id:
                                         new_assignments.append(a)
                                 elif isinstance(a, dict):
-                                    if a.get('employee_id') != accepter_model_id:
+                                    if a.get('employee_id') != accepter_model_id and a.get('employee_id') != requester_model_id:
                                         new_assignments.append(a)
                             
                             # Add requester

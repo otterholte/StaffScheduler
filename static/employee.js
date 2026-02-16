@@ -458,7 +458,10 @@ function renderTimelineView() {
                 if (!dayAssignments[empId]) {
                     dayAssignments[empId] = { hours: [], roleId: assignment.role_id, viaSwap: false, swappedFrom: null };
                 }
-                dayAssignments[empId].hours.push(hour);
+                // Deduplicate: don't add same hour twice for same employee
+                if (!dayAssignments[empId].hours.includes(hour)) {
+                    dayAssignments[empId].hours.push(hour);
+                }
                 // Track if any hour in shift was obtained via swap
                 if (assignment.via_swap) {
                     dayAssignments[empId].viaSwap = true;
@@ -1426,7 +1429,10 @@ function renderTableView() {
                 if (!empHoursToday[empId]) {
                     empHoursToday[empId] = [];
                 }
-                empHoursToday[empId].push(hour);
+                // Deduplicate: don't add same hour twice for same employee
+                if (!empHoursToday[empId].includes(hour)) {
+                    empHoursToday[empId].push(hour);
+                }
             });
         });
         
