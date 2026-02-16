@@ -2275,7 +2275,7 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
             original_end_hour=swap_shift.get('end_hour'),
             original_role_id=swap_shift.get('role_id'),
             week_start_date=swap_request.week_start_date,
-            note=f"Counter offer for your {day_names[swap_request.original_day]} {swap_request.original_start_hour}:00-{swap_request.original_end_hour}:00 shift",
+            note=f"Swap offer for your {day_names[swap_request.original_day]} {format_shift_time(swap_request.original_start_hour, swap_request.original_end_hour)} shift",
             status='pending',
             # Mark as counter offer and link to original request
             is_counter_offer=True,
