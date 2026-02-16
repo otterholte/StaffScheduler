@@ -2654,11 +2654,14 @@ function updateUnifiedNotificationBadge() {
     // Get incoming swap count
     const swapCount = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').length;
     
-    // Get outgoing swap update count (accepted/declined that haven't been seen)
-    const swapUpdateCount = (employeeState.swapRequests.outgoing || []).filter(r => 
-        (r.status === 'accepted' || r.status === 'declined') && 
-        !seenSwapUpdates.has(r.id) && !seenSwapUpdates.has(String(r.id))
-    ).length;
+    // Get outgoing swap update count (accepted/declined/all-recipients-declined that haven't been seen)
+    const swapUpdateCount = (employeeState.swapRequests.outgoing || []).filter(r => {
+        if (seenSwapUpdates.has(r.id) || seenSwapUpdates.has(String(r.id))) return false;
+        if (r.status === 'accepted' || r.status === 'declined') return true;
+        // Also count pending requests where all recipients declined
+        if (r.recipients && r.recipients.length > 0 && r.recipients.every(rec => rec.response === 'declined')) return true;
+        return false;
+    }).length;
     
     const totalCount = ptoCount + swapCount + swapUpdateCount;
     
@@ -2736,7 +2739,13 @@ function renderUnifiedNotificationList() {
     
     // Add outgoing swap updates (accepted/declined) as notifications for the requester
     (employeeState.swapRequests.outgoing || []).forEach(swap => {
-        if (swap.status !== 'accepted' && swap.status !== 'declined') return;
+        // Check if it's resolved (accepted/declined) OR if all recipients declined but status wasn't updated
+        const isAccepted = swap.status === 'accepted';
+        const isDeclined = swap.status === 'declined';
+        const allRecipientsDeclined = swap.recipients && swap.recipients.length > 0 && 
+            swap.recipients.every(r => r.response === 'declined');
+        
+        if (!isAccepted && !isDeclined && !allRecipientsDeclined) return;
         // Skip if already seen
         if (seenSwapUpdates.has(swap.id) || seenSwapUpdates.has(String(swap.id))) return;
         
@@ -2753,25 +2762,28 @@ function renderUnifiedNotificationList() {
         
         // Find who responded
         let responderName = 'Someone';
-        if (swap.status === 'accepted' && swap.recipients) {
+        if (isAccepted && swap.recipients) {
             const accepter = swap.recipients.find(r => r.response === 'accepted');
             if (accepter) responderName = accepter.employee_name || 'Someone';
-        } else if (swap.status === 'declined' && swap.recipients) {
-            const allDeclined = swap.recipients.every(r => r.response === 'declined');
-            if (allDeclined) responderName = 'Everyone';
+        } else if ((isDeclined || allRecipientsDeclined) && swap.recipients) {
+            if (swap.recipients.length === 1) {
+                responderName = swap.recipients[0].employee_name || 'Someone';
+            } else {
+                responderName = 'All recipients';
+            }
         }
         
-        const isAccepted = swap.status === 'accepted';
+        const effectivelyAccepted = isAccepted;
         
         notifications.push({
             type: 'swap_update',
             id: swap.id,
-            title: isAccepted ? 'Swap Accepted!' : 'Swap Declined',
+            title: effectivelyAccepted ? 'Swap Accepted!' : 'Swap Declined',
             subtitle: `${shiftDateStr} ${timeRange}`,
-            detail: isAccepted 
+            detail: effectivelyAccepted 
                 ? `${responderName} accepted your swap request`
                 : `${responderName} declined your swap request`,
-            isAccepted: isAccepted,
+            isAccepted: effectivelyAccepted,
             date: new Date(swap.resolved_at || swap.created_at),
             swap: swap,
         });
@@ -2823,16 +2835,16 @@ function renderUnifiedNotificationList() {
                     <div class="notif-title">${notif.title}</div>
                     <div class="notif-subtitle">${notif.subtitle}</div>
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
-                    <div class="notif-tap-hint">Tap for details</div>
+                    <div class="notif-tap-hint">Tap to view on schedule</div>
                 </div>
                 <div class="notif-chevron">›</div>
             `;
             item.style.cursor = 'pointer';
             
-            // Click to open detail popup
+            // Click to go straight to schedule with expanded sticky bar
             item.addEventListener('click', () => {
                 document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
-                showSwapNotificationDetail(notif.swap);
+                navigateToSwapOnSchedule(notif.swap);
             });
         } else if (notif.type === 'swap_update') {
             const icon = notif.isAccepted ? '✅' : '❌';
@@ -2858,6 +2870,47 @@ function renderUnifiedNotificationList() {
         
         list.appendChild(item);
     });
+}
+
+function navigateToSwapOnSchedule(swap) {
+    // Calculate the week offset for this swap
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dayOfWeek = today.getDay();
+    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const currentMonday = new Date(today);
+    currentMonday.setDate(today.getDate() - daysToMonday);
+    
+    let targetWeekOffset = 0;
+    if (swap.week_start_date) {
+        const swapMonday = new Date(swap.week_start_date + 'T00:00:00');
+        targetWeekOffset = Math.round((swapMonday - currentMonday) / (7 * 24 * 60 * 60 * 1000));
+    }
+    
+    const needsWeekChange = targetWeekOffset !== employeeState.weekOffset;
+    if (needsWeekChange) {
+        employeeState.weekOffset = targetWeekOffset;
+        updateURLWeek(employeeState.weekOffset);
+        updateWeekDisplay();
+    }
+    
+    const afterLoad = () => {
+        highlightScheduleDay(swap.original_day);
+        showStickySwapAction(swap);
+        
+        setTimeout(() => {
+            const scheduleSection = document.getElementById('scheduleSection') || document.querySelector('.schedule-container');
+            if (scheduleSection) {
+                scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }, 100);
+    };
+    
+    if (needsWeekChange) {
+        loadScheduleData().then(afterLoad);
+    } else {
+        afterLoad();
+    }
 }
 
 function showSwapNotificationDetail(swap) {
@@ -3054,34 +3107,54 @@ function showStickySwapAction(swap) {
     // Remove any existing sticky popup
     document.getElementById('stickySwapAction')?.remove();
     
-    const dayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const requesterName = swap.requester_name || 'Someone';
-    const dayName = dayNamesShort[swap.original_day] || '?';
-    const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
+    const dayName = dayNames[swap.original_day] || '?';
+    const timeRange = `${formatTime(swap.original_start_hour)} – ${formatTime(swap.original_end_hour)}`;
+    const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
+    const isCounterOffer = swap.is_counter_offer;
     
-    let shiftDateStr = dayName;
+    // Build the date string
+    let dateStr = '';
     if (swap.week_start_date) {
         const ws = new Date(swap.week_start_date + 'T00:00:00');
         const shiftDate = new Date(ws);
         shiftDate.setDate(ws.getDate() + swap.original_day);
-        shiftDateStr = `${dayName} ${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
+        dateStr = `${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
     }
+    
+    // Eligibility info
+    let eligibilityHtml = '';
+    if (swap.my_eligibility_type === 'swap_only') {
+        eligibilityHtml = '<div class="sticky-swap-elig swap-only">⚠ Must offer a shift in exchange</div>';
+    } else {
+        eligibilityHtml = '<div class="sticky-swap-elig pickup">✓ Can pick up without swapping</div>';
+    }
+    
+    // Note
+    const noteHtml = swap.note 
+        ? `<div class="sticky-swap-note">"${swap.note}"</div>` 
+        : '';
     
     const sticky = document.createElement('div');
     sticky.id = 'stickySwapAction';
     sticky.innerHTML = `
-        <div class="sticky-swap-content">
-            <div class="sticky-swap-info">
-                <div class="sticky-swap-title">${requesterName}'s swap request</div>
-                <div class="sticky-swap-shift">${shiftDateStr} · ${timeRange}</div>
-            </div>
-            <div class="sticky-swap-btns">
-                <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
-                <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
-            </div>
-        </div>
         <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
+        <div class="sticky-swap-header">
+            <strong>${requesterName}</strong> wants to ${actionType} a shift
+        </div>
+        <div class="sticky-swap-details">
+            <div class="sticky-swap-day">${dayName}${dateStr ? ', ' + dateStr : ''}</div>
+            <div class="sticky-swap-time">${timeRange}</div>
+            ${swap.original_role_id && swap.original_role_id !== 'staff' ? `<div class="sticky-swap-role">${swap.original_role_id}</div>` : ''}
+        </div>
+        ${noteHtml}
+        ${eligibilityHtml}
+        <div class="sticky-swap-btns">
+            <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
+            <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
+        </div>
     `;
     
     document.body.appendChild(sticky);
@@ -3091,26 +3164,23 @@ function showStickySwapAction(swap) {
         sticky.classList.add('visible');
     });
     
-    sticky.querySelector('#stickyAccept').addEventListener('click', () => {
+    const cleanup = () => {
         sticky.classList.remove('visible');
         setTimeout(() => sticky.remove(), 300);
-        // Clear highlights
         document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+    };
+    
+    sticky.querySelector('#stickyAccept').addEventListener('click', () => {
+        cleanup();
         handleSwapFromNotification(swap.id, 'accept');
     });
     
     sticky.querySelector('#stickyDecline').addEventListener('click', () => {
-        sticky.classList.remove('visible');
-        setTimeout(() => sticky.remove(), 300);
-        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+        cleanup();
         handleSwapFromNotification(swap.id, 'decline');
     });
     
-    sticky.querySelector('#stickyDismiss').addEventListener('click', () => {
-        sticky.classList.remove('visible');
-        setTimeout(() => sticky.remove(), 300);
-        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
-    });
+    sticky.querySelector('#stickyDismiss').addEventListener('click', cleanup);
 }
 
 function formatPTODateRange(start, end) {

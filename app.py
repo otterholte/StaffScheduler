@@ -2257,6 +2257,15 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     if response_type == 'decline':
         recipient.response = 'declined'
         recipient.responded_at = datetime.utcnow()
+        
+        # Check if ALL recipients have now declined - if so, mark the whole request as declined
+        all_recipients = SwapRequestRecipient.query.filter_by(swap_request_id=swap_request.id).all()
+        all_declined = all(r.response == 'declined' for r in all_recipients)
+        if all_declined:
+            swap_request.status = 'declined'
+            swap_request.resolved_at = datetime.utcnow()
+            print(f"[SWAP] All recipients declined - marking request {swap_request.request_id} as declined")
+        
         db.session.commit()
         
         # Send decline notification in background

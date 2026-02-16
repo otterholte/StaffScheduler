@@ -707,10 +707,10 @@ body.menu-open {
     background: #0f172a;
     border-top: 2px solid #334155;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.8);
-    padding: 0.75rem 1rem;
+    padding: 1rem 1.25rem 1.25rem;
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.6rem;
     transform: translateY(100%);
     transition: transform 0.3s ease;
 }
@@ -719,49 +719,109 @@ body.menu-open {
     transform: translateY(0);
 }
 
-.sticky-swap-content {
-    flex: 1;
+.sticky-swap-dismiss {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.75rem;
+    background: none;
+    border: none;
+    color: var(--text-muted, #94a3b8);
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+    z-index: 1;
+}
+
+.sticky-swap-dismiss:hover {
+    opacity: 1;
+}
+
+.sticky-swap-header {
+    font-size: 0.95rem;
+    color: var(--text-primary, #f1f5f9);
+    padding-right: 1.5rem;
+}
+
+.sticky-swap-header strong {
+    color: var(--employee-accent, #10b981);
+}
+
+.sticky-swap-details {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    min-width: 0;
+    flex-wrap: wrap;
 }
 
-.sticky-swap-info {
-    flex: 1;
-    min-width: 0;
+.sticky-swap-day {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--text-primary, #f1f5f9);
 }
 
-.sticky-swap-title {
-    font-size: 0.85rem;
+.sticky-swap-time {
+    font-size: 0.9rem;
     font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
+    color: var(--employee-accent, #10b981);
+    background: rgba(16, 185, 129, 0.12);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+}
+
+.sticky-swap-role {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #94a3b8);
+    background: var(--bg-tertiary, #1e293b);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+}
+
+.sticky-swap-note {
+    font-size: 0.85rem;
+    color: var(--text-secondary, #cbd5e1);
+    font-style: italic;
+    line-height: 1.3;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
 }
 
-.sticky-swap-shift {
-    font-size: 0.75rem;
-    color: var(--employee-accent, #10b981);
+.sticky-swap-elig {
+    font-size: 0.78rem;
     font-weight: 500;
+    padding: 0.2rem 0;
+}
+
+.sticky-swap-elig.pickup {
+    color: #34d399;
+}
+
+.sticky-swap-elig.swap-only {
+    color: #fbbf24;
 }
 
 .sticky-swap-btns {
     display: flex;
-    gap: 0.5rem;
-    flex-shrink: 0;
+    gap: 0.6rem;
+    margin-top: 0.25rem;
 }
 
 .sticky-swap-btn {
     border: none;
     border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
+    padding: 0.6rem 1.5rem;
+    font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
+    flex: 1;
+    text-align: center;
 }
 
 .sticky-swap-btn.accept {
@@ -775,25 +835,12 @@ body.menu-open {
 
 .sticky-swap-btn.decline {
     background: var(--bg-tertiary, #334155);
-    color: var(--text-secondary);
+    color: var(--text-secondary, #94a3b8);
 }
 
 .sticky-swap-btn.decline:hover {
     background: #ef4444;
     color: white;
-}
-
-.sticky-swap-dismiss {
-    background: none;
-    border: none;
-    color: var(--text-muted, #666);
-    font-size: 1.1rem;
-    cursor: pointer;
-    padding: 0.25rem;
-    line-height: 1;
-    flex-shrink: 0;
-    opacity: 0.6;
-    transition: opacity 0.15s;
 }
 
 .sticky-swap-dismiss:hover {
@@ -3615,20 +3662,16 @@ body.menu-open {
     
     /* === STICKY SWAP ACTION - Mobile friendly === */
     #stickySwapAction {
-        padding: 0.75rem 0.75rem;
+        padding: 0.75rem 1rem;
         padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
     }
     
-    .sticky-swap-content {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.5rem;
+    .sticky-swap-header {
+        font-size: 0.88rem;
     }
     
-    .sticky-swap-info {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+    .sticky-swap-day {
+        font-size: 0.95rem;
     }
     
     .sticky-swap-btns {
