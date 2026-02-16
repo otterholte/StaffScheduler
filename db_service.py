@@ -590,17 +590,40 @@ def get_schedule_with_status_from_db(business_id: str, week_start: date) -> tupl
 
 def get_published_schedule_from_db(business_id: str, week_start: date) -> Optional[Schedule]:
     """Get a published schedule from the database."""
+    from datetime import timedelta
     db_business = get_db_business(business_id)
     if not db_business:
         return None
     
     week_id = week_start.strftime('%Y-W%V')
     
+    # Try by week_id first
     db_schedule = DBSchedule.query.filter_by(
         business_db_id=db_business.id,
         week_id=week_id,
         status='published'
     ).first()
+    
+    if not db_schedule:
+        # Try by week_start_date column (handles timezone mismatch)
+        db_schedule = DBSchedule.query.filter_by(
+            business_db_id=db_business.id,
+            week_start_date=week_start,
+            status='published'
+        ).first()
+    
+    if not db_schedule:
+        # Try nearby dates (client/server may be 1 day apart due to timezones)
+        for delta in [-1, 1]:
+            alt_date = week_start + timedelta(days=delta)
+            alt_week_id = alt_date.strftime('%Y-W%V')
+            db_schedule = DBSchedule.query.filter_by(
+                business_db_id=db_business.id,
+                week_id=alt_week_id,
+                status='published'
+            ).first()
+            if db_schedule:
+                break
     
     if db_schedule:
         return _db_schedule_to_model(db_schedule)

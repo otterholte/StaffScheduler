@@ -13,9 +13,29 @@ function getInitialViewMode() {
     return 'table'; // Default to table view for employees
 }
 
+function getInitialWeekOffset() {
+    const params = new URLSearchParams(window.location.search);
+    const week = params.get('week');
+    if (week !== null) {
+        const offset = parseInt(week, 10);
+        if (!isNaN(offset)) return offset;
+    }
+    return 0;
+}
+
 function updateURLView(viewMode) {
     const url = new URL(window.location);
     url.searchParams.set('view', viewMode);
+    window.history.replaceState({}, '', url);
+}
+
+function updateURLWeek(weekOffset) {
+    const url = new URL(window.location);
+    if (weekOffset === 0) {
+        url.searchParams.delete('week');
+    } else {
+        url.searchParams.set('week', weekOffset);
+    }
     window.history.replaceState({}, '', url);
 }
 
@@ -33,7 +53,7 @@ const employeeState = {
     businessSlug: EMPLOYEE_DATA.businessSlug,
     schedule: EMPLOYEE_DATA.schedule || null,
     availability: EMPLOYEE_DATA.availability || {},
-    weekOffset: 0,
+    weekOffset: getInitialWeekOffset(),
     viewMode: getInitialViewMode(), // 'timeline', 'grid', or 'table'
     filterMode: 'mine', // 'mine' or 'everyone'
     // Availability editing state
@@ -255,6 +275,7 @@ function setupWeekNavigation() {
     if (prevBtn) {
         prevBtn.addEventListener('click', async () => {
             employeeState.weekOffset--;
+            updateURLWeek(employeeState.weekOffset);
             updateWeekDisplay();
             await loadScheduleData();
         });
@@ -263,6 +284,7 @@ function setupWeekNavigation() {
     if (nextBtn) {
         nextBtn.addEventListener('click', async () => {
             employeeState.weekOffset++;
+            updateURLWeek(employeeState.weekOffset);
             updateWeekDisplay();
             await loadScheduleData();
         });
@@ -282,8 +304,11 @@ async function loadScheduleData() {
     try {
         // Use db_id for API calls (integer ID from database)
         const empId = employeeState.employee.db_id || employeeState.employee.id;
+        // Send the actual week start date to avoid timezone mismatch between client/server
+        const dates = getWeekDates(employeeState.weekOffset);
+        const weekStart = formatDateLocal(dates[0]);
         const response = await fetch(
-            `/api/employee/${employeeState.businessSlug}/${empId}/schedule?weekOffset=${employeeState.weekOffset}`
+            `/api/employee/${employeeState.businessSlug}/${empId}/schedule?weekStart=${weekStart}&weekOffset=${employeeState.weekOffset}`
         );
         const data = await response.json();
         
@@ -332,7 +357,9 @@ async function loadScheduleData() {
 
 async function loadApprovedPTOForSchedule() {
     try {
-        const response = await fetch(`/api/${employeeState.businessSlug}/pto/approved?weekOffset=${employeeState.weekOffset}`);
+        const dates = getWeekDates(employeeState.weekOffset);
+        const weekStart = formatDateLocal(dates[0]);
+        const response = await fetch(`/api/${employeeState.businessSlug}/pto/approved?weekStart=${weekStart}&weekOffset=${employeeState.weekOffset}`);
         const data = await response.json();
         
         if (data.success) {
@@ -2893,6 +2920,7 @@ function scrollToAndHighlightPTO(pto) {
     // If we need to change weeks, navigate there
     if (weekDiff !== employeeState.weekOffset) {
         employeeState.weekOffset = weekDiff;
+        updateURLWeek(employeeState.weekOffset);
         updateWeekDisplay();
         loadScheduleData().then(() => {
             highlightPTOElement(pto);

@@ -933,7 +933,8 @@ def deduplicate_slot_assignments(slot_assignments):
 @app.route('/api/employee/<business_slug>/<int:employee_id>/schedule', methods=['GET'])
 def get_employee_schedule(business_slug, employee_id):
     """Get the published schedule for an employee (no login required - public for employees)."""
-    week_offset = request.args.get('weekOffset', 0, type=int)
+    # Prefer explicit weekStart date from client (avoids timezone mismatch between client/server)
+    week_start_str = request.args.get('weekStart')
     
     # Get the business - force reload to ensure fresh employee data
     business = get_business_by_slug(business_slug, force_reload=True)
@@ -944,7 +945,13 @@ def get_employee_schedule(business_slug, employee_id):
         }), 404
     
     # Get the published schedule from database
-    week_start = get_week_start(week_offset)
+    if week_start_str:
+        try:
+            week_start = date.fromisoformat(week_start_str)
+        except ValueError:
+            week_start = get_week_start(request.args.get('weekOffset', 0, type=int))
+    else:
+        week_start = get_week_start(request.args.get('weekOffset', 0, type=int))
     
     try:
         schedule = get_published_schedule_from_db(business.id, week_start)
@@ -1481,14 +1488,26 @@ def get_approved_pto_for_week(business_slug):
         if not db_business:
             return jsonify({'success': False, 'error': 'Business not found in database'}), 404
         
-        # Get week offset from params
-        week_offset = request.args.get('weekOffset', 0, type=int)
-        
-        # Calculate week start (Sunday) and end (Saturday)
-        today = datetime.now().date()
-        days_since_sunday = today.weekday() + 1 if today.weekday() != 6 else 0
-        week_start = today - timedelta(days=days_since_sunday) + timedelta(weeks=week_offset)
-        week_end = week_start + timedelta(days=6)
+        # Prefer explicit weekStart date from client (avoids timezone mismatch)
+        week_start_str = request.args.get('weekStart')
+        if week_start_str:
+            try:
+                week_monday = date.fromisoformat(week_start_str)
+                # Convert Monday-based start to Sunday-based for PTO overlap check
+                week_start = week_monday - timedelta(days=1)  # Sunday before
+                week_end = week_monday + timedelta(days=6)  # Saturday after
+            except ValueError:
+                week_offset = request.args.get('weekOffset', 0, type=int)
+                today = datetime.now().date()
+                days_since_sunday = today.weekday() + 1 if today.weekday() != 6 else 0
+                week_start = today - timedelta(days=days_since_sunday) + timedelta(weeks=week_offset)
+                week_end = week_start + timedelta(days=6)
+        else:
+            week_offset = request.args.get('weekOffset', 0, type=int)
+            today = datetime.now().date()
+            days_since_sunday = today.weekday() + 1 if today.weekday() != 6 else 0
+            week_start = today - timedelta(days=days_since_sunday) + timedelta(weeks=week_offset)
+            week_end = week_start + timedelta(days=6)
         
         # Get approved PTO that overlaps with this week
         pto_requests = PTORequest.query.filter(
@@ -2332,7 +2351,10 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
     db_business = get_db_business(business.id)
     if db_business:
         week_id = swap_request.week_start_date.strftime('%Y-W%V')
-        print(f"[SWAP] Looking for schedule: business_db_id={db_business.id}, week_id={week_id}")
+        print(f"[SWAP] Looking for schedule: business_db_id={db_business.id}, week_id={week_id}, week_start_date={swap_request.week_start_date}")
+        
+        # Try by week_id first, then fall back to week_start_date column
+        # (handles timezone mismatch where client/server compute different week_ids for the same week)
         db_schedule = DBSchedule.query.filter_by(
             business_db_id=db_business.id,
             week_id=week_id,
@@ -2340,7 +2362,32 @@ def respond_to_swap_request(business_slug, employee_id, request_id):
         ).first()
         
         if not db_schedule:
-            print(f"[SWAP] ERROR: No published schedule found for week_id={week_id}")
+            # Try by week_start_date directly
+            db_schedule = DBSchedule.query.filter_by(
+                business_db_id=db_business.id,
+                week_start_date=swap_request.week_start_date,
+                status='published'
+            ).first()
+            if db_schedule:
+                print(f"[SWAP] Found schedule by week_start_date (week_id mismatch: stored={db_schedule.week_id}, computed={week_id})")
+        
+        if not db_schedule:
+            # Last resort: find any published schedule that contains this day
+            # The swap's week_start might differ from the schedule's week_start by up to 1 day (timezone issue)
+            for delta in [-1, 1]:
+                alt_date = swap_request.week_start_date + timedelta(days=delta)
+                alt_week_id = alt_date.strftime('%Y-W%V')
+                db_schedule = DBSchedule.query.filter_by(
+                    business_db_id=db_business.id,
+                    week_id=alt_week_id,
+                    status='published'
+                ).first()
+                if db_schedule:
+                    print(f"[SWAP] Found schedule with nearby date: alt_date={alt_date}, alt_week_id={alt_week_id}")
+                    break
+        
+        if not db_schedule:
+            print(f"[SWAP] ERROR: No published schedule found for week_id={week_id} or nearby dates")
             schedule_error = f"No published schedule found for week {week_id}"
         else:
             try:
