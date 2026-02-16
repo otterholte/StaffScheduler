@@ -2699,6 +2699,7 @@ function renderUnifiedNotificationList() {
     
     // Add swap notifications (pending incoming requests)
     const dayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending').forEach(swap => {
         const requesterName = swap.requester_name || 'Someone';
         const dayName = dayNamesShort[swap.original_day] || '?';
@@ -2706,11 +2707,20 @@ function renderUnifiedNotificationList() {
         const notePreview = swap.note ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
         const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
         
+        // Compute the actual date (e.g. "Mon Feb 16")
+        let shiftDateStr = dayName;
+        if (swap.week_start_date) {
+            const ws = new Date(swap.week_start_date + 'T00:00:00');
+            const shiftDate = new Date(ws);
+            shiftDate.setDate(ws.getDate() + swap.original_day);
+            shiftDateStr = `${dayName} ${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
+        }
+        
         notifications.push({
             type: 'swap',
             id: swap.id,
             title: `${requesterName}`,
-            subtitle: `Wants to ${actionType}: ${dayName} ${timeRange}`,
+            subtitle: `Wants to ${actionType}: ${shiftDateStr} ${timeRange}`,
             notePreview: notePreview,
             date: new Date(swap.created_at),
             swap: swap,
@@ -2873,19 +2883,38 @@ function showSwapNotificationDetail(swap) {
         if (e.target === popup) popup.remove();
     });
     
-    // View Schedule button - navigate to the week containing this shift
+    // View Schedule button - navigate, highlight the day, show sticky mini-popup
     popup.querySelector('#swapDetailViewSchedule').addEventListener('click', () => {
         popup.remove();
-        if (targetWeekOffset !== employeeState.weekOffset) {
+        
+        const needsWeekChange = targetWeekOffset !== employeeState.weekOffset;
+        if (needsWeekChange) {
             employeeState.weekOffset = targetWeekOffset;
             updateURLWeek(employeeState.weekOffset);
             updateWeekDisplay();
-            loadScheduleData();
         }
-        // Scroll to the schedule section
-        const scheduleSection = document.getElementById('scheduleSection') || document.querySelector('.schedule-container');
-        if (scheduleSection) {
-            scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Load schedule then highlight + show sticky popup
+        const afterLoad = () => {
+            // Highlight the day column on the schedule
+            highlightScheduleDay(swap.original_day);
+            
+            // Show sticky mini-popup for accept/decline
+            showStickySwapAction(swap);
+            
+            // Scroll to the schedule section
+            setTimeout(() => {
+                const scheduleSection = document.getElementById('scheduleSection') || document.querySelector('.schedule-container');
+                if (scheduleSection) {
+                    scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            }, 100);
+        };
+        
+        if (needsWeekChange) {
+            loadScheduleData().then(afterLoad);
+        } else {
+            afterLoad();
         }
     });
     
@@ -2899,6 +2928,119 @@ function showSwapNotificationDetail(swap) {
     popup.querySelector('#swapDetailDecline').addEventListener('click', () => {
         popup.remove();
         handleSwapFromNotification(swap.id, 'decline');
+    });
+}
+
+function highlightScheduleDay(dayIdx) {
+    // Remove any existing highlights
+    document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+    
+    // Highlight in table view - find the column for this day
+    const table = document.querySelector('.simple-schedule-table');
+    if (table) {
+        // Header cells (skip first which is the name column)
+        const headerCells = table.querySelectorAll('thead th');
+        const daysOpen = employeeState.daysOpen || [0, 1, 2, 3, 4, 5, 6];
+        const colIndex = daysOpen.indexOf(dayIdx);
+        if (colIndex >= 0 && headerCells[colIndex + 1]) {
+            headerCells[colIndex + 1].classList.add('schedule-day-highlight');
+        }
+        // Body cells in that column
+        const bodyRows = table.querySelectorAll('tbody tr');
+        bodyRows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells[colIndex + 1]) {
+                cells[colIndex + 1].classList.add('schedule-day-highlight');
+            }
+        });
+    }
+    
+    // Highlight in timeline view
+    const timelineDays = document.querySelectorAll('.timeline-day');
+    timelineDays.forEach(day => {
+        if (parseInt(day.dataset?.dayIdx) === dayIdx) {
+            day.classList.add('schedule-day-highlight');
+        }
+    });
+    
+    // Highlight in grid view
+    const gridSlots = document.querySelectorAll(`.slot[data-day="${dayIdx}"]`);
+    gridSlots.forEach(slot => slot.classList.add('schedule-day-highlight'));
+    
+    // Highlight in upcoming shifts
+    const upcomingItems = document.querySelectorAll('.upcoming-shift-item');
+    upcomingItems.forEach(item => {
+        if (parseInt(item.dataset?.day) === dayIdx) {
+            item.classList.add('schedule-day-highlight');
+        }
+    });
+    
+    // Auto-clear after 8 seconds
+    setTimeout(() => {
+        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+    }, 8000);
+}
+
+function showStickySwapAction(swap) {
+    // Remove any existing sticky popup
+    document.getElementById('stickySwapAction')?.remove();
+    
+    const dayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const requesterName = swap.requester_name || 'Someone';
+    const dayName = dayNamesShort[swap.original_day] || '?';
+    const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
+    
+    let shiftDateStr = dayName;
+    if (swap.week_start_date) {
+        const ws = new Date(swap.week_start_date + 'T00:00:00');
+        const shiftDate = new Date(ws);
+        shiftDate.setDate(ws.getDate() + swap.original_day);
+        shiftDateStr = `${dayName} ${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
+    }
+    
+    const sticky = document.createElement('div');
+    sticky.id = 'stickySwapAction';
+    sticky.innerHTML = `
+        <div class="sticky-swap-content">
+            <div class="sticky-swap-info">
+                <div class="sticky-swap-title">${requesterName}'s swap request</div>
+                <div class="sticky-swap-shift">${shiftDateStr} · ${timeRange}</div>
+            </div>
+            <div class="sticky-swap-btns">
+                <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
+                <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
+            </div>
+        </div>
+        <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
+    `;
+    
+    document.body.appendChild(sticky);
+    
+    // Slide in
+    requestAnimationFrame(() => {
+        sticky.classList.add('visible');
+    });
+    
+    sticky.querySelector('#stickyAccept').addEventListener('click', () => {
+        sticky.classList.remove('visible');
+        setTimeout(() => sticky.remove(), 300);
+        // Clear highlights
+        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+        handleSwapFromNotification(swap.id, 'accept');
+    });
+    
+    sticky.querySelector('#stickyDecline').addEventListener('click', () => {
+        sticky.classList.remove('visible');
+        setTimeout(() => sticky.remove(), 300);
+        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+        handleSwapFromNotification(swap.id, 'decline');
+    });
+    
+    sticky.querySelector('#stickyDismiss').addEventListener('click', () => {
+        sticky.classList.remove('visible');
+        setTimeout(() => sticky.remove(), 300);
+        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
     });
 }
 

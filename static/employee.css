@@ -637,6 +637,135 @@ body.menu-open {
     font-size: 0.85rem;
 }
 
+/* === Schedule Day Highlight (when viewing swap request) === */
+.schedule-day-highlight {
+    background: rgba(59, 130, 246, 0.12) !important;
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.4);
+    border-radius: 4px;
+    animation: dayHighlightPulse 2s ease-in-out infinite;
+}
+
+@keyframes dayHighlightPulse {
+    0%, 100% { background: rgba(59, 130, 246, 0.12) !important; }
+    50% { background: rgba(59, 130, 246, 0.22) !important; }
+}
+
+/* Timeline day highlight */
+.timeline-day.schedule-day-highlight {
+    border-radius: 12px;
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+/* Upcoming shift item highlight */
+.upcoming-shift-item.schedule-day-highlight {
+    border-radius: 10px;
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+/* === Sticky Swap Action Popup === */
+#stickySwapAction {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    background: var(--bg-secondary, #1e293b);
+    border-top: 1px solid var(--border-color, #374151);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+}
+
+#stickySwapAction.visible {
+    transform: translateY(0);
+}
+
+.sticky-swap-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.sticky-swap-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sticky-swap-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sticky-swap-shift {
+    font-size: 0.75rem;
+    color: var(--employee-accent, #10b981);
+    font-weight: 500;
+}
+
+.sticky-swap-btns {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.sticky-swap-btn {
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+
+.sticky-swap-btn.accept {
+    background: var(--employee-accent, #10b981);
+    color: white;
+}
+
+.sticky-swap-btn.accept:hover {
+    background: #059669;
+}
+
+.sticky-swap-btn.decline {
+    background: var(--bg-tertiary, #334155);
+    color: var(--text-secondary);
+}
+
+.sticky-swap-btn.decline:hover {
+    background: #ef4444;
+    color: white;
+}
+
+.sticky-swap-dismiss {
+    background: none;
+    border: none;
+    color: var(--text-muted, #666);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.sticky-swap-dismiss:hover {
+    opacity: 1;
+    color: var(--text-primary);
+}
+
 /* Highlight pulse animation for notifications */
 .highlight-pulse {
     animation: highlightPulse 2s ease-out;
@@ -3447,6 +3576,34 @@ body.menu-open {
     .swap-detail-actions .btn {
         flex: 1;
         min-height: 48px;
+    }
+    
+    /* === STICKY SWAP ACTION - Mobile friendly === */
+    #stickySwapAction {
+        padding: 0.75rem 0.75rem;
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    }
+    
+    .sticky-swap-content {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+    }
+    
+    .sticky-swap-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .sticky-swap-btns {
+        width: 100%;
+    }
+    
+    .sticky-swap-btn {
+        flex: 1;
+        min-height: 44px;
+        font-size: 0.9rem;
     }
     
     /* === NOTIFICATIONS - Full screen on mobile === */
