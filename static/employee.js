@@ -3137,23 +3137,33 @@ function showStickySwapAction(swap) {
         ? `<div class="sticky-swap-note">"${swap.note}"</div>` 
         : '';
     
+    // Short eligibility label
+    const eligLabel = swap.my_eligibility_type === 'swap_only' 
+        ? '<span class="sticky-elig-tag swap-only">⚠ Must swap</span>'
+        : '<span class="sticky-elig-tag pickup">✓ Pickup OK</span>';
+    
+    // Truncate note for inline display
+    let noteSnippet = '';
+    if (swap.note) {
+        noteSnippet = swap.note.length > 60 ? swap.note.substring(0, 60) + '…' : swap.note;
+    }
+    
     const sticky = document.createElement('div');
     sticky.id = 'stickySwapAction';
     sticky.innerHTML = `
-        <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
-        <div class="sticky-swap-header">
-            <strong>${requesterName}</strong> wants to ${actionType} a shift
-        </div>
-        <div class="sticky-swap-details">
-            <div class="sticky-swap-day">${dayName}${dateStr ? ', ' + dateStr : ''}</div>
-            <div class="sticky-swap-time">${timeRange}</div>
-            ${swap.original_role_id && swap.original_role_id !== 'staff' ? `<div class="sticky-swap-role">${swap.original_role_id}</div>` : ''}
-        </div>
-        ${noteHtml}
-        ${eligibilityHtml}
-        <div class="sticky-swap-btns">
-            <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
-            <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
+        <div class="sticky-swap-row">
+            <div class="sticky-swap-info">
+                <span class="sticky-swap-who"><strong>${requesterName}</strong> · ${actionType}</span>
+                <span class="sticky-swap-sep">│</span>
+                <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
+                ${eligLabel}
+                ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
+            </div>
+            <div class="sticky-swap-btns">
+                <button class="sticky-swap-btn decline" id="stickyDecline">Decline</button>
+                <button class="sticky-swap-btn accept" id="stickyAccept">Accept</button>
+            </div>
+            <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
         </div>
     `;
     
