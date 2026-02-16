@@ -2863,6 +2863,79 @@ body.menu-open {
 }
 
 /* Offer Swap button style */
+/* Info icon + tooltip for counter offer context */
+.notif-info-wrap,
+.sticky-info-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.3rem;
+}
+
+.notif-info-icon,
+.sticky-info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--bg-tertiary, #334155);
+    color: var(--text-muted, #94a3b8);
+    font-size: 0.65rem;
+    font-style: normal;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.notif-info-icon:hover,
+.sticky-info-icon:hover {
+    background: var(--employee-accent, #10b981);
+    color: white;
+}
+
+.notif-info-tooltip,
+.sticky-info-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: var(--text-primary, #f1f5f9);
+    font-size: 0.78rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    white-space: nowrap;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    border: 1px solid #334155;
+    z-index: 100;
+    pointer-events: none;
+}
+
+.notif-info-wrap:hover .notif-info-tooltip,
+.sticky-info-wrap:hover .sticky-info-tooltip {
+    display: block;
+}
+
+/* Mobile: tap to toggle */
+@media (hover: none) {
+    .notif-info-tooltip,
+    .sticky-info-tooltip {
+        white-space: normal;
+        max-width: 250px;
+        left: auto;
+        right: 0;
+        transform: none;
+    }
+    
+    .notif-info-wrap:active .notif-info-tooltip,
+    .sticky-info-wrap:active .sticky-info-tooltip {
+        display: block;
+    }
+}
+
 .notif-btn-offer-swap {
     background: rgba(59, 130, 246, 0.15);
     color: #60a5fa;

@@ -2715,8 +2715,9 @@ function renderUnifiedNotificationList() {
         const timeRange = `${formatTime(swap.original_start_hour)}-${formatTime(swap.original_end_hour)}`;
         const isOpenForSwaps = swap.open_for_swaps;
         const isCounterOffer = swap.is_counter_offer;
-        // Don't show auto-generated note for counter offers (it's redundant)
+        // For counter offers, show note as tooltip; for regular, show inline preview
         const notePreview = (swap.note && !isCounterOffer) ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
+        const counterOfferContext = (isCounterOffer && swap.note) ? swap.note : '';
         let actionType = 'give away';
         let title = requesterName;
         if (isCounterOffer) {
@@ -2749,6 +2750,7 @@ function renderUnifiedNotificationList() {
             swap: swap,
             isOpenForSwaps: isOpenForSwaps,
             isCounterOffer: isCounterOffer,
+            counterOfferContext: counterOfferContext,
             seen: false
         });
     });
@@ -2846,9 +2848,9 @@ function renderUnifiedNotificationList() {
             });
         } else if (notif.type === 'swap') {
             item.innerHTML = `
-                <div class="notif-icon swap-icon">🔄</div>
+                <div class="notif-icon swap-icon">${notif.isCounterOffer ? '⇄' : '🔄'}</div>
                 <div class="notif-content">
-                    <div class="notif-title">${notif.title}</div>
+                    <div class="notif-title">${notif.title}${notif.counterOfferContext ? `<span class="notif-info-wrap"><span class="notif-info-icon" title="${notif.counterOfferContext}">ℹ</span><span class="notif-info-tooltip">${notif.counterOfferContext}</span></span>` : ''}</div>
                     <div class="notif-subtitle">${notif.subtitle}</div>
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
                     <div class="notif-actions">
@@ -3198,9 +3200,13 @@ function showStickySwapAction(swap) {
     // Label and tag based on type
     let whoText = `<strong>${requesterName}</strong> · ${isOpenForSwaps ? 'open for swaps' : actionType}`;
     let tagHtml = isOpenForSwaps ? '<span class="sticky-elig-tag swap-open">🔄 Swap</span>' : eligLabel;
+    let infoIconHtml = '';
     if (isCounterOffer) {
         whoText = `<strong>${requesterName}</strong> · offering a trade`;
         tagHtml = '<span class="sticky-elig-tag swap-open">⇄ Swap Offer</span>';
+        if (swap.note) {
+            infoIconHtml = `<span class="sticky-info-wrap"><span class="sticky-info-icon">ℹ</span><span class="sticky-info-tooltip">${swap.note}</span></span>`;
+        }
     }
     
     const sticky = document.createElement('div');
@@ -3209,6 +3215,7 @@ function showStickySwapAction(swap) {
         <div class="sticky-swap-row">
             <div class="sticky-swap-info">
                 <span class="sticky-swap-who">${whoText}</span>
+                ${infoIconHtml}
                 <span class="sticky-swap-sep">│</span>
                 <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
                 ${tagHtml}
