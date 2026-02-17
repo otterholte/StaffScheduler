@@ -886,32 +886,40 @@ body.menu-open {
     color: var(--text-primary);
 }
 
-/* Counter-offer trade flow layout */
-.sticky-trade-flow {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-    min-width: 0;
-    font-size: 0.9rem;
-    color: var(--text-secondary, #cbd5e1);
+/* Counter-offer trade stacked layout */
+#stickySwapAction:has(.sticky-trade-stack) {
+    position: relative;
 }
 
-.sticky-trade-flow strong {
+.sticky-dismiss-topright {
+    position: absolute !important;
+    top: 0.6rem;
+    right: 0.75rem;
+}
+
+.sticky-trade-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.92rem;
+    color: var(--text-secondary, #cbd5e1);
+    line-height: 1.7;
+    padding-right: 1.5rem;
+}
+
+.sticky-trade-stack strong {
     color: var(--employee-accent, #10b981);
 }
 
 .sticky-trade-line {
-    display: inline;
     white-space: nowrap;
 }
 
 .sticky-trade-pill {
     display: inline-block;
-    font-size: 0.82rem;
+    font-size: 0.84rem;
     font-weight: 600;
-    padding: 0.2rem 0.6rem;
+    padding: 0.18rem 0.6rem;
     border-radius: 5px;
     white-space: nowrap;
     vertical-align: baseline;
@@ -929,44 +937,14 @@ body.menu-open {
     border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
-#stickySwapAction:has(.sticky-trade-flow) {
+.sticky-trade-btns {
     display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
 }
 
-/* Mobile: stack into 3 clear lines */
-@media (max-width: 600px) {
-    #stickySwapAction:has(.sticky-trade-flow) {
-        flex-direction: column;
-        align-items: stretch;
-        padding: 1rem 1.25rem;
-        gap: 0.75rem;
-    }
-    
-    .sticky-trade-flow {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 0.35rem;
-        font-size: 0.92rem;
-        line-height: 1.6;
-    }
-    
-    .sticky-trade-line {
-        display: block;
-    }
-    
-    .sticky-trade-pill {
-        font-size: 0.82rem;
-        padding: 0.15rem 0.5rem;
-    }
-    
-    .sticky-swap-btns {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: flex-end;
-    }
+.sticky-trade-btns .sticky-swap-btn {
+    flex: 1;
 }
 
 /* Highlight pulse animation for notifications */

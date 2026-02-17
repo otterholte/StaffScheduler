@@ -3234,14 +3234,13 @@ function showStickySwapAction(swap) {
         const theirPill = `${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}`;
         
         stickyInnerHtml = `
-            <div class="sticky-trade-flow">
-                <span class="sticky-trade-line line-theirs"><strong>${requesterName}</strong> wants to trade their <span class="sticky-trade-pill theirs">${theirPill}</span></span>
-                <span class="sticky-trade-line line-yours">for your <span class="sticky-trade-pill yours">${yourShiftPill}</span></span>
+            <button class="sticky-swap-dismiss sticky-dismiss-topright" id="stickyDismiss">✕</button>
+            <div class="sticky-trade-stack">
+                <div class="sticky-trade-line"><strong>${requesterName}</strong> wants to trade</div>
+                <div class="sticky-trade-line">their <span class="sticky-trade-pill theirs">${theirPill}</span></div>
+                <div class="sticky-trade-line">for your <span class="sticky-trade-pill yours">${yourShiftPill}</span></div>
+                <div class="sticky-trade-btns">${buttonsHtml}</div>
             </div>
-            <div class="sticky-swap-btns">
-                ${buttonsHtml}
-            </div>
-            <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
         `;
     } else {
         // Regular request layout
