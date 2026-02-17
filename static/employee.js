@@ -2951,7 +2951,11 @@ function navigateToSwapOnSchedule(swap) {
     }
     
     const afterLoad = () => {
-        highlightScheduleDay(swap.original_day);
+        clearScheduleHighlights();
+        highlightScheduleDay(swap.original_day, 'schedule-day-highlight');
+        if (swap.is_counter_offer && swap.original_request_day !== undefined) {
+            highlightScheduleDay(swap.original_request_day, 'schedule-day-highlight-green');
+        }
         showStickySwapAction(swap);
         
         setTimeout(() => {
@@ -3074,13 +3078,14 @@ function showSwapNotificationDetail(swap) {
         
         // Load schedule then highlight + show sticky popup
         const afterLoad = () => {
-            // Highlight the day column on the schedule
-            highlightScheduleDay(swap.original_day);
+            clearScheduleHighlights();
+            highlightScheduleDay(swap.original_day, 'schedule-day-highlight');
+            if (swap.is_counter_offer && swap.original_request_day !== undefined) {
+                highlightScheduleDay(swap.original_request_day, 'schedule-day-highlight-green');
+            }
             
-            // Show sticky mini-popup for accept/decline
             showStickySwapAction(swap);
             
-            // Scroll to the schedule section
             setTimeout(() => {
                 const scheduleSection = document.getElementById('scheduleSection') || document.querySelector('.schedule-container');
                 if (scheduleSection) {
@@ -3109,26 +3114,23 @@ function showSwapNotificationDetail(swap) {
     });
 }
 
-function highlightScheduleDay(dayIdx) {
-    // Remove any existing highlights
-    document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+function highlightScheduleDay(dayIdx, highlightClass) {
+    const cls = highlightClass || 'schedule-day-highlight';
     
     // Highlight in table view - find the column for this day
     const table = document.querySelector('.simple-schedule-table');
     if (table) {
-        // Header cells (skip first which is the name column)
         const headerCells = table.querySelectorAll('thead th');
         const daysOpen = employeeState.daysOpen || [0, 1, 2, 3, 4, 5, 6];
         const colIndex = daysOpen.indexOf(dayIdx);
         if (colIndex >= 0 && headerCells[colIndex + 1]) {
-            headerCells[colIndex + 1].classList.add('schedule-day-highlight');
+            headerCells[colIndex + 1].classList.add(cls);
         }
-        // Body cells in that column
         const bodyRows = table.querySelectorAll('tbody tr');
         bodyRows.forEach(row => {
             const cells = row.querySelectorAll('td');
             if (cells[colIndex + 1]) {
-                cells[colIndex + 1].classList.add('schedule-day-highlight');
+                cells[colIndex + 1].classList.add(cls);
             }
         });
     }
@@ -3137,26 +3139,27 @@ function highlightScheduleDay(dayIdx) {
     const timelineDays = document.querySelectorAll('.timeline-day');
     timelineDays.forEach(day => {
         if (parseInt(day.dataset?.dayIdx) === dayIdx) {
-            day.classList.add('schedule-day-highlight');
+            day.classList.add(cls);
         }
     });
     
     // Highlight in grid view
     const gridSlots = document.querySelectorAll(`.slot[data-day="${dayIdx}"]`);
-    gridSlots.forEach(slot => slot.classList.add('schedule-day-highlight'));
+    gridSlots.forEach(slot => slot.classList.add(cls));
     
     // Highlight in upcoming shifts
     const upcomingItems = document.querySelectorAll('.upcoming-shift-item');
     upcomingItems.forEach(item => {
         if (parseInt(item.dataset?.day) === dayIdx) {
-            item.classList.add('schedule-day-highlight');
+            item.classList.add(cls);
         }
     });
-    
-    // Auto-clear after 8 seconds
-    setTimeout(() => {
-        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
-    }, 8000);
+}
+
+function clearScheduleHighlights() {
+    document.querySelectorAll('.schedule-day-highlight, .schedule-day-highlight-green').forEach(el => {
+        el.classList.remove('schedule-day-highlight', 'schedule-day-highlight-green');
+    });
 }
 
 function showStickySwapAction(swap) {
@@ -3281,7 +3284,7 @@ function showStickySwapAction(swap) {
     const cleanup = () => {
         sticky.classList.remove('visible');
         setTimeout(() => sticky.remove(), 300);
-        document.querySelectorAll('.schedule-day-highlight').forEach(el => el.classList.remove('schedule-day-highlight'));
+        clearScheduleHighlights();
     };
     
     sticky.querySelector('#stickyAccept').addEventListener('click', () => {
