@@ -527,9 +527,14 @@ body.menu-open {
 
 .notif-trade-shifts {
     display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.notif-trade-line {
+    display: flex;
     align-items: center;
-    gap: 0.4rem;
-    flex-wrap: wrap;
+    gap: 0.35rem;
 }
 
 .notif-trade-pill {

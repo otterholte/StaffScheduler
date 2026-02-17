@@ -2895,11 +2895,8 @@ function renderUnifiedNotificationList() {
                     <div class="notif-trade-card">
                         <div class="notif-trade-header">⇄ <strong>${swap.requester_name || 'Someone'}</strong> wants to trade</div>
                         <div class="notif-trade-shifts">
-                            <span class="notif-trade-label">Their</span>
-                            <span class="notif-trade-pill theirs">${theirDateStr} · ${theirTime}</span>
-                            <span class="notif-trade-arrow">→</span>
-                            <span class="notif-trade-label">For your</span>
-                            <span class="notif-trade-pill yours">${yourPillText}</span>
+                            <div class="notif-trade-line"><span class="notif-trade-label">Their</span> <span class="notif-trade-pill theirs">${theirDateStr} · ${theirTime}</span></div>
+                            <div class="notif-trade-line"><span class="notif-trade-label">For your</span> <span class="notif-trade-pill yours">${yourPillText}</span></div>
                         </div>
                         <div class="notif-actions">
                             <button class="notif-btn notif-btn-decline">Decline</button>
