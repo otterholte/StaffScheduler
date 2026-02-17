@@ -3234,12 +3234,15 @@ function showStickySwapAction(swap) {
         const theirPill = `${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}`;
         
         stickyInnerHtml = `
-            <button class="sticky-swap-dismiss sticky-dismiss-topright" id="stickyDismiss">✕</button>
-            <div class="sticky-trade-stack">
-                <div class="sticky-trade-line"><strong>${requesterName}</strong> wants to trade</div>
-                <div class="sticky-trade-line">their <span class="sticky-trade-pill theirs">${theirPill}</span></div>
-                <div class="sticky-trade-line">for your <span class="sticky-trade-pill yours">${yourShiftPill}</span></div>
-                <div class="sticky-trade-btns">${buttonsHtml}</div>
+            <div class="sticky-swap-row sticky-trade-row">
+                <div class="sticky-trade-flow">
+                    <span class="sticky-trade-header"><strong>${requesterName}</strong> wants to trade</span>
+                    <span class="sticky-trade-shifts">their <span class="sticky-trade-pill theirs">${theirPill}</span> for your <span class="sticky-trade-pill yours">${yourShiftPill}</span></span>
+                </div>
+                <div class="sticky-swap-btns">
+                    ${buttonsHtml}
+                </div>
+                <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
             </div>
         `;
     } else {
