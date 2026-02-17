@@ -2717,17 +2717,7 @@ function renderUnifiedNotificationList() {
         const isCounterOffer = swap.is_counter_offer;
         // For counter offers, show note as tooltip; for regular, show inline preview
         const notePreview = (swap.note && !isCounterOffer) ? swap.note.substring(0, 50) + (swap.note.length > 50 ? '...' : '') : '';
-        // For counter offers, reformat the note to use 12hr time
-        let counterOfferContext = '';
-        if (isCounterOffer && swap.note) {
-            counterOfferContext = swap.note.replace(/(\d{1,2}):00/g, (match, h) => {
-                const hour = parseInt(h);
-                if (hour === 0) return '12am';
-                if (hour < 12) return hour + 'am';
-                if (hour === 12) return '12pm';
-                return (hour - 12) + 'pm';
-            });
-        }
+        // No longer need counterOfferContext since subtitle now includes both shifts
         let actionType = 'give away';
         let title = requesterName;
         if (isCounterOffer) {
@@ -2746,9 +2736,26 @@ function renderUnifiedNotificationList() {
             shiftDateStr = `${dayName} ${monthsShort[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
         }
         
-        const subtitle = isCounterOffer
-            ? `Offering their ${shiftDateStr} ${timeRange} shift for yours`
-            : `Wants to ${actionType}: ${shiftDateStr} ${timeRange}`;
+        let subtitle = '';
+        if (isCounterOffer) {
+            // Build "for your [day] [time]" from the original request data
+            let yourShiftStr = 'your shift';
+            if (swap.original_request_day !== undefined && swap.original_request_start_hour !== undefined) {
+                const origDay = dayNamesShort[swap.original_request_day] || '?';
+                const origTime = `${formatTime(swap.original_request_start_hour)}-${formatTime(swap.original_request_end_hour)}`;
+                let origDateStr = origDay;
+                if (swap.original_request_week_start_date) {
+                    const ows = new Date(swap.original_request_week_start_date + 'T00:00:00');
+                    const origDate = new Date(ows);
+                    origDate.setDate(ows.getDate() + swap.original_request_day);
+                    origDateStr = `${origDay} ${monthsShort[origDate.getMonth()]} ${origDate.getDate()}`;
+                }
+                yourShiftStr = `your ${origDateStr} ${origTime}`;
+            }
+            subtitle = `Offering ${shiftDateStr} ${timeRange} for ${yourShiftStr}`;
+        } else {
+            subtitle = `Wants to ${actionType}: ${shiftDateStr} ${timeRange}`;
+        }
         
         notifications.push({
             type: 'swap',
@@ -2760,7 +2767,6 @@ function renderUnifiedNotificationList() {
             swap: swap,
             isOpenForSwaps: isOpenForSwaps,
             isCounterOffer: isCounterOffer,
-            counterOfferContext: counterOfferContext,
             seen: false
         });
     });
@@ -2861,7 +2867,7 @@ function renderUnifiedNotificationList() {
                 <div class="notif-icon swap-icon">${notif.isCounterOffer ? '⇄' : '🔄'}</div>
                 <div class="notif-content">
                     <div class="notif-title">${notif.title}</div>
-                    <div class="notif-subtitle">${notif.subtitle}${notif.counterOfferContext ? ` <span class="notif-info-wrap"><span class="notif-info-icon">ℹ</span><span class="notif-info-tooltip">${notif.counterOfferContext}</span></span>` : ''}</div>
+                    <div class="notif-subtitle">${notif.subtitle}</div>
                     ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
                     <div class="notif-actions">
                         <button class="notif-btn notif-btn-decline">Decline</button>
@@ -2889,26 +2895,6 @@ function renderUnifiedNotificationList() {
                     e.stopPropagation();
                     document.getElementById('unifiedNotificationDropdown')?.classList.remove('visible');
                     showSwapOfferPicker(notif.swap);
-                });
-            }
-            // Position info tooltip with JS so it escapes the dropdown bounds
-            const infoIcon = item.querySelector('.notif-info-icon');
-            const infoTooltip = item.querySelector('.notif-info-tooltip');
-            if (infoIcon && infoTooltip) {
-                const showTip = (e) => {
-                    e.stopPropagation();
-                    const rect = infoIcon.getBoundingClientRect();
-                    infoTooltip.style.display = 'block';
-                    infoTooltip.style.top = (rect.top - infoTooltip.offsetHeight - 8) + 'px';
-                    infoTooltip.style.left = Math.min(rect.left, window.innerWidth - infoTooltip.offsetWidth - 12) + 'px';
-                };
-                const hideTip = () => { infoTooltip.style.display = 'none'; };
-                infoIcon.addEventListener('mouseenter', showTip);
-                infoIcon.addEventListener('mouseleave', hideTip);
-                infoIcon.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    if (infoTooltip.style.display === 'block') hideTip();
-                    else showTip(e);
                 });
             }
             // Clicking anywhere else on the notification navigates to schedule
@@ -3235,7 +3221,14 @@ function showStickySwapAction(swap) {
         whoText = `<strong>${requesterName}</strong> · offering a trade`;
         tagHtml = '<span class="sticky-elig-tag swap-open">⇄ Swap Offer</span>';
         if (swap.note) {
-            infoIconHtml = `<span class="sticky-info-wrap"><span class="sticky-info-icon">ℹ</span><span class="sticky-info-tooltip">${swap.note}</span></span>`;
+            const tipText = swap.note.replace(/(\d{1,2}):00/g, (m, h) => {
+                const hr = parseInt(h);
+                if (hr === 0) return '12am';
+                if (hr < 12) return hr + 'am';
+                if (hr === 12) return '12pm';
+                return (hr - 12) + 'pm';
+            });
+            infoIconHtml = `<span class="sticky-info-wrap"><span class="sticky-info-icon">ℹ</span><span class="sticky-info-tooltip">${tipText}</span></span>`;
         }
     }
     

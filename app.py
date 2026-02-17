@@ -1970,12 +1970,23 @@ def get_swap_requests(business_slug, employee_id):
                 requester_name = requester_db.name if requester_db else 'Unknown'
                 print(f"[DEBUG]   Requester name: {requester_name}")
                 
-                incoming.append({
+                entry = {
                     **swap_req.to_dict(),
                     'requester_name': requester_name,
                     'my_response': recipient.response,
                     'my_eligibility_type': recipient.eligibility_type
-                })
+                }
+                
+                # For counter offers, include the original request's shift details
+                if swap_req.is_counter_offer and swap_req.counter_offer_for_id:
+                    original_req = ShiftSwapRequest.query.get(swap_req.counter_offer_for_id)
+                    if original_req:
+                        entry['original_request_day'] = original_req.original_day
+                        entry['original_request_start_hour'] = original_req.original_start_hour
+                        entry['original_request_end_hour'] = original_req.original_end_hour
+                        entry['original_request_week_start_date'] = original_req.week_start_date.isoformat() if original_req.week_start_date else None
+                
+                incoming.append(entry)
         print(f"[DEBUG] Final incoming count: {len(incoming)}")
         
         debug_step = "process_outgoing"
