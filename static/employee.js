@@ -3217,7 +3217,7 @@ function showStickySwapAction(swap) {
     
     if (isCounterOffer) {
         // Build "your shift" pill from original request data
-        let yourShiftPill = 'Your shift';
+        let yourShiftPill = 'your shift';
         if (swap.original_request_day !== undefined) {
             const yourDay = dayNames[swap.original_request_day] || '?';
             const yourTime = `${formatTime(swap.original_request_start_hour)}–${formatTime(swap.original_request_end_hour)}`;
@@ -3231,14 +3231,14 @@ function showStickySwapAction(swap) {
             yourShiftPill = `${yourDay}${yourDate ? ' ' + yourDate : ''} · ${yourTime}`;
         }
         
+        const theirPill = `${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}`;
+        
         stickyInnerHtml = `
-            <div class="sticky-trade-layout">
-                <div class="sticky-trade-header"><strong>${requesterName}</strong> wants to trade</div>
-                <div class="sticky-trade-shifts">
-                    <span class="sticky-trade-pill theirs">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
-                    <span class="sticky-trade-arrow">⇄</span>
-                    <span class="sticky-trade-pill yours">${yourShiftPill}</span>
-                </div>
+            <div class="sticky-trade-flow">
+                <span class="sticky-trade-text"><strong>${requesterName}</strong> wants to trade their</span>
+                <span class="sticky-trade-pill theirs">${theirPill}</span>
+                <span class="sticky-trade-text">for your</span>
+                <span class="sticky-trade-pill yours">${yourShiftPill}</span>
             </div>
             <div class="sticky-swap-btns">
                 ${buttonsHtml}
