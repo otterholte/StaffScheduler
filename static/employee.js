@@ -3213,43 +3213,63 @@ function showStickySwapAction(swap) {
         `;
     }
     
-    // Label and tag based on type
-    let whoText = `<strong>${requesterName}</strong> · ${isOpenForSwaps ? 'open for swaps' : actionType}`;
-    let tagHtml = isOpenForSwaps ? '<span class="sticky-elig-tag swap-open">🔄 Swap</span>' : eligLabel;
-    let infoIconHtml = '';
-    if (isCounterOffer) {
-        whoText = `<strong>${requesterName}</strong> · offering a trade`;
-        tagHtml = '<span class="sticky-elig-tag swap-open">⇄ Swap Offer</span>';
-        if (swap.note) {
-            const tipText = swap.note.replace(/(\d{1,2}):00/g, (m, h) => {
-                const hr = parseInt(h);
-                if (hr === 0) return '12am';
-                if (hr < 12) return hr + 'am';
-                if (hr === 12) return '12pm';
-                return (hr - 12) + 'pm';
-            });
-            infoIconHtml = `<span class="sticky-info-wrap"><span class="sticky-info-icon">ℹ</span><span class="sticky-info-tooltip">${tipText}</span></span>`;
-        }
-    }
+    let stickyInnerHtml = '';
     
-    const sticky = document.createElement('div');
-    sticky.id = 'stickySwapAction';
-    sticky.innerHTML = `
-        <div class="sticky-swap-row">
-            <div class="sticky-swap-info">
-                <span class="sticky-swap-who">${whoText}</span>
-                <span class="sticky-swap-sep">│</span>
-                <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
-                ${tagHtml}
-                ${infoIconHtml}
-                ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
+    if (isCounterOffer) {
+        // Build "your shift" pill from original request data
+        let yourShiftPill = 'Your shift';
+        if (swap.original_request_day !== undefined) {
+            const yourDay = dayNames[swap.original_request_day] || '?';
+            const yourTime = `${formatTime(swap.original_request_start_hour)}–${formatTime(swap.original_request_end_hour)}`;
+            let yourDate = '';
+            if (swap.original_request_week_start_date) {
+                const ows = new Date(swap.original_request_week_start_date + 'T00:00:00');
+                const od = new Date(ows);
+                od.setDate(ows.getDate() + swap.original_request_day);
+                yourDate = `${monthsShort[od.getMonth()]} ${od.getDate()}`;
+            }
+            yourShiftPill = `${yourDay}${yourDate ? ' ' + yourDate : ''} · ${yourTime}`;
+        }
+        
+        stickyInnerHtml = `
+            <div class="sticky-trade-layout">
+                <div class="sticky-trade-header"><strong>${requesterName}</strong> wants to trade</div>
+                <div class="sticky-trade-shifts">
+                    <span class="sticky-trade-pill theirs">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
+                    <span class="sticky-trade-arrow">⇄</span>
+                    <span class="sticky-trade-pill yours">${yourShiftPill}</span>
+                </div>
             </div>
             <div class="sticky-swap-btns">
                 ${buttonsHtml}
             </div>
             <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
-        </div>
-    `;
+        `;
+    } else {
+        // Regular request layout
+        let whoText = `<strong>${requesterName}</strong> · ${isOpenForSwaps ? 'open for swaps' : actionType}`;
+        let tagHtml = isOpenForSwaps ? '<span class="sticky-elig-tag swap-open">🔄 Swap</span>' : eligLabel;
+        
+        stickyInnerHtml = `
+            <div class="sticky-swap-row">
+                <div class="sticky-swap-info">
+                    <span class="sticky-swap-who">${whoText}</span>
+                    <span class="sticky-swap-sep">│</span>
+                    <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
+                    ${tagHtml}
+                    ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
+                </div>
+                <div class="sticky-swap-btns">
+                    ${buttonsHtml}
+                </div>
+                <button class="sticky-swap-dismiss" id="stickyDismiss">✕</button>
+            </div>
+        `;
+    }
+    
+    const sticky = document.createElement('div');
+    sticky.id = 'stickySwapAction';
+    sticky.innerHTML = stickyInnerHtml;
     
     document.body.appendChild(sticky);
     

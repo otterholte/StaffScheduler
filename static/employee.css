@@ -886,6 +886,63 @@ body.menu-open {
     color: var(--text-primary);
 }
 
+/* Counter-offer trade layout */
+.sticky-trade-layout {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+}
+
+.sticky-trade-header {
+    font-size: 0.88rem;
+    color: var(--text-secondary, #cbd5e1);
+}
+
+.sticky-trade-header strong {
+    color: var(--employee-accent, #10b981);
+}
+
+.sticky-trade-shifts {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sticky-trade-pill {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.sticky-trade-pill.theirs {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.sticky-trade-pill.yours {
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.sticky-trade-arrow {
+    font-size: 1.1rem;
+    color: var(--text-muted, #64748b);
+    flex-shrink: 0;
+}
+
+#stickySwapAction:has(.sticky-trade-layout) {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+}
+
 /* Highlight pulse animation for notifications */
 .highlight-pulse {
     animation: highlightPulse 2s ease-out;
