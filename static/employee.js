@@ -3235,10 +3235,8 @@ function showStickySwapAction(swap) {
         
         stickyInnerHtml = `
             <div class="sticky-trade-flow">
-                <span class="sticky-trade-text"><strong>${requesterName}</strong> wants to trade their</span>
-                <span class="sticky-trade-pill theirs">${theirPill}</span>
-                <span class="sticky-trade-text">for your</span>
-                <span class="sticky-trade-pill yours">${yourShiftPill}</span>
+                <span class="sticky-trade-line line-theirs"><strong>${requesterName}</strong> wants to trade their <span class="sticky-trade-pill theirs">${theirPill}</span></span>
+                <span class="sticky-trade-line line-yours">for your <span class="sticky-trade-pill yours">${yourShiftPill}</span></span>
             </div>
             <div class="sticky-swap-btns">
                 ${buttonsHtml}
