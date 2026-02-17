@@ -887,9 +887,7 @@ body.menu-open {
 }
 
 /* Counter-offer trade stacked layout */
-#stickySwapAction:has(.sticky-trade-stack) {
-    position: relative;
-}
+/* keep fixed positioning, just ensure relative context for the dismiss button */
 
 .sticky-dismiss-topright {
     position: absolute !important;
