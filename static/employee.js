@@ -2863,20 +2863,64 @@ function renderUnifiedNotificationList() {
                 updateUnifiedNotificationBadge();
             });
         } else if (notif.type === 'swap') {
-            item.innerHTML = `
-                <div class="notif-icon swap-icon">${notif.isCounterOffer ? '⇄' : '🔄'}</div>
-                <div class="notif-content">
-                    <div class="notif-title">${notif.title}</div>
-                    <div class="notif-subtitle">${notif.subtitle}</div>
-                    ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
-                    <div class="notif-actions">
-                        <button class="notif-btn notif-btn-decline">Decline</button>
-                        ${notif.isOpenForSwaps && !notif.isCounterOffer ? `<button class="notif-btn notif-btn-offer-swap">Offer Swap</button>` : ''}
-                        <button class="notif-btn notif-btn-accept">${notif.isCounterOffer ? 'Accept Trade' : (notif.isOpenForSwaps ? 'Pick Up' : 'Accept')}</button>
+            if (notif.isCounterOffer) {
+                const swap = notif.swap;
+                const dayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                const monthsShort = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const theirDay = dayNamesShort[swap.original_day] || '?';
+                const theirTime = `${formatTime(swap.original_start_hour)}–${formatTime(swap.original_end_hour)}`;
+                let theirDateStr = theirDay;
+                if (swap.week_start_date) {
+                    const ws = new Date(swap.week_start_date + 'T00:00:00');
+                    const sd = new Date(ws);
+                    sd.setDate(ws.getDate() + swap.original_day);
+                    theirDateStr = `${theirDay} ${monthsShort[sd.getMonth()]} ${sd.getDate()}`;
+                }
+                
+                let yourPillText = 'Your shift';
+                if (swap.original_request_day !== undefined) {
+                    const yourDay = dayNamesShort[swap.original_request_day] || '?';
+                    const yourTime = `${formatTime(swap.original_request_start_hour)}–${formatTime(swap.original_request_end_hour)}`;
+                    let yourDateStr = yourDay;
+                    if (swap.original_request_week_start_date) {
+                        const ows = new Date(swap.original_request_week_start_date + 'T00:00:00');
+                        const od = new Date(ows);
+                        od.setDate(ows.getDate() + swap.original_request_day);
+                        yourDateStr = `${yourDay} ${monthsShort[od.getMonth()]} ${od.getDate()}`;
+                    }
+                    yourPillText = `${yourDateStr} · ${yourTime}`;
+                }
+                
+                item.innerHTML = `
+                    <div class="notif-trade-card">
+                        <div class="notif-trade-header">⇄ <strong>${swap.requester_name || 'Someone'}</strong> wants to trade</div>
+                        <div class="notif-trade-shifts">
+                            <span class="notif-trade-pill theirs">${theirDateStr} · ${theirTime}</span>
+                            <span class="notif-trade-arrow">→</span>
+                            <span class="notif-trade-pill yours">${yourPillText}</span>
+                        </div>
+                        <div class="notif-actions">
+                            <button class="notif-btn notif-btn-decline">Decline</button>
+                            <button class="notif-btn notif-btn-accept">Accept Trade</button>
+                        </div>
                     </div>
-                </div>
-                <div class="notif-chevron">›</div>
-            `;
+                `;
+            } else {
+                item.innerHTML = `
+                    <div class="notif-icon swap-icon">🔄</div>
+                    <div class="notif-content">
+                        <div class="notif-title">${notif.title}</div>
+                        <div class="notif-subtitle">${notif.subtitle}</div>
+                        ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
+                        <div class="notif-actions">
+                            <button class="notif-btn notif-btn-decline">Decline</button>
+                            ${notif.isOpenForSwaps ? `<button class="notif-btn notif-btn-offer-swap">Offer Swap</button>` : ''}
+                            <button class="notif-btn notif-btn-accept">${notif.isOpenForSwaps ? 'Pick Up' : 'Accept'}</button>
+                        </div>
+                    </div>
+                    <div class="notif-chevron">›</div>
+                `;
+            }
             item.style.cursor = 'pointer';
             
             item.querySelector('.notif-btn-accept').addEventListener('click', (e) => {

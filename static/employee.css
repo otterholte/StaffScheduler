@@ -507,6 +507,62 @@ body.menu-open {
     margin-top: 0.4rem;
 }
 
+/* Counter-offer trade card in notification dropdown */
+.notif-trade-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.15rem 0;
+}
+
+.notif-trade-header {
+    font-size: 0.82rem;
+    color: var(--text-secondary, #cbd5e1);
+}
+
+.notif-trade-header strong {
+    color: var(--employee-accent, #10b981);
+}
+
+.notif-trade-shifts {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.notif-trade-pill {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.18rem 0.5rem;
+    border-radius: 5px;
+    white-space: nowrap;
+}
+
+.notif-trade-pill.theirs {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.notif-trade-pill.yours {
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.notif-trade-arrow {
+    font-size: 0.8rem;
+    color: var(--text-muted, #64748b);
+    flex-shrink: 0;
+}
+
+.notif-trade-card .notif-actions {
+    margin-top: 0.35rem;
+}
+
 .notif-btn {
     border: none;
     border-radius: 6px;
