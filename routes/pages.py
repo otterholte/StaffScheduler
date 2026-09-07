@@ -96,8 +96,10 @@ def contact_submit():
 
 @pages_bp.route('/api/health')
 def health():
-    """Used after deploys to confirm the new build is live."""
-    return jsonify({'status': 'ok', 'version': APP_VERSION})
+    """Used after deploys to confirm the new build is live (Railway sets the commit SHA)."""
+    import os
+    commit = os.environ.get('RAILWAY_GIT_COMMIT_SHA') or os.environ.get('SOURCE_COMMIT') or ''
+    return jsonify({'status': 'ok', 'version': APP_VERSION, 'commit': commit[:12]})
 
 
 # ---------------------------------------------------------------- entry points
