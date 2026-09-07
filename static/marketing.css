@@ -1140,3 +1140,12 @@ img {
     .promo-bar-inner { flex-direction: column; gap: 0.4rem; }
     .step-number { display: none; }
 }
+
+/* The nav is fixed to the top, so push the promo bar (first thing in the
+   flow) below it and pull the following hero up to compensate. */
+.promo-bar { margin-top: 64px; position: relative; z-index: 5; }
+.promo-bar + .hero { padding-top: 4rem; }
+.promo-bar + .hero.hero-compact { padding-top: 3rem; }
+@media (max-width: 768px) {
+    .promo-bar { margin-top: 64px; }
+}
