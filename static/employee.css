@@ -5532,3 +5532,17 @@ button.slide-menu-item {
     /* Shift blocks and popover buttons */
     .shift-swap-btn, .popover-btn, .btn-sm { min-height: 44px; }
 }
+
+/* Swap modal: friendly empty state when no coworker is eligible */
+.eligible-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1rem;
+    border-radius: 10px;
+    background: var(--warning-bg);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+.eligible-empty span { color: var(--text-secondary); font-size: 0.85rem; }

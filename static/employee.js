@@ -2921,7 +2921,12 @@ function renderUnifiedNotificationList() {
                         <div class="notif-actions">
                             <button class="notif-btn notif-btn-decline">Decline</button>
                             ${notif.isOpenForSwaps ? `<button class="notif-btn notif-btn-offer-swap">Offer Swap</button>` : ''}
-                            <button class="notif-btn notif-btn-accept">${notif.isOpenForSwaps ? 'Pick Up' : 'Accept'}</button>
+                            <button class="notif-btn notif-btn-accept">${
+                                // Picking up would exceed their hours: the button opens the trade picker instead
+                                notif.swap && notif.swap.my_eligibility_type === 'swap_only' && !notif.swap.is_counter_offer
+                                    ? 'Offer a Trade'
+                                    : (notif.isOpenForSwaps ? 'Pick Up' : 'Accept')
+                            }</button>
                         </div>
                     </div>
                     <div class="notif-chevron">›</div>
@@ -4001,11 +4006,15 @@ async function loadEligibleStaff(shift) {
             
             if (submitBtn) submitBtn.disabled = false;
         } else {
-            eligibleList.innerHTML = '<div class="loading-spinner">No eligible staff found for this shift.</div>';
+            eligibleList.innerHTML = `
+                <div class="eligible-empty">
+                    <strong>Nobody can take this shift right now.</strong>
+                    <span>Coworkers need the same role, to be free at that time, and room under their max hours. Ask your manager if you need it covered.</span>
+                </div>`;
         }
     } catch (error) {
         console.error('Failed to load eligible staff:', error);
-        eligibleList.innerHTML = '<div class="loading-spinner">Failed to load eligible staff.</div>';
+        eligibleList.innerHTML = '<div class="eligible-empty"><strong>Could not load coworkers.</strong><span>Check your connection and try again.</span></div>';
     }
 }
 
