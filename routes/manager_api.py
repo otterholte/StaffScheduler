@@ -236,8 +236,15 @@ def create_or_get_employee_user(db_employee: DBEmployee, email: str, name: str):
     if existing:
         if existing.linked_employee_id in (None, db_employee.id):
             existing.linked_employee_id = db_employee.id
+            temp_password = None
+            # Never signed in and still on a temporary password (e.g. the first
+            # invitation email failed): issue a fresh one so the re-sent
+            # invitation actually lets them in.
+            if existing.must_change_password and existing.last_login is None:
+                temp_password = generate_temp_password()
+                existing.set_password(temp_password)
             db.session.commit()
-            return existing, None
+            return existing, temp_password
         return None, None  # linked to a different employee record
 
     temp_password = generate_temp_password()

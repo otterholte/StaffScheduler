@@ -1964,9 +1964,6 @@ function displayToDataDay(displayDay) {
 }
 
 function initAvailabilityEditor() {
-    console.log('[EmployeeAvail] initAvailabilityEditor called');
-    console.log('[EmployeeAvail] Raw EMPLOYEE_DATA.availability:', EMPLOYEE_DATA.availability);
-    console.log('[EmployeeAvail] employeeState.availability before conversion:', JSON.stringify(employeeState.availability));
     
     // Convert from backend day format (Mon=0) to display format (Sun=0)
     if (employeeState.availability && typeof employeeState.availability === 'object') {
@@ -1981,14 +1978,12 @@ function initAvailabilityEditor() {
 
     // Initialize with default "All Day" if no availability exists
     if (!employeeState.availability || Object.keys(employeeState.availability).length === 0) {
-        console.log('[EmployeeAvail] No availability found, using defaults');
         employeeState.availability = {};
         for (let day = 0; day < 7; day++) {
             employeeState.availability[day] = [[employeeState.startHour, employeeState.endHour]];
         }
     }
     
-    console.log('[EmployeeAvail] Final availability (display days):', JSON.stringify(employeeState.availability));
     renderAvailabilityTable();
     setupSaveButton();
     updateAvailabilityStats();
@@ -2314,7 +2309,6 @@ async function saveAvailability() {
             const dataDay = displayToDataDay(parseInt(displayDay));
             availabilityForBackend[dataDay] = ranges;
         });
-        console.log('[EmployeeAvail] Saving availability, converted to backend format:', availabilityForBackend);
         
         const empId = employeeState.employee.db_id || employeeState.employee.id;
         const response = await fetch(`/api/employee/${empId}/availability`, {
