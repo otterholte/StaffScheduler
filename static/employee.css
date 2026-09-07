@@ -5489,3 +5489,46 @@ button.slide-menu-item {
     color: inherit;
     cursor: pointer;
 }
+
+/* ---------- Mobile tap targets (2026 pass) ---------- */
+@media (max-width: 768px) {
+    /* Availability editor: keep the time pickers and row buttons finger-sized */
+    .custom-select-value {
+        padding: 0.5rem 0.45rem;
+        font-size: 0.9rem;
+        min-width: 34px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .time-input-group .time-ampm-select .custom-select-value {
+        font-size: 0.8rem;
+        min-width: 38px;
+    }
+    .custom-select-option {
+        padding: 0.65rem 0.75rem;
+        font-size: 0.95rem;
+        min-height: 40px;
+    }
+    .avail-add-btn,
+    .avail-remove-row-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 1.15rem;
+    }
+    .avail-remove-row-btn { margin-right: 0.5rem; }
+    .avail-time-row { gap: 0.4rem; flex-wrap: wrap; }
+
+    /* Week navigation arrows on the schedule page */
+    .week-nav-inline .week-nav-arrow {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+    }
+    .week-nav-inline .week-nav-arrow svg { width: 22px; height: 22px; }
+    .week-date-range { font-size: 0.95rem; }
+
+    /* Shift blocks and popover buttons */
+    .shift-swap-btn, .popover-btn, .btn-sm { min-height: 44px; }
+}

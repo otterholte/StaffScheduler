@@ -3,6 +3,19 @@
  * Handles schedule viewing and availability editing for individual employees
  */
 
+
+// ==================== HTML ESCAPING ====================
+/**
+ * Escape text before putting it into innerHTML. Notes and names are typed by
+ * people; without this a note like <img onerror=...> would run in a coworker's
+ * browser.
+ */
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
 // ==================== URL PARAMS ====================
 function getInitialViewMode() {
     const params = new URLSearchParams(window.location.search);
@@ -176,7 +189,7 @@ function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     toast.innerHTML = `
-        <span class="toast-message">${message}</span>
+        <span class="toast-message">${escapeHtml(message)}</span>
         <button class="toast-close" onclick="this.parentElement.remove()">×</button>
     `;
     container.appendChild(toast);
@@ -1864,7 +1877,7 @@ function renderUpcomingShifts() {
         
         // Check if shift was obtained via swap
             const swapBadge = item.viaSwap 
-                ? `<span class="swap-badge" title="Obtained via shift swap from ${employeeMap[item.swappedFrom]?.name || 'another employee'}">🔄 Swapped</span>` 
+                ? `<span class="swap-badge" title="Obtained via shift swap from ${escapeHtml(employeeMap[item.swappedFrom]?.name || 'another employee')}">🔄 Swapped</span>` 
             : '';
         
         // Add data attributes for click handler
@@ -2842,7 +2855,7 @@ function renderUnifiedNotificationList() {
                 <div class="notif-icon pto-icon">📅</div>
                 <div class="notif-content">
                     <div class="notif-title">${notif.title} <span style="${statusColor}">${statusIcon}</span></div>
-                    <div class="notif-subtitle">${notif.subtitle}</div>
+                    <div class="notif-subtitle">${escapeHtml(notif.subtitle)}</div>
                 </div>
             `;
             item.style.cursor = 'pointer';
@@ -2908,9 +2921,9 @@ function renderUnifiedNotificationList() {
                 item.innerHTML = `
                     <div class="notif-icon swap-icon">🔄</div>
                     <div class="notif-content">
-                        <div class="notif-title">${notif.title}</div>
-                        <div class="notif-subtitle">${notif.subtitle}</div>
-                        ${notif.notePreview ? `<div class="notif-note">"${notif.notePreview}"</div>` : ''}
+                        <div class="notif-title">${escapeHtml(notif.title)}</div>
+                        <div class="notif-subtitle">${escapeHtml(notif.subtitle)}</div>
+                        ${notif.notePreview ? `<div class="notif-note">"${escapeHtml(notif.notePreview)}"</div>` : ''}
                         <div class="notif-actions">
                             <button class="notif-btn notif-btn-decline">Decline</button>
                             ${notif.isOpenForSwaps ? `<button class="notif-btn notif-btn-offer-swap">Offer Swap</button>` : ''}
@@ -2952,8 +2965,8 @@ function renderUnifiedNotificationList() {
             item.innerHTML = `
                 <div class="notif-icon swap-update-icon ${statusClass}">${icon}</div>
                 <div class="notif-content">
-                    <div class="notif-title">${notif.title}</div>
-                    <div class="notif-subtitle">${notif.subtitle}</div>
+                    <div class="notif-title">${escapeHtml(notif.title)}</div>
+                    <div class="notif-subtitle">${escapeHtml(notif.subtitle)}</div>
                     <div class="notif-detail">${notif.detail}</div>
                 </div>
             `;
@@ -3303,7 +3316,7 @@ function showStickySwapAction(swap) {
                     <span class="sticky-swap-sep">│</span>
                     <span class="sticky-swap-when">${dayName}${dateStr ? ' ' + dateStr : ''} · ${timeRange}</span>
                     ${tagHtml}
-                    ${noteSnippet ? `<span class="sticky-swap-note">"${noteSnippet}"</span>` : ''}
+                    ${noteSnippet ? `<span class="sticky-swap-note">"${escapeHtml(noteSnippet)}"</span>` : ''}
                 </div>
                 <div class="sticky-swap-btns">
                     ${buttonsHtml}
@@ -3801,7 +3814,7 @@ function renderIncomingSwapRequests() {
                     <div class="swap-request-shift">
                         ${isCounterOffer ? 'Offering' : 'Wants to swap'}: <strong>${shiftTime}</strong>
                     </div>
-                    ${req.note ? `<div class="swap-request-note">"${req.note}"</div>` : ''}
+                    ${req.note ? `<div class="swap-request-note">"${escapeHtml(req.note)}"</div>` : ''}
                     <div class="swap-request-actions">
                         <button class="btn btn-success btn-sm" onclick="showSwapResponseModal('${req.id}')">
                             ${isCounterOffer ? 'View Offer' : 'Respond'}
@@ -4426,7 +4439,7 @@ function showSwapResponseModal(requestId) {
                     <p style="margin: 0.25rem 0; color: var(--text-secondary);">They're offering their shift:</p>
                     <div class="shift-day">${dayNames[request.original_day]}</div>
                     <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
-                    ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
+                    ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${escapeHtml(request.note)}"</p>` : ''}
                 </div>
             `;
         } else {
@@ -4436,7 +4449,7 @@ function showSwapResponseModal(requestId) {
                     <p style="margin: 0 0 0.5rem 0;"><strong>${request.requester_name}</strong> wants to ${requestType}:</p>
                     <div class="shift-day">${dayNames[request.original_day]}</div>
                     <div class="shift-time">${formatTime(request.original_start_hour)} - ${formatTime(request.original_end_hour)}</div>
-                    ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${request.note}"</p>` : ''}
+                    ${request.note ? `<p style="margin: 0.75rem 0 0; font-style: italic; color: var(--text-muted);">"${escapeHtml(request.note)}"</p>` : ''}
                 </div>
             `;
         }
@@ -4928,8 +4941,8 @@ function renderPTORequestsList() {
                         <span class="pto-type">${typeEmoji} ${capitalizeFirst(req.pto_type)}</span>
                         <span class="pto-status-badge ${statusClass}">${capitalizeFirst(req.status)}</span>
                     </div>
-                    ${req.employee_note ? `<div class="pto-request-note">"${req.employee_note}"</div>` : ''}
-                    ${req.manager_note ? `<div class="pto-manager-note">Manager: "${req.manager_note}"</div>` : ''}
+                    ${req.employee_note ? `<div class="pto-request-note">"${escapeHtml(req.employee_note)}"</div>` : ''}
+                    ${req.manager_note ? `<div class="pto-manager-note">Manager: "${escapeHtml(req.manager_note)}"</div>` : ''}
                 </div>
                 ${canCancel ? `
                     <button class="pto-delete-btn" onclick="showCancelPTOConfirm('${req.id}', '${req.pto_type}', '${dateRange}')" title="Cancel request">

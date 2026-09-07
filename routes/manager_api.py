@@ -411,6 +411,9 @@ def email_status():
     return jsonify({
         'configured': email.is_configured(),
         'email_configured': email.is_configured(),
+        'resend_configured': bool(email.use_resend),
+        'smtp_configured': bool(email.use_smtp),
+        'from_email': email.resend_from_email if email.use_resend else (email.username or None),
         'sms_configured': sms.is_configured(),
     })
 

@@ -150,18 +150,23 @@ class EmailService:
             return False, "Email service not configured. Set RESEND_API_KEY or MAIL_USERNAME/MAIL_PASSWORD."
         
         # Try Resend API first (works on cloud platforms like Railway)
+        resend_error = None
         if self.use_resend:
             success, msg = self._send_via_resend(to_email, subject, html_body, text_body)
             if success:
                 return success, msg
-            # Log Resend failure but continue to SMTP fallback
+            resend_error = msg
             print(f"[EMAIL] Resend failed: {msg}", flush=True)
-        
-        # Fall back to SMTP
+
+        # Fall back to SMTP (usually blocked on cloud hosts, so keep the Resend
+        # error in the message rather than hiding it behind a network error)
         if self.use_smtp:
-            return self._send_via_smtp(to_email, subject, html_body, text_body)
-        
-        return False, "No email method available"
+            success, msg = self._send_via_smtp(to_email, subject, html_body, text_body)
+            if success or not resend_error:
+                return success, msg
+            return False, f"{resend_error} (SMTP fallback also failed: {msg})"
+
+        return False, resend_error or "No email method available"
     
     def send_portal_invitation(
         self,
