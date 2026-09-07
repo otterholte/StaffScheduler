@@ -439,9 +439,12 @@ class Employee:
         
         return {
             "id": self.id,
+            "db_id": getattr(self, "db_id", None),  # integer row id used by portal URLs
             "name": self.name,
             "email": self.email,
             "phone": self.phone,
+            "notify_email": getattr(self, "notify_email", True),
+            "notify_sms": getattr(self, "notify_sms", True),
             "classification": self.classification.value,
             "min_hours": self.min_hours,
             "max_hours": self.max_hours,
@@ -516,7 +519,12 @@ class ScheduleMetrics:
     
     # Supervision
     unsupervised_violations: int = 0
-    
+
+    # Diagnostics (populated by the solver so the UI can explain the result)
+    employees_under_min: List[Dict] = field(default_factory=list)  # [{employee_id, employee_name, hours, min_hours}]
+    clopenings: List[Dict] = field(default_factory=list)           # [{employee_id, close_day, close_hour, open_day, open_hour, rest_hours}]
+    suggestions: List[str] = field(default_factory=list)           # plain-English tips for the manager
+
     def to_dict(self) -> dict:
         return {
             "total_slots_required": self.total_slots_required,
@@ -533,7 +541,10 @@ class ScheduleMetrics:
             "preference_matches": self.preference_matches,
             "preference_misses": self.preference_misses,
             "consecutive_day_violations": self.consecutive_day_violations,
-            "unsupervised_violations": self.unsupervised_violations
+            "unsupervised_violations": self.unsupervised_violations,
+            "employees_under_min": self.employees_under_min,
+            "clopenings": self.clopenings,
+            "suggestions": self.suggestions
         }
 
 
@@ -565,7 +576,8 @@ class Schedule:
     solve_time_ms: float = 0.0
     solution_index: int = 0
     objective_value: int = 0
-    
+    solver_status: str = ""  # 'optimal' (proven best) or 'feasible' (good, stopped early)
+
     @property
     def coverage_percentage(self) -> float:
         if self.total_hours_needed == 0:
@@ -606,7 +618,8 @@ class Schedule:
             "is_feasible": self.is_feasible,
             "solve_time_ms": round(self.solve_time_ms, 2),
             "solution_index": self.solution_index,
-            "objective_value": self.objective_value
+            "objective_value": self.objective_value,
+            "solver_status": self.solver_status
         }
 
 
@@ -645,7 +658,11 @@ class BusinessScenario:
     
     # NEW: Has user completed initial setup? (shows onboarding if False)
     has_completed_setup: bool = True
-    
+
+    # Display metadata shown in the location switcher
+    emoji: str = "🏢"
+    color: str = "#6366f1"
+
     def get_operating_hours(self) -> range:
         return range(self.start_hour, self.end_hour)
     
@@ -781,6 +798,8 @@ class BusinessScenario:
             "coverage_mode": self.coverage_mode.value,
             "shift_templates": [s.to_dict() for s in self.shift_templates],
             "has_completed_setup": self.has_completed_setup,
+            "emoji": self.emoji,
+            "color": self.color,
             "total_employees": len(self.employees),
             "total_roles": len(self.roles)
         }

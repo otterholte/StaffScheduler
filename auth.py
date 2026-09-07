@@ -1,463 +1,307 @@
-"""Authentication routes for user login, registration, and logout."""
+"""
+Authentication: login, registration, logout, profile, password change/reset.
 
-from datetime import datetime, timedelta
+Mounted under /auth. Every page redirect goes through
+`default_landing_url()` so managers land on their own business and employees
+land on their portal (never on a demo business).
+"""
+
 import secrets
-from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
-from flask_login import login_user, logout_user, login_required, current_user
-from models import db, User, PasswordResetToken
-from scheduler import create_user_business, get_user_business
+from datetime import datetime, timedelta
+from urllib.parse import urlparse
+
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user, login_required, login_user, logout_user
+
 from email_service import get_email_service
+from models import db, PasswordResetToken, User
+from services.business_context import default_landing_url, ensure_user_has_business
+from services.common import site_url
+import db_service
 
 auth_bp = Blueprint('auth', __name__)
 
+MIN_PASSWORD_LENGTH = 8
+
+
+def _safe_next(default: str) -> str:
+    """Only follow `next` if it is a path on this site (prevents open redirects)."""
+    nxt = request.args.get('next') or request.form.get('next') or ''
+    if nxt and nxt.startswith('/') and not nxt.startswith('//') and not urlparse(nxt).netloc:
+        return nxt
+    return default
+
+
+def _form(*names):
+    """Read fields from JSON or form data (both are supported)."""
+    data = request.get_json(silent=True) if request.is_json else request.form
+    data = data or {}
+    return [(data.get(n) or '').strip() if isinstance(data.get(n), str) else data.get(n) for n in names]
+
+
+# ---------------------------------------------------------------- login / logout
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """Handle user login."""
-    # If already logged in, redirect to app dashboard
     if current_user.is_authenticated:
-        return redirect('/sunrise-coffee/schedule')
-    
+        return redirect(_safe_next(default_landing_url()))
+
     if request.method == 'POST':
-        # Handle both form and JSON submissions
-        if request.is_json:
-            data = request.get_json()
-            login_id = data.get('email', '').strip()  # Can be email or username
-            password = data.get('password', '')
-            remember = data.get('remember', False)
-        else:
-            login_id = request.form.get('email', '').strip()  # Can be email or username
-            password = request.form.get('password', '')
-            remember = request.form.get('remember', False)
-        
-        # Find user by email or username
-        # First try email (case-insensitive)
-        user = User.query.filter_by(email=login_id.lower()).first()
-        
-        # If not found by email, try username (case-insensitive)
-        if not user:
-            user = User.query.filter(User.username.ilike(login_id)).first()
-        
-        if user and user.check_password(password):
-            if not user.is_active:
-                if request.is_json:
-                    return jsonify({'success': False, 'error': 'Account is deactivated.'}), 403
-                flash('Your account has been deactivated. Please contact support.', 'error')
-                return render_template('login.html')
-            
-            # Log the user in
-            login_user(user, remember=remember)
-            user.last_login = datetime.utcnow()
-            db.session.commit()
-            
-            # Check if user needs to change password (temp password on first login)
-            if user.must_change_password:
-                if request.is_json:
-                    return jsonify({
-                        'success': True, 
-                        'user': user.to_dict(),
-                        'redirect': '/auth/change-password',
-                        'must_change_password': True
-                    })
-                return redirect(url_for('auth.change_password'))
-            
-            # Determine redirect based on user type
-            if user.is_employee and user.linked_employee:
-                # Employee user - redirect to their portal
-                db_employee = user.linked_employee
-                # Get the business slug from the employee's business
-                from models import BusinessSettings
-                business_setting = BusinessSettings.query.filter_by(id=db_employee.business_db_id).first()
-                if business_setting:
-                    redirect_url = f'/employee/{business_setting.business_id.replace("user_", "").replace("_", "-")}/{db_employee.id}/schedule'
-                else:
-                    redirect_url = '/login'  # Fallback
-            else:
-                # Manager user - redirect to their business
-                redirect_url = '/sunrise-coffee/schedule'  # Default, will be updated with proper business
-            
-            if request.is_json:
-                return jsonify({
-                    'success': True, 
-                    'user': user.to_dict(),
-                    'redirect': redirect_url
-                })
-            
-            # Redirect to next page or determined destination
-            next_page = request.args.get('next')
-            return redirect(next_page if next_page else redirect_url)
-        else:
+        login_id, password, remember = _form('email', 'password', 'remember')
+        login_id = (login_id or '').lower()
+
+        user = User.query.filter_by(email=login_id).first() or User.query.filter(User.username.ilike(login_id)).first()
+        if not user or not user.check_password(password or ''):
             if request.is_json:
                 return jsonify({'success': False, 'error': 'Invalid username/email or password.'}), 401
             flash('Invalid username/email or password.', 'error')
-    
-    return render_template('login.html')
-
-
-@auth_bp.route('/register', methods=['GET', 'POST'])
-def register():
-    """Handle user registration."""
-    # If already logged in, redirect to app
-    if current_user.is_authenticated:
-        return redirect('/sunrise-coffee/schedule')
-    
-    if request.method == 'POST':
-        # Handle both form and JSON submissions
-        if request.is_json:
-            data = request.get_json()
-            email = data.get('email', '').lower().strip()
-            username = data.get('username', '').strip()
-            password = data.get('password', '')
-            confirm_password = data.get('confirm_password', '')
-            first_name = data.get('first_name', '').strip()
-            last_name = data.get('last_name', '').strip()
-            company_name = data.get('company_name', '').strip()
-        else:
-            email = request.form.get('email', '').lower().strip()
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '')
-            confirm_password = request.form.get('confirm_password', '')
-            first_name = request.form.get('first_name', '').strip()
-            last_name = request.form.get('last_name', '').strip()
-            company_name = request.form.get('company_name', '').strip()
-        
-        errors = []
-        
-        # Validation
-        if not email:
-            errors.append('Email is required.')
-        elif '@' not in email or '.' not in email:
-            errors.append('Please enter a valid email address.')
-        
-        if not username:
-            errors.append('Username is required.')
-        elif len(username) < 3:
-            errors.append('Username must be at least 3 characters.')
-        elif not username.isalnum() and '_' not in username:
-            errors.append('Username can only contain letters, numbers, and underscores.')
-        
-        if not password:
-            errors.append('Password is required.')
-        elif len(password) < 8:
-            errors.append('Password must be at least 8 characters.')
-        
-        if password != confirm_password:
-            errors.append('Passwords do not match.')
-        
-        # Check if email already exists
-        if User.query.filter_by(email=email).first():
-            errors.append('An account with this email already exists.')
-        
-        # Check if username already exists
-        if User.query.filter_by(username=username).first():
-            errors.append('This username is already taken.')
-        
-        if errors:
+            return render_template('login.html')
+        if not user.is_active:
             if request.is_json:
-                return jsonify({'success': False, 'errors': errors}), 400
-            for error in errors:
-                flash(error, 'error')
-            return render_template('register.html')
-        
-        # Create new user
-        user = User(
-            email=email,
-            username=username,
-            first_name=first_name or None,
-            last_name=last_name or None,
-            company_name=company_name or None
-        )
-        user.set_password(password)
-        
-        db.session.add(user)
-        db.session.commit()
-        
-        # If user provided a company name, create their business
-        redirect_url = '/sunrise-coffee/schedule'
-        if company_name:
-            owner_name = f"{first_name} {last_name}".strip() if first_name or last_name else username
-            business = create_user_business(user.id, company_name, owner_name)
-            # Generate the slug for their business (same logic as app.py slugify)
-            import re
-            slug = company_name.lower().strip()
-            slug = re.sub(r'[^\w\s-]', '', slug)
-            slug = re.sub(r'[\s_]+', '-', slug)
-            slug = re.sub(r'-+', '-', slug)
-            redirect_url = f'/{slug}/schedule'
-        
-        # Log the user in immediately
-        login_user(user)
+                return jsonify({'success': False, 'error': 'Account is deactivated.'}), 403
+            flash('Your account has been deactivated. Please contact support.', 'error')
+            return render_template('login.html')
+
+        login_user(user, remember=bool(remember))
         user.last_login = datetime.utcnow()
         db.session.commit()
-        
+
+        if user.must_change_password:
+            destination = url_for('auth.change_password')
+        else:
+            destination = _safe_next(default_landing_url(user))
+
         if request.is_json:
-            return jsonify({
-                'success': True,
-                'user': user.to_dict(),
-                'message': 'Account created successfully!',
-                'redirect': redirect_url
-            })
-        
-        flash('Account created successfully! Welcome to Staff Scheduler Pro.', 'success')
-        return redirect(redirect_url)
-    
-    return render_template('register.html')
+            return jsonify({'success': True, 'user': user.to_dict(), 'redirect': destination,
+                            'must_change_password': bool(user.must_change_password)})
+        return redirect(destination)
+
+    return render_template('login.html')
 
 
 @auth_bp.route('/logout')
 @login_required
 def logout():
-    """Log out the current user."""
     logout_user()
-    # Get the referrer to determine where to redirect
-    referrer = request.referrer or ''
-    # If logging out from settings page, stay on settings
-    if '/settings' in referrer:
-        flash('You have been logged out.', 'info')
-        return redirect('/settings')
     flash('You have been logged out.', 'info')
-    return redirect('/settings')
+    return redirect('/')
 
+
+# ---------------------------------------------------------------- registration
+
+@auth_bp.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(default_landing_url())
+
+    if request.method == 'POST':
+        email, username, password, confirm, first_name, last_name, company_name = _form(
+            'email', 'username', 'password', 'confirm_password', 'first_name', 'last_name', 'company_name')
+        email = (email or '').lower()
+
+        errors = []
+        if not email or '@' not in email or '.' not in email.split('@')[-1]:
+            errors.append('Please enter a valid email address.')
+        if not username or len(username) < 3:
+            errors.append('Username must be at least 3 characters.')
+        elif not all(c.isalnum() or c == '_' for c in username):
+            errors.append('Username can only contain letters, numbers, and underscores.')
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
+            errors.append(f'Password must be at least {MIN_PASSWORD_LENGTH} characters.')
+        if password != confirm:
+            errors.append('Passwords do not match.')
+        if not company_name:
+            errors.append('Please enter your business name.')
+        if email and User.query.filter_by(email=email).first():
+            errors.append('An account with this email already exists. Try signing in or resetting your password.')
+        if username and User.query.filter(User.username.ilike(username)).first():
+            errors.append('This username is already taken.')
+
+        if errors:
+            if request.is_json:
+                return jsonify({'success': False, 'errors': errors}), 400
+            for e in errors:
+                flash(e, 'error')
+            return render_template('register.html', form=request.form)
+
+        user = User(email=email, username=username, first_name=first_name or None,
+                    last_name=last_name or None, company_name=company_name)
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+
+        ensure_user_has_business(user)  # creates their first location
+        login_user(user)
+        user.last_login = datetime.utcnow()
+        db.session.commit()
+
+        destination = default_landing_url(user)
+        if request.is_json:
+            return jsonify({'success': True, 'user': user.to_dict(), 'redirect': destination,
+                            'message': 'Account created successfully!'})
+        flash('Welcome to Staff Scheduler! Add your staff and shifts to get started.', 'success')
+        return redirect(destination)
+
+    return render_template('register.html', form={})
+
+
+# ---------------------------------------------------------------- profile API
 
 @auth_bp.route('/api/user')
 @login_required
 def get_current_user():
-    """Get the current logged-in user's information."""
-    return jsonify({
-        'success': True,
-        'user': current_user.to_dict()
-    })
+    return jsonify({'success': True, 'user': current_user.to_dict()})
 
 
 @auth_bp.route('/api/user', methods=['PUT'])
 @login_required
 def update_user():
-    """Update the current user's profile."""
-    data = request.get_json()
-    
+    data = request.get_json(silent=True) or {}
     if 'first_name' in data:
-        current_user.first_name = data['first_name'].strip() or None
+        current_user.first_name = (data.get('first_name') or '').strip() or None
     if 'last_name' in data:
-        current_user.last_name = data['last_name'].strip() or None
-    if 'company_name' in data:
-        current_user.company_name = data['company_name'].strip() or None
-    
-    # Handle email change
-    if 'email' in data and data['email'] != current_user.email:
+        current_user.last_name = (data.get('last_name') or '').strip() or None
+    if 'company_name' in data and (data.get('company_name') or '').strip():
+        current_user.company_name = data['company_name'].strip()
+
+    if data.get('email') and data['email'].lower().strip() != current_user.email:
         new_email = data['email'].lower().strip()
         if User.query.filter_by(email=new_email).first():
             return jsonify({'success': False, 'error': 'Email already in use.'}), 400
         current_user.email = new_email
-    
-    # Handle password change
-    if 'new_password' in data and data['new_password']:
-        current_password = data.get('current_password', '')
-        if not current_user.check_password(current_password):
+
+    if data.get('new_password'):
+        if not current_user.check_password(data.get('current_password', '')):
             return jsonify({'success': False, 'error': 'Current password is incorrect.'}), 400
-        if len(data['new_password']) < 8:
-            return jsonify({'success': False, 'error': 'New password must be at least 8 characters.'}), 400
+        if len(data['new_password']) < MIN_PASSWORD_LENGTH:
+            return jsonify({'success': False, 'error': f'New password must be at least {MIN_PASSWORD_LENGTH} characters.'}), 400
         current_user.set_password(data['new_password'])
-    
+
     db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'user': current_user.to_dict(),
-        'message': 'Profile updated successfully.'
-    })
-
-
+    return jsonify({'success': True, 'user': current_user.to_dict(), 'message': 'Profile updated.'})
 
 
 @auth_bp.route('/api/user', methods=['DELETE'])
 @login_required
 def delete_user_account():
-    """Delete the current user's account."""
-    data = request.get_json() or {}
-    password = data.get('password', '')
-    
-    # Require password confirmation for account deletion
-    if not current_user.check_password(password):
+    """Delete the account and every business it owns (password required)."""
+    data = request.get_json(silent=True) or {}
+    if not current_user.check_password(data.get('password', '')):
         return jsonify({'success': False, 'error': 'Incorrect password.'}), 400
-    
-    user_id = current_user.id
-    username = current_user.username
-    
-    # Log out the user first
+
+    user_id, username = current_user.id, current_user.username
     logout_user()
-    
-    # Delete the user from the database
     user = User.query.get(user_id)
     if user:
+        for row in db_service.get_user_db_businesses(user.id):
+            db_service.delete_business_from_db(row.business_id)
+        from models import BusinessSettings, UserBusinessSettings
+        BusinessSettings.query.filter_by(owner_id=user.id).delete()
+        UserBusinessSettings.query.filter_by(user_id=user.id).delete()
+        PasswordResetToken.query.filter_by(user_id=user.id).delete()
         db.session.delete(user)
         db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'message': f'Account "{username}" has been deleted.'
-    })
+    return jsonify({'success': True, 'message': f'Account "{username}" has been deleted.'})
 
+
+# ---------------------------------------------------------------- password change
 
 @auth_bp.route('/change-password', methods=['GET', 'POST'])
 @login_required
 def change_password():
-    """Force password change for users with temporary passwords."""
-    # If user doesn't need to change password, redirect to appropriate page
-    if not current_user.must_change_password:
-        if current_user.is_employee and current_user.linked_employee:
-            db_employee = current_user.linked_employee
-            from models import BusinessSettings
-            business_setting = BusinessSettings.query.filter_by(id=db_employee.business_db_id).first()
-            if business_setting:
-                return redirect(f'/employee/{business_setting.business_id.replace("user_", "").replace("_", "-")}/{db_employee.id}/schedule')
-        return redirect('/sunrise-coffee/schedule')
-    
+    """Forced on first login with a temporary password; also usable any time."""
     if request.method == 'POST':
-        # Handle both form and JSON submissions
-        if request.is_json:
-            data = request.get_json()
-            new_password = data.get('new_password', '')
-            confirm_password = data.get('confirm_password', '')
-        else:
-            new_password = request.form.get('new_password', '')
-            confirm_password = request.form.get('confirm_password', '')
-        
+        new_password, confirm = _form('new_password', 'confirm_password')
         errors = []
-        
-        if not new_password:
-            errors.append('New password is required.')
-        elif len(new_password) < 8:
-            errors.append('Password must be at least 8 characters.')
-        
-        if new_password != confirm_password:
+        if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
+            errors.append(f'Password must be at least {MIN_PASSWORD_LENGTH} characters.')
+        if new_password != confirm:
             errors.append('Passwords do not match.')
-        
         if errors:
             if request.is_json:
                 return jsonify({'success': False, 'errors': errors}), 400
-            for error in errors:
-                flash(error, 'error')
+            for e in errors:
+                flash(e, 'error')
             return render_template('change_password.html')
-        
-        # Update password and clear the flag
+
         current_user.set_password(new_password)
         current_user.must_change_password = False
         db.session.commit()
-        
-        # Determine redirect URL
-        if current_user.is_employee and current_user.linked_employee:
-            db_employee = current_user.linked_employee
-            from models import BusinessSettings
-            business_setting = BusinessSettings.query.filter_by(id=db_employee.business_db_id).first()
-            if business_setting:
-                redirect_url = f'/employee/{business_setting.business_id.replace("user_", "").replace("_", "-")}/{db_employee.id}/schedule'
-            else:
-                redirect_url = '/login'
-        else:
-            redirect_url = '/sunrise-coffee/schedule'
-        
+        destination = default_landing_url(current_user)
         if request.is_json:
-            return jsonify({
-                'success': True,
-                'message': 'Password changed successfully.',
-                'redirect': redirect_url
-            })
-        
+            return jsonify({'success': True, 'message': 'Password changed.', 'redirect': destination})
         flash('Password changed successfully!', 'success')
-        return redirect(redirect_url)
-    
+        return redirect(destination)
+
     return render_template('change_password.html')
 
 
+# ---------------------------------------------------------------- password reset
+
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
-    """Handle forgot password requests."""
     if current_user.is_authenticated:
-        return redirect('/sunrise-coffee/schedule')
-    
+        return redirect(default_landing_url())
+
     if request.method == 'POST':
-        email = request.form.get('email', '').lower().strip()
-        
+        (email,) = _form('email')
+        email = (email or '').lower()
         if not email:
             flash('Please enter your email address.', 'error')
             return render_template('forgot_password.html')
-        
-        # Find user by email
+
         user = User.query.filter_by(email=email).first()
-        
-        # Always show success message to prevent email enumeration
         if user:
-            # Delete any existing unused tokens for this user
             PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).delete()
-            
-            # Create new token
             token = secrets.token_urlsafe(32)
-            reset_token = PasswordResetToken(
-                user_id=user.id,
-                token=token,
-                expires_at=datetime.utcnow() + timedelta(hours=1)
-            )
-            db.session.add(reset_token)
+            db.session.add(PasswordResetToken(user_id=user.id, token=token,
+                                              expires_at=datetime.utcnow() + timedelta(hours=1)))
             db.session.commit()
-            
-            # Send email
-            email_service = get_email_service()
-            if email_service.is_configured():
-                reset_url = request.host_url.rstrip('/') + url_for('auth.reset_password', token=token)
-                user_name = user.first_name or user.username
-                success, msg = email_service.send_password_reset(user.email, user_name, reset_url)
-                if not success:
-                    print(f"[AUTH] Password reset email failed: {msg}", flush=True)
+
+            reset_url = f"{site_url()}{url_for('auth.reset_password', token=token)}"
+            svc = get_email_service()
+            if svc.is_configured():
+                ok, msg = svc.send_password_reset(user.email, user.first_name or user.username, reset_url)
+                if not ok:
+                    print(f"[AUTH] Password reset email failed for {user.email}: {msg}", flush=True)
             else:
-                print(f"[AUTH] Email not configured, reset token: {token}", flush=True)
-        
-        flash('If an account with that email exists, we\'ve sent a password reset link.', 'success')
+                print(f"[AUTH] Email not configured. Reset link: {reset_url}", flush=True)
+
+        # Same message either way so nobody can probe which emails exist
+        flash("If an account with that email exists, we've sent a password reset link. Check your spam folder if it doesn't arrive within a few minutes.", 'success')
         return redirect(url_for('auth.login'))
-    
+
     return render_template('forgot_password.html')
 
 
 @auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    """Handle password reset with token."""
     if current_user.is_authenticated:
-        return redirect('/sunrise-coffee/schedule')
-    
-    # Find and validate token
+        return redirect(default_landing_url())
+
     reset_token = PasswordResetToken.query.filter_by(token=token).first()
-    
     if not reset_token or not reset_token.is_valid():
-        flash('This password reset link is invalid or has expired.', 'error')
+        flash('This password reset link is invalid or has expired. Request a new one below.', 'error')
         return redirect(url_for('auth.forgot_password'))
-    
+
     if request.method == 'POST':
-        password = request.form.get('password', '')
-        confirm_password = request.form.get('confirm_password', '')
-        
+        password, confirm = _form('password', 'confirm_password')
         errors = []
-        
-        if not password:
-            errors.append('Password is required.')
-        elif len(password) < 8:
-            errors.append('Password must be at least 8 characters.')
-        
-        if password != confirm_password:
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
+            errors.append(f'Password must be at least {MIN_PASSWORD_LENGTH} characters.')
+        if password != confirm:
             errors.append('Passwords do not match.')
-        
         if errors:
-            for error in errors:
-                flash(error, 'error')
+            for e in errors:
+                flash(e, 'error')
             return render_template('reset_password.html', token=token)
-        
-        # Update password
+
         user = reset_token.user
         user.set_password(password)
-        
-        # Mark token as used
+        user.must_change_password = False
         reset_token.used_at = datetime.utcnow()
         db.session.commit()
-        
-        flash('Your password has been reset. You can now log in.', 'success')
+        flash('Your password has been reset. You can now sign in.', 'success')
         return redirect(url_for('auth.login'))
-    
+
     return render_template('reset_password.html', token=token)

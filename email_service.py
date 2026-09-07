@@ -743,6 +743,90 @@ This email was sent by Staff Scheduler.
         return self.send_email(to_email, subject, html_body, text_body)
 
 
+    def send_notification(
+        self,
+        to_email: str,
+        subject: str,
+        title: str,
+        greeting: str,
+        intro: str,
+        detail_lines: Optional[list] = None,
+        cta_text: Optional[str] = None,
+        cta_url: Optional[str] = None,
+        footer_note: str = "",
+        accent_start: str = "#467df6",
+        accent_end: str = "#a855f7",
+    ) -> Tuple[bool, str]:
+        """Generic branded notification email used for PTO, counter offers,
+        published schedules, and anything new we add later.
+
+        `detail_lines` is a list of short strings rendered in a highlighted box.
+        """
+        details_html = ""
+        if detail_lines:
+            rows = "".join(
+                f'<p style="margin: 0 0 8px; font-size: 16px; color: #374151; font-weight: 600;">{line}</p>'
+                for line in detail_lines
+            )
+            details_html = f"""
+                        <div style="background-color: #f3f4f6; border-radius: 10px; padding: 18px 20px; margin: 22px 0; border-left: 4px solid {accent_start};">
+                            {rows}
+                        </div>
+"""
+        cta_html = ""
+        if cta_text and cta_url:
+            cta_html = f"""
+                        <div style="text-align: center; margin: 28px 0;">
+                            <a href="{cta_url}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, {accent_start} 0%, {accent_end} 100%); color: #ffffff; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px;">
+                                {cta_text}
+                            </a>
+                        </div>
+                        <p style="margin: 10px 0 0; font-size: 13px; color: #9090a0; line-height: 1.6; text-align: center;">
+                            Or open this link: <a href="{cta_url}" style="color: {accent_start}; word-break: break-all;">{cta_url}</a>
+                        </p>
+"""
+        footer_html = f'<p style="margin: 25px 0 0; font-size: 14px; color: #9090a0; line-height: 1.6;">{footer_note}</p>' if footer_note else ""
+
+        html_body = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f5f5fa;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <tr><td>
+            <div style="background: linear-gradient(135deg, {accent_start} 0%, {accent_end} 100%); padding: 3px; border-radius: 16px;">
+                <div style="background-color: #ffffff; border-radius: 14px; padding: 40px;">
+                    <div style="text-align: center; margin-bottom: 26px;">
+                        <h1 style="margin: 0; font-size: 24px; color: #1a1a2e;">{title}</h1>
+                    </div>
+                    <h2 style="margin: 0 0 15px; font-size: 20px; color: #1a1a2e;">{greeting}</h2>
+                    <p style="margin: 0 0 12px; font-size: 16px; color: #5a5a70; line-height: 1.6;">{intro}</p>
+                    {details_html}
+                    {cta_html}
+                    {footer_html}
+                </div>
+            </div>
+            <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #9090a0;">
+                This email was sent by Staff Scheduler.
+            </p>
+        </td></tr>
+    </table>
+</body>
+</html>
+"""
+        text_lines = [greeting, "", intro, ""]
+        if detail_lines:
+            text_lines.extend(detail_lines)
+            text_lines.append("")
+        if cta_text and cta_url:
+            text_lines.append(f"{cta_text}: {cta_url}")
+            text_lines.append("")
+        if footer_note:
+            text_lines.append(footer_note)
+        text_body = "\n".join(text_lines)
+        return self.send_email(to_email, subject, html_body, text_body)
+
+
 # Singleton instance
 _email_service = None
 

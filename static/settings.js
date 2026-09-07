@@ -39,9 +39,21 @@ const dom = {
 };
 
 // ==================== THEME ====================
+// The stylesheet keys light mode off `body[data-theme="light"]` (the manager
+// app does the same in app.js), so the attribute has to live on <body>.
+function applyThemeAttribute(theme) {
+    if (theme === 'light') {
+        document.body.setAttribute('data-theme', 'light');
+        document.documentElement.setAttribute('data-theme', 'light');
+    } else {
+        document.body.removeAttribute('data-theme');
+        document.documentElement.removeAttribute('data-theme');
+    }
+}
+
 function loadTheme() {
     const theme = localStorage.getItem('theme') || 'dark';
-    document.documentElement.setAttribute('data-theme', theme);
+    applyThemeAttribute(theme);
     state.theme = theme;
     
     if (dom.themeSwitch) {
@@ -54,7 +66,7 @@ function loadTheme() {
 }
 
 function setTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
+    applyThemeAttribute(theme);
     localStorage.setItem('theme', theme);
     state.theme = theme;
     

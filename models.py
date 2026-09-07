@@ -202,14 +202,18 @@ class DBBusiness(db.Model):
     
     # Coverage mode: 'shifts' or 'detailed'
     coverage_mode = db.Column(db.String(20), default='shifts')
-    
+
+    # Peak periods + per-role coverage configs (used by 'detailed' mode), stored as JSON:
+    # {"peak_periods": [...], "role_coverage_configs": [...]}
+    coverage_config_json = db.Column(db.Text, nullable=True)
+
     # Setup status
     has_completed_setup = db.Column(db.Boolean, default=False)
-    
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     owner = db.relationship('User', backref=db.backref('businesses', lazy=True))
     employees = db.relationship('DBEmployee', backref='business', lazy=True, cascade='all, delete-orphan')
@@ -225,11 +229,29 @@ class DBBusiness(db.Model):
         if not self.days_open:
             return []
         return [int(d) for d in self.days_open.split(',') if d]
-    
+
     def set_days_open_list(self, days):
         """Set days_open from a list of integers."""
         self.days_open = ','.join(str(d) for d in days)
-    
+
+    def get_coverage_config(self):
+        """Return {'peak_periods': [...], 'role_coverage_configs': [...]} (never None)."""
+        if not self.coverage_config_json:
+            return {'peak_periods': [], 'role_coverage_configs': []}
+        try:
+            data = json.loads(self.coverage_config_json)
+        except json.JSONDecodeError:
+            return {'peak_periods': [], 'role_coverage_configs': []}
+        data.setdefault('peak_periods', [])
+        data.setdefault('role_coverage_configs', [])
+        return data
+
+    def set_coverage_config(self, peak_periods, role_coverage_configs):
+        self.coverage_config_json = json.dumps({
+            'peak_periods': peak_periods,
+            'role_coverage_configs': role_coverage_configs,
+        })
+
     def to_dict(self):
         return {
             'business_id': self.business_id,
@@ -306,18 +328,22 @@ class DBEmployee(db.Model):
     # Cost tracking
     hourly_rate = db.Column(db.Float, default=15.0)
     weekend_shifts_worked = db.Column(db.Integer, default=0)
-    
+
+    # Notification preferences (employee can change these in their portal)
+    notify_email = db.Column(db.Boolean, default=True)
+    notify_sms = db.Column(db.Boolean, default=True)
+
     # Availability stored as JSON
     # Format: {"availability": [{"day": 0, "hour": 8}, ...], "preferences": [...], "time_off": [...]}
     availability_json = db.Column(db.Text, default='{}')
-    
+
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Unique constraint: one employee ID per business
     __table_args__ = (db.UniqueConstraint('employee_id', 'business_db_id', name='unique_employee_per_business'),)
-    
+
     def __repr__(self):
         return f'<DBEmployee {self.employee_id}: {self.name}>'
     
@@ -362,6 +388,8 @@ class DBEmployee(db.Model):
             'overtime_allowed': self.overtime_allowed,
             'hourly_rate': self.hourly_rate,
             'weekend_shifts_worked': self.weekend_shifts_worked,
+            'notify_email': self.notify_email if self.notify_email is not None else True,
+            'notify_sms': self.notify_sms if self.notify_sms is not None else True,
             'availability': avail_data.get('availability', []),
             'preferences': avail_data.get('preferences', []),
             'time_off': avail_data.get('time_off', [])
@@ -715,68 +743,121 @@ class PTORequest(db.Model):
         }
 
 
+class ScheduleJob(db.Model):
+    """A background schedule-generation job.
+
+    Generation runs in a worker thread so the HTTP request returns immediately
+    and the browser can poll for progress. Storing the job in the database (not
+    in process memory) means the poll can be answered by any Gunicorn worker.
+    """
+    __tablename__ = 'schedule_jobs'
+
+    id = db.Column(db.String(36), primary_key=True)  # uuid4
+    business_id = db.Column(db.String(100), nullable=False, index=True)
+    owner_id = db.Column(db.Integer, nullable=True)  # None for demo jobs
+    week_start = db.Column(db.Date, nullable=False)
+    kind = db.Column(db.String(20), default='generate')  # 'generate' | 'alternative'
+
+    # 'queued' | 'running' | 'done' | 'failed'
+    status = db.Column(db.String(20), default='queued', index=True)
+    message = db.Column(db.Text, nullable=True)        # human-readable progress line
+    progress_json = db.Column(db.Text, nullable=True)  # {"solutions": n, "unfilled_slots": n, "elapsed": s, ...}
+    result_json = db.Column(db.Text, nullable=True)    # full response payload when done
+    error = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def get_progress(self):
+        if not self.progress_json:
+            return {}
+        try:
+            return json.loads(self.progress_json)
+        except json.JSONDecodeError:
+            return {}
+
+    def get_result(self):
+        if not self.result_json:
+            return None
+        try:
+            return json.loads(self.result_json)
+        except json.JSONDecodeError:
+            return None
+
+    def to_dict(self, include_result=True):
+        data = {
+            'job_id': self.id,
+            'business_id': self.business_id,
+            'week_start': self.week_start.isoformat() if self.week_start else None,
+            'kind': self.kind,
+            'status': self.status,
+            'message': self.message,
+            'progress': self.get_progress(),
+            'error': self.error,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+        if include_result and self.status == 'done':
+            data['result'] = self.get_result()
+        return data
+
+
 def init_db(app):
     """Initialize the database with the Flask app."""
     db.init_app(app)
     bcrypt.init_app(app)
-    
+
     with app.app_context():
         db.create_all()
-        
+
         # Run migrations to add any missing columns
         _run_migrations(app)
 
 
+# Columns added after the original tables were created. `create_all` never
+# alters existing tables, so each deploy checks these and adds what is missing.
+# Format: (table, column, SQL type/default clause)
+_COLUMN_MIGRATIONS = [
+    ('users', 'linked_employee_id', 'INTEGER REFERENCES db_employees(id)'),
+    ('users', 'must_change_password', 'BOOLEAN DEFAULT FALSE'),
+    ('businesses', 'coverage_config_json', 'TEXT'),
+    ('db_employees', 'notify_email', 'BOOLEAN DEFAULT TRUE'),
+    ('db_employees', 'notify_sms', 'BOOLEAN DEFAULT TRUE'),
+    ('shift_swap_requests', 'open_for_swaps', 'BOOLEAN DEFAULT FALSE'),
+    ('shift_swap_requests', 'counter_offer_for_id', 'INTEGER REFERENCES shift_swap_requests(id)'),
+    ('shift_swap_requests', 'is_counter_offer', 'BOOLEAN DEFAULT FALSE'),
+]
+
+
 def _run_migrations(app):
-    """Run database migrations to add missing columns.
-    
-    This handles the case where the code has new columns that don't exist
-    in the production database yet.
-    """
+    """Add any columns that exist in the models but not yet in the database."""
     from sqlalchemy import text, inspect
-    
+
     try:
         inspector = inspect(db.engine)
-        
-        # Check if users table exists
-        if 'users' not in inspector.get_table_names():
-            return  # Table doesn't exist yet, create_all will handle it
-        
-        existing_columns = [col['name'] for col in inspector.get_columns('users')]
-        
+        tables = set(inspector.get_table_names())
         migrations_run = []
-        
-        # Migration: Add linked_employee_id column
-        if 'linked_employee_id' not in existing_columns:
+
+        for table, column, ddl in _COLUMN_MIGRATIONS:
+            if table not in tables:
+                continue
+            existing = {col['name'] for col in inspector.get_columns(table)}
+            if column in existing:
+                continue
             try:
-                db.session.execute(text(
-                    'ALTER TABLE users ADD COLUMN linked_employee_id INTEGER REFERENCES db_employees(id)'
-                ))
+                db.session.execute(text(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}'))
                 db.session.commit()
-                migrations_run.append('linked_employee_id')
+                migrations_run.append(f'{table}.{column}')
             except Exception as e:
                 db.session.rollback()
-                print(f"Migration warning (linked_employee_id): {e}")
-        
-        # Migration: Add must_change_password column
-        if 'must_change_password' not in existing_columns:
-            try:
-                db.session.execute(text(
-                    'ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT FALSE'
-                ))
-                db.session.commit()
-                migrations_run.append('must_change_password')
-            except Exception as e:
-                db.session.rollback()
-                print(f"Migration warning (must_change_password): {e}")
-        
+                print(f"[DB MIGRATION] Warning adding {table}.{column}: {e}", flush=True)
+
         if migrations_run:
-            print(f"[DB MIGRATION] Added columns to users table: {migrations_run}", flush=True)
-        
-        # Migration: Add ON DELETE CASCADE to all foreign keys referencing businesses.id
-        # This allows deleting a business directly via SQL and having all child rows cleaned up
-        _migrate_cascade_foreign_keys(app)
-    
+            print(f"[DB MIGRATION] Added columns: {migrations_run}", flush=True)
+
+        # PostgreSQL only: make sure child rows are removed when a business is deleted
+        if db.engine.dialect.name == 'postgresql':
+            _migrate_cascade_foreign_keys(app)
+
     except Exception as e:
         print(f"[DB MIGRATION] Warning during migration check: {e}", flush=True)
 

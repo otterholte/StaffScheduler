@@ -73,6 +73,7 @@
                         {% endfor %}
                         <div class="dropdown-divider"></div>
                         {% endif %}
+                        {% if is_demo %}
                         <div class="dropdown-header dropdown-header-demo">Demo Locations</div>
                         {% for b in businesses[user_businesses_count:] %}
                         <button class="business-option {% if b.id == business.id %}active{% endif %}" data-business-id="{{ b.id }}" data-business-slug="{{ b.slug }}">
@@ -91,6 +92,25 @@
                         </button>
                         {% endfor %}
                         <div class="dropdown-divider"></div>
+                        {% if my_business_url %}
+                        <a class="add-business-btn" href="{{ my_business_url }}" title="Leave the demo and go back to your own business">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                            Back to my business
+                        </a>
+                        {% else %}
+                        <a class="add-business-btn" href="/auth/register" title="Create a free account to build your own schedule">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="16"></line>
+                                <line x1="8" y1="12" x2="16" y2="12"></line>
+                            </svg>
+                            Create your own business
+                        </a>
+                        {% endif %}
+                        {% else %}
                         <button class="add-business-btn" id="addBusinessBtn">
                             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <circle cx="12" cy="12" r="10"></circle>
@@ -99,6 +119,14 @@
                             </svg>
                             Add New Location
                         </button>
+                        <a class="add-business-btn demo-link" href="/demo/schedule" title="Explore sample businesses without touching your data">
+                            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polygon points="10 8 16 12 10 16 10 8"></polygon>
+                            </svg>
+                            Try demo businesses
+                        </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>

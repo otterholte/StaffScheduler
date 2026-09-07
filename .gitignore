@@ -47,3 +47,9 @@ instance/
 *.db
 
 
+
+# Local virtualenv and databases
+.venv/
+staffscheduler.db
+instance/
+*.sqlite

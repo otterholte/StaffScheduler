@@ -1,48 +1,154 @@
 """
-Advanced OR-Tools CP-SAT Solver for Staff Scheduling.
+OR-Tools CP-SAT solver for weekly staff scheduling.
 
-This module implements a comprehensive constraint programming solution with:
-- Role-based coverage requirements
-- Employee classification (FT/PT)
-- Time-off requests
-- Peak hour staffing
-- Overtime control
-- Soft preferences
-- Fairness tracking
-- Supervision requirements
-- Consecutive days preferences
+This is the heart of the product. It turns a `BusinessScenario` (employees,
+roles, availability, and hour-by-hour coverage requirements) into a weekly
+schedule that satisfies every hard rule and does as well as possible on the
+soft ones.
+
+The model is built once per solve. Decision variables:
+
+    x[e, d, h, r]   employee e works hour h on day d in role r   (bool)
+    w[e, d, h]      employee e works hour h on day d in ANY role  (bool)
+    start[e, d, h]  hour h is the first hour of a shift           (bool)
+    end[e, d, h]    hour h is the last hour of a shift            (bool)
+    day[e, d]       employee e works at all on day d              (bool)
+
+Variables are only created where they can possibly be 1: the employee must be
+available (and not on time-off), must hold the role, and there must be a
+coverage requirement (with max_staff > 0) for that role at that hour. That
+pruning is what makes the model small, and small models solve fast.
+
+HARD RULES (never violated):
+    - availability / approved time-off
+    - one role per hour, max staff per requirement
+    - weekly max hours (40 unless overtime is allowed)
+    - max hours per day, max shift length, min shift length
+    - max separate shifts per day, max split-shift days per week
+    - max days per week (when the mode is "required")
+    - supervision: an employee who needs supervision only works when a
+      supervisor is also on the clock
+
+SOFT RULES (penalised in the objective, in rough priority order):
+    - coverage shortfall (dominant weight, extra on peak hours)
+    - weekly minimum hours not reached
+    - clopenings (too little rest between a closing and an opening shift)
+    - too many consecutive days
+    - max days per week (when the mode is "preferred")
+    - overtime hours
+    - fairness: max hours-shortfall across staff, weekend distribution
+    - preferences (bonus for preferred hours)
+    - fragmentation: extra shift starts, mid-shift role switches
+    - scheduling strategy (minimise / balanced / maximise hours)
+
+The solver stops as soon as it proves optimality, hits the time limit, or the
+best solution has not improved for `stall_seconds`. A progress callback lets the
+web layer show live status to the user.
 """
 
+import os
 import time
-from typing import List, Optional, Dict, Tuple, Set
+from typing import Callable, Dict, List, Optional, Set, Tuple
+
 from ortools.sat.python import cp_model
 
 from .models import (
-    Employee, Schedule, ShiftAssignment, ScheduleMetrics,
-    BusinessScenario, CoverageRequirement, Role, TimeSlot,
-    EmployeeClassification
+    BusinessScenario, CoverageRequirement, Employee, Role, Schedule,
+    ScheduleMetrics, ShiftAssignment,
 )
 
 
+# Day names used in human-readable diagnostics.
+_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+
+def _fmt_hour(hour: int) -> str:
+    """Format an integer hour (0-24) as '6am', '12pm', '5pm'."""
+    hour = hour % 24
+    if hour == 0:
+        return "12am"
+    if hour < 12:
+        return f"{hour}am"
+    if hour == 12:
+        return "12pm"
+    return f"{hour - 12}pm"
+
+
+class _ProgressCallback(cp_model.CpSolverSolutionCallback):
+    """Tracks improving solutions, reports progress, and stops on stall.
+
+    CP-SAT calls `on_solution_callback` every time it finds a better solution.
+    We record when that happened so we can stop the search once the solution
+    has stopped improving for `stall_seconds` (there is no point burning the
+    full time limit proving optimality of a schedule that is already as good
+    as it is going to get in practice).
+    """
+
+    def __init__(self, shortfall_vars, stall_seconds: float, min_seconds: float,
+                 progress: Optional[Callable[[dict], None]], started_at: float,
+                 significant_delta: float = 40.0):
+        super().__init__()
+        self._shortfall_vars = shortfall_vars
+        self._stall_seconds = stall_seconds
+        self._min_seconds = min_seconds
+        self._significant_delta = significant_delta
+        self._progress = progress
+        self._started_at = started_at
+        self.solution_count = 0
+        # Only *meaningful* improvements (a coverage slot, an hour of minimum
+        # hours, a clopening) reset the stall timer. Improvements smaller than
+        # `significant_delta` are cosmetic (a preference here, a shift start
+        # there) and should not keep the user waiting.
+        self.last_improvement_at = started_at
+        self.best_objective = None
+        self.best_shortfall = None
+
+    def on_solution_callback(self):
+        now = time.time()
+        self.solution_count += 1
+        objective = self.ObjectiveValue()
+        if self.best_objective is None or objective - self.best_objective >= self._significant_delta:
+            self.last_improvement_at = now
+        self.best_objective = objective
+        self.best_shortfall = int(sum(self.Value(v) for v in self._shortfall_vars))
+        if self._progress:
+            self._progress({
+                "phase": "improving",
+                "solutions": self.solution_count,
+                "objective": self.best_objective,
+                "bound": self.BestObjectiveBound(),
+                "unfilled_slots": self.best_shortfall,
+                "elapsed": now - self._started_at,
+            })
+
+    def should_stop(self) -> bool:
+        """Called from a timer thread; returns True when the search should end."""
+        if self.solution_count == 0:
+            return False
+        now = time.time()
+        if now - self._started_at < self._min_seconds:
+            return False
+        return (now - self.last_improvement_at) >= self._stall_seconds
+
+
 class AdvancedScheduleSolver:
-    """
-    Advanced solver for staff scheduling with role-based constraints.
-    
-    Features:
-    - Multiple roles with separate coverage requirements
-    - Hard constraints: availability, time-off, supervision, OT caps
-    - Soft constraints: preferences, consecutive days, fairness, OT avoidance
-    - Weighted objective function for optimization
-    """
-    
-    # Soft constraint weights
-    WEIGHT_COVERAGE = 1000        # Primary: fill required slots
-    WEIGHT_PREFERENCE = 10        # Bonus for preferred times
-    WEIGHT_CONSECUTIVE_PT = 5     # Penalty per day over 3 for PT
-    WEIGHT_CONSECUTIVE_FT = 5     # Penalty per day over 5 for FT
-    WEIGHT_FAIRNESS = 10          # Penalty for unfair weekend distribution
-    WEIGHT_OVERTIME = 20          # Penalty per overtime hour
-    
+    """Builds and solves the weekly scheduling model for one business."""
+
+    # ---- Objective weights (integers; larger = more important) --------------
+    WEIGHT_COVERAGE = 1000        # per missing person-hour of required coverage
+    WEIGHT_PEAK_EXTRA = 250       # additional penalty when the missing hour is a peak hour
+    WEIGHT_MIN_HOURS = 40         # per hour an employee lands under their weekly minimum
+    WEIGHT_CLOPEN = 60            # per closing shift followed by an opening shift
+    WEIGHT_CONSECUTIVE = 25       # per day worked beyond the consecutive-days limit
+    WEIGHT_OVER_DAYS = 30         # per day over the (preferred) max days per week
+    WEIGHT_OVERTIME = 20          # per overtime hour (when overtime is allowed)
+    WEIGHT_FAIRNESS_HOURS = 25    # on the worst hours-shortfall across all staff
+    WEIGHT_WEEKEND_FAIRNESS = 10  # per weekend day for staff above the weekend average
+    WEIGHT_PREFERENCE = 10        # bonus per hour worked inside a preferred window
+    WEIGHT_SHIFT_START = 6        # per shift (fewer, longer shifts are better)
+    WEIGHT_ROLE_SWITCH = 4        # per mid-shift role change
+    WEIGHT_STRATEGY_HOUR = 5      # per hour, sign depends on strategy
+
     def __init__(
         self,
         business: BusinessScenario,
@@ -50,825 +156,789 @@ class AdvancedScheduleSolver:
         max_hours_per_day: int = 8,
         max_splits_per_day: int = 2,
         max_split_shifts_per_week: int = 2,
-        scheduling_strategy: str = 'balanced',  # 'minimize', 'balanced', 'maximize'
+        scheduling_strategy: str = "balanced",   # 'minimize' | 'balanced' | 'maximize'
         max_days_ft: int = 5,
-        max_days_ft_mode: str = 'required',  # 'off', 'preferred', 'required'
+        max_days_ft_mode: str = "required",      # 'off' | 'preferred' | 'required'
         max_days_pt: int = 3,
-        max_days_pt_mode: str = 'required'   # 'off', 'preferred', 'required'
+        max_days_pt_mode: str = "required",
+        max_shift_hours: Optional[int] = None,   # defaults to max_hours_per_day
+        min_rest_hours: int = 10,                # hours between a close and the next open
+        max_consecutive_days: int = 6,           # soft limit on days worked in a row
+        supervision_required: bool = True,       # enforce the needs_supervision rule
+        weekend_fairness: bool = True,           # spread weekend work by history
+        avoid_overtime: bool = True,             # penalise hours above 40
+        progress_callback: Optional[Callable[[dict], None]] = None,
     ):
         self.business = business
-        self.employees = business.employees
-        self.roles = {r.id: r for r in business.roles}
-        self.coverage_requirements = business.coverage_requirements
-        self.min_shift_hours = min_shift_hours
-        self.max_hours_per_day = max_hours_per_day
-        self.max_splits_per_day = max_splits_per_day
-        self.max_split_shifts_per_week = max_split_shifts_per_week
-        self.scheduling_strategy = scheduling_strategy
-        
-        # Max days per week constraints
-        self.max_days_ft = max_days_ft
-        self.max_days_ft_mode = max_days_ft_mode
-        self.max_days_pt = max_days_pt
-        self.max_days_pt_mode = max_days_pt_mode
-        
-        # Operating parameters
-        self.operating_hours = list(business.get_operating_hours())
-        self.days_open = business.days_open
+        self.employees: List[Employee] = list(business.employees)
+        self.roles: Dict[str, Role] = {r.id: r for r in business.roles}
+        self.coverage_requirements: List[CoverageRequirement] = list(business.coverage_requirements)
+
+        # Policy knobs (all validated so a bad value from the UI cannot break the model)
+        self.min_shift_hours = max(1, int(min_shift_hours or 1))
+        self.max_hours_per_day = max(self.min_shift_hours, int(max_hours_per_day or 8))
+        self.max_shift_hours = max(self.min_shift_hours, int(max_shift_hours or self.max_hours_per_day))
+        self.max_splits_per_day = max(1, int(max_splits_per_day or 1))
+        self.max_split_shifts_per_week = max(0, int(max_split_shifts_per_week or 0))
+        self.scheduling_strategy = scheduling_strategy if scheduling_strategy in ("minimize", "balanced", "maximize") else "balanced"
+        self.max_days_ft = max(1, int(max_days_ft or 5))
+        self.max_days_ft_mode = max_days_ft_mode if max_days_ft_mode in ("off", "preferred", "required") else "required"
+        self.max_days_pt = max(1, int(max_days_pt or 3))
+        self.max_days_pt_mode = max_days_pt_mode if max_days_pt_mode in ("off", "preferred", "required") else "required"
+        self.min_rest_hours = max(0, int(min_rest_hours or 0))
+        self.max_consecutive_days = max(1, int(max_consecutive_days or 6))
+        self.supervision_required = bool(supervision_required)
+        self.weekend_fairness = bool(weekend_fairness)
+        self.avoid_overtime = bool(avoid_overtime)
+        self.progress_callback = progress_callback
+
+        # Operating window
+        self.operating_hours: List[int] = list(business.get_operating_hours())
+        self.days_open: List[int] = sorted(business.days_open)
         self.num_days = len(self.days_open)
-        
-        # Solver state
+
+        # Requirements indexed by slot; only requirements inside the operating
+        # window and on open days can ever be met, so the rest are ignored.
+        self._req_index: Dict[Tuple[int, int, str], CoverageRequirement] = {}
+        for req in self.coverage_requirements:
+            if req.day in self.days_open and req.hour in self.operating_hours and req.max_staff > 0:
+                self._req_index[(req.day, req.hour, req.role_id)] = req
+
+        # Solutions found so far (used to force *different* alternatives)
+        self._previous_solutions: List[Set[Tuple[str, int, int]]] = []
+
+        # Per-solve model state (populated by _build_model)
         self._model: Optional[cp_model.CpModel] = None
-        self._shift_vars: Dict[Tuple[str, int, int, str], cp_model.IntVar] = {}
-        self._works_day_vars: Dict[Tuple[str, int], cp_model.IntVar] = {}
-        self._previous_solutions: List[Dict] = []
-        
-        # Index coverage requirements for faster lookup
-        self._coverage_index: Dict[Tuple[int, int, str], CoverageRequirement] = {}
-        for req in self.coverage_requirements:
-            self._coverage_index[(req.day, req.hour, req.role_id)] = req
-    
-    def _get_employees_for_role(self, role_id: str) -> List[Employee]:
-        """Get all employees who can fill a specific role."""
-        return [e for e in self.employees if role_id in e.roles]
-    
-    def _get_supervisors(self) -> List[Employee]:
-        """Get all employees who can supervise."""
-        return [e for e in self.employees if e.can_supervise]
-    
-    def _get_employees_needing_supervision(self) -> List[Employee]:
-        """Get all employees who need supervision."""
-        return [e for e in self.employees if e.needs_supervision]
-    
-    def _build_model(self, exclude_solutions: List[Dict] = None):
-        """Build the CP-SAT model with all constraints."""
-        self._model = cp_model.CpModel()
-        self._shift_vars = {}
-        self._works_day_vars = {}
-        
-        # Track objective components
-        objective_terms = []
-        
-        # =================================================================
-        # DECISION VARIABLES
-        # =================================================================
-        
-        # shift[emp_id, day, hour, role] = 1 if employee works that hour in that role
+        self._x: Dict[Tuple[str, int, int, str], cp_model.IntVar] = {}
+        self._w: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
+        self._start: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
+        self._end: Dict[Tuple[str, int, int], cp_model.IntVar] = {}
+        self._day: Dict[Tuple[str, int], cp_model.IntVar] = {}
+        self._hours: Dict[str, cp_model.LinearExpr] = {}
+        self._shortfall: Dict[Tuple[int, int, str], cp_model.IntVar] = {}
+        self._under_min: Dict[str, cp_model.IntVar] = {}
+        self._clopen_vars: List[Tuple[str, int, int, int, cp_model.IntVar]] = []
+
+    # ------------------------------------------------------------------ helpers
+
+    def _report(self, phase: str, message: str, **extra):
+        """Send a progress event to the web layer (if anyone is listening)."""
+        if self.progress_callback:
+            event = {"phase": phase, "message": message}
+            event.update(extra)
+            try:
+                self.progress_callback(event)
+            except Exception:
+                pass  # progress reporting must never break a solve
+
+    def _eligible_roles_at(self, emp: Employee, day: int, hour: int) -> List[str]:
+        """Roles this employee could fill at (day, hour) given the requirements."""
+        return [r for r in emp.roles if (day, hour, r) in self._req_index]
+
+    # -------------------------------------------------------------- the model
+
+    def _build_model(self, exclude_solutions: Optional[List[Set[Tuple[str, int, int]]]] = None):
+        """Create all variables, constraints, and the objective."""
+        m = cp_model.CpModel()
+        self._model = m
+        self._x, self._w, self._start, self._end, self._day = {}, {}, {}, {}, {}
+        self._hours, self._shortfall, self._under_min, self._clopen_vars = {}, {}, {}, []
+        objective: List[cp_model.LinearExpr] = []
+
+        hours = self.operating_hours
+        H = len(hours)
+        hour_pos = {h: i for i, h in enumerate(hours)}
+
+        # ---------------------------------------------------------------
+        # 1. Decision variables (only where an assignment is possible)
+        # ---------------------------------------------------------------
         for emp in self.employees:
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        var_name = f"shift_{emp.id}_{day}_{hour}_{role_id}"
-                        self._shift_vars[(emp.id, day, hour, role_id)] = self._model.NewBoolVar(var_name)
-        
-        # works_day[emp_id, day] = 1 if employee works at all on that day
+            for d in self.days_open:
+                for h in hours:
+                    if not emp.is_available(d, h):
+                        continue
+                    roles_here = self._eligible_roles_at(emp, d, h)
+                    if not roles_here:
+                        continue
+                    if len(roles_here) == 1:
+                        # Single eligible role: the role var IS the work var.
+                        v = m.NewBoolVar(f"x_{emp.id}_{d}_{h}_{roles_here[0]}")
+                        self._x[(emp.id, d, h, roles_here[0])] = v
+                        self._w[(emp.id, d, h)] = v
+                    else:
+                        w = m.NewBoolVar(f"w_{emp.id}_{d}_{h}")
+                        role_vars = []
+                        for r in roles_here:
+                            v = m.NewBoolVar(f"x_{emp.id}_{d}_{h}_{r}")
+                            self._x[(emp.id, d, h, r)] = v
+                            role_vars.append(v)
+                        # Exactly one role when working, none when not.
+                        m.Add(sum(role_vars) == w)
+                        self._w[(emp.id, d, h)] = w
+
+        # ---------------------------------------------------------------
+        # 2. Shift structure per employee-day: starts, ends, day worked
+        # ---------------------------------------------------------------
         for emp in self.employees:
-            for day in self.days_open:
-                var_name = f"works_day_{emp.id}_{day}"
-                self._works_day_vars[(emp.id, day)] = self._model.NewBoolVar(var_name)
-                
-                # Link to shift vars: works_day = 1 iff any shift var is 1
-                day_shifts = []
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            day_shifts.append(self._shift_vars[key])
-                
-                if day_shifts:
-                    self._model.AddMaxEquality(self._works_day_vars[(emp.id, day)], day_shifts)
-                else:
-                    self._model.Add(self._works_day_vars[(emp.id, day)] == 0)
-        
-        # =================================================================
-        # HARD CONSTRAINTS
-        # =================================================================
-        
-        # 1. AVAILABILITY & TIME-OFF CONSTRAINT
+            for d in self.days_open:
+                day_w = [(h, self._w[(emp.id, d, h)]) for h in hours if (emp.id, d, h) in self._w]
+                day_var = m.NewBoolVar(f"day_{emp.id}_{d}")
+                self._day[(emp.id, d)] = day_var
+                if not day_w:
+                    m.Add(day_var == 0)
+                    continue
+
+                # day_var = OR(all hours)
+                m.AddMaxEquality(day_var, [v for _, v in day_w])
+
+                # Daily hour cap
+                m.Add(sum(v for _, v in day_w) <= self.max_hours_per_day)
+
+                # start[h] = w[h] AND NOT w[h-1];  end[h] = w[h] AND NOT w[h+1]
+                # (a missing neighbour var means the employee cannot work then, i.e. 0)
+                starts = []
+                for h, v in day_w:
+                    prev = self._w.get((emp.id, d, h - 1)) if (h - 1) in hour_pos else None
+                    nxt = self._w.get((emp.id, d, h + 1)) if (h + 1) in hour_pos else None
+
+                    if prev is None:
+                        s = v
+                    else:
+                        s = m.NewBoolVar(f"s_{emp.id}_{d}_{h}")
+                        m.AddBoolAnd([v, prev.Not()]).OnlyEnforceIf(s)
+                        m.AddBoolOr([v.Not(), prev]).OnlyEnforceIf(s.Not())
+                    self._start[(emp.id, d, h)] = s
+                    starts.append(s)
+
+                    if nxt is None:
+                        e = v
+                    else:
+                        e = m.NewBoolVar(f"e_{emp.id}_{d}_{h}")
+                        m.AddBoolAnd([v, nxt.Not()]).OnlyEnforceIf(e)
+                        m.AddBoolOr([v.Not(), nxt]).OnlyEnforceIf(e.Not())
+                    self._end[(emp.id, d, h)] = e
+
+                    # Minimum shift length: a shift starting at h covers the next
+                    # min_shift_hours hours. If that is impossible (end of the
+                    # window, or an unavailable hour), a shift cannot start here.
+                    needed = [self._w.get((emp.id, d, h + j)) for j in range(1, self.min_shift_hours)]
+                    if any(n is None for n in needed):
+                        m.Add(s == 0)
+                    else:
+                        for n in needed:
+                            m.AddImplication(s, n)
+
+                # Maximum shift length: no window of max_shift_hours+1 consecutive
+                # hours can be fully worked. Only needed when the daily cap does
+                # not already guarantee it.
+                if self.max_shift_hours < self.max_hours_per_day:
+                    L = self.max_shift_hours + 1
+                    for i in range(0, H - L + 1):
+                        window = [self._w.get((emp.id, d, hours[i + j])) for j in range(L)]
+                        if all(v is not None for v in window):
+                            m.Add(sum(window) <= self.max_shift_hours)
+
+                # Shifts per day
+                m.Add(sum(starts) <= self.max_splits_per_day)
+                # Soft: prefer fewer, longer shifts
+                for s in starts:
+                    objective.append(-self.WEIGHT_SHIFT_START * s)
+
+        # ---------------------------------------------------------------
+        # 3. Split-shift days per week (hard)
+        # ---------------------------------------------------------------
+        if self.max_splits_per_day > 1:
+            for emp in self.employees:
+                split_days = []
+                for d in self.days_open:
+                    starts = [self._start[(emp.id, d, h)] for h in hours if (emp.id, d, h) in self._start]
+                    if len(starts) < 2:
+                        continue
+                    has_split = m.NewBoolVar(f"split_{emp.id}_{d}")
+                    m.Add(sum(starts) >= 2).OnlyEnforceIf(has_split)
+                    m.Add(sum(starts) <= 1).OnlyEnforceIf(has_split.Not())
+                    split_days.append(has_split)
+                if split_days:
+                    m.Add(sum(split_days) <= self.max_split_shifts_per_week)
+
+        # ---------------------------------------------------------------
+        # 4. Coverage: shortfall variables (soft) and max staff (hard)
+        # ---------------------------------------------------------------
+        for (d, h, r), req in self._req_index.items():
+            staffed = [self._x[(e.id, d, h, r)] for e in self.employees if (e.id, d, h, r) in self._x]
+            need = int(req.min_staff)
+            if need <= 0 and not staffed:
+                continue
+            if staffed:
+                m.Add(sum(staffed) <= int(req.max_staff))
+            if need > 0:
+                short = m.NewIntVar(0, need, f"short_{d}_{h}_{r}")
+                m.Add(short >= need - sum(staffed))
+                self._shortfall[(d, h, r)] = short
+                weight = self.WEIGHT_COVERAGE + (self.WEIGHT_PEAK_EXTRA if req.is_peak else 0)
+                objective.append(-weight * short)
+
+        # ---------------------------------------------------------------
+        # 5. Weekly hours: hard max, soft min, overtime
+        # ---------------------------------------------------------------
+        max_possible = H * self.num_days
         for emp in self.employees:
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key not in self._shift_vars:
+            week_vars = [self._w[(emp.id, d, h)] for d in self.days_open for h in hours if (emp.id, d, h) in self._w]
+            total = sum(week_vars) if week_vars else 0
+            self._hours[emp.id] = total
+
+            cap = int(emp.max_hours) if emp.overtime_allowed else min(40, int(emp.max_hours))
+            if week_vars:
+                m.Add(total <= cap)
+
+            # Soft minimum: penalty for every hour under min_hours
+            min_h = max(0, int(emp.min_hours))
+            under = m.NewIntVar(0, max(min_h, 0), f"under_{emp.id}")
+            if min_h > 0:
+                m.Add(under >= min_h - total)
+                objective.append(-self.WEIGHT_MIN_HOURS * under)
+            else:
+                m.Add(under == 0)
+            self._under_min[emp.id] = under
+
+            # Overtime (only possible when allowed; hard cap otherwise)
+            if self.avoid_overtime and emp.overtime_allowed and cap > 40 and week_vars:
+                ot = m.NewIntVar(0, cap - 40, f"ot_{emp.id}")
+                m.Add(ot >= total - 40)
+                objective.append(-self.WEIGHT_OVERTIME * ot)
+
+        # Fairness on hours: penalise the worst shortfall so it is shared
+        if self._under_min:
+            worst = m.NewIntVar(0, max(max(int(e.min_hours), 0) for e in self.employees) if self.employees else 0, "worst_under")
+            m.AddMaxEquality(worst, list(self._under_min.values()))
+            objective.append(-self.WEIGHT_FAIRNESS_HOURS * worst)
+
+        # ---------------------------------------------------------------
+        # 6. Days per week (hard or soft by classification)
+        # ---------------------------------------------------------------
+        for emp in self.employees:
+            max_days = self.max_days_ft if emp.is_full_time else self.max_days_pt
+            mode = self.max_days_ft_mode if emp.is_full_time else self.max_days_pt_mode
+            if mode == "off":
+                continue
+            days_worked = sum(self._day[(emp.id, d)] for d in self.days_open)
+            if mode == "required":
+                m.Add(days_worked <= max_days)
+            else:
+                over = m.NewIntVar(0, max(0, self.num_days - max_days), f"overdays_{emp.id}")
+                m.Add(over >= days_worked - max_days)
+                objective.append(-self.WEIGHT_OVER_DAYS * over)
+
+        # ---------------------------------------------------------------
+        # 7. Consecutive days (soft) - any run of K+1 calendar days
+        # ---------------------------------------------------------------
+        K = self.max_consecutive_days
+        if self.num_days > K:
+            for emp in self.employees:
+                for i in range(0, self.num_days - K):
+                    window_days = self.days_open[i:i + K + 1]
+                    # Only a run of truly consecutive calendar days counts
+                    if window_days[-1] - window_days[0] != K:
+                        continue
+                    over = m.NewIntVar(0, 1, f"consec_{emp.id}_{window_days[0]}")
+                    m.Add(over >= sum(self._day[(emp.id, d)] for d in window_days) - K)
+                    objective.append(-self.WEIGHT_CONSECUTIVE * over)
+
+        # ---------------------------------------------------------------
+        # 8. Rest between shifts / clopenings (soft)
+        # ---------------------------------------------------------------
+        if self.min_rest_hours > 0 and hours:
+            for emp in self.employees:
+                for d in self.days_open:
+                    if d + 1 not in self.days_open:
+                        continue
+                    for h1 in hours:
+                        e_var = self._end.get((emp.id, d, h1))
+                        if e_var is None:
                             continue
-                        
-                        # Not available or has time-off
-                        if not emp.is_available(day, hour):
-                            self._model.Add(self._shift_vars[key] == 0)
-        
-        # 2. ONE ROLE PER HOUR CONSTRAINT
-        # An employee can only work one role at a time
-        for emp in self.employees:
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    role_vars = []
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            role_vars.append(self._shift_vars[key])
-                    if role_vars:
-                        self._model.Add(sum(role_vars) <= 1)
-        
-        # 2b. MAX HOURS PER DAY CONSTRAINT
-        # Limit total hours an employee can work in a single day
-        for emp in self.employees:
-            for day in self.days_open:
-                daily_hours = []
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            daily_hours.append(self._shift_vars[key])
-                if daily_hours:
-                    self._model.Add(sum(daily_hours) <= self.max_hours_per_day)
-        
-        # 3. ROLE COVERAGE CONSTRAINTS
-        coverage_vars = {}
-        for req in self.coverage_requirements:
-            if req.day not in self.days_open:
-                continue
-            if req.hour not in self.operating_hours:
-                continue
-            
-            # Get employees who can fill this role
-            eligible = self._get_employees_for_role(req.role_id)
-            
-            role_shifts = []
-            for emp in eligible:
-                key = (emp.id, req.day, req.hour, req.role_id)
-                if key in self._shift_vars:
-                    role_shifts.append(self._shift_vars[key])
-            
-            if role_shifts:
-                # Minimum coverage
-                coverage_met = self._model.NewBoolVar(f"cov_{req.day}_{req.hour}_{req.role_id}")
-                self._model.Add(sum(role_shifts) >= req.min_staff).OnlyEnforceIf(coverage_met)
-                self._model.Add(sum(role_shifts) < req.min_staff).OnlyEnforceIf(coverage_met.Not())
-                
-                # Maximum coverage (hard cap)
-                self._model.Add(sum(role_shifts) <= req.max_staff)
-                
-                # Track for objective
-                coverage_vars[(req.day, req.hour, req.role_id)] = coverage_met
-                objective_terms.append(coverage_met * self.WEIGHT_COVERAGE)
-            else:
-                # No eligible employees - coverage impossible
-                coverage_vars[(req.day, req.hour, req.role_id)] = None
-        
-        # 4. SUPERVISION CONSTRAINT
-        # If an employee needs supervision, at least one supervisor must be working
-        supervisors = self._get_supervisors()
-        needs_supervision = self._get_employees_needing_supervision()
-        
-        for emp in needs_supervision:
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    # Check if this employee is working at this time
-                    emp_working_vars = []
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            emp_working_vars.append(self._shift_vars[key])
-                    
-                    if not emp_working_vars:
-                        continue
-                    
-                    emp_working = self._model.NewBoolVar(f"working_{emp.id}_{day}_{hour}")
-                    self._model.AddMaxEquality(emp_working, emp_working_vars)
-                    
-                    # If employee is working, at least one supervisor must be working
-                    supervisor_working_vars = []
-                    for sup in supervisors:
-                        for role_id in sup.roles:
-                            key = (sup.id, day, hour, role_id)
-                            if key in self._shift_vars:
-                                supervisor_working_vars.append(self._shift_vars[key])
-                    
-                    if supervisor_working_vars:
-                        # If emp_working, then sum(supervisor_working_vars) >= 1
-                        self._model.Add(sum(supervisor_working_vars) >= 1).OnlyEnforceIf(emp_working)
-        
-        # 5. WEEKLY HOURS CONSTRAINT
-        for emp in self.employees:
-            weekly_hours = []
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            weekly_hours.append(self._shift_vars[key])
-            
-            if weekly_hours:
-                total_hours = sum(weekly_hours)
-                self._model.Add(total_hours >= emp.min_hours)
-                
-                # Overtime cap
-                if emp.overtime_allowed:
-                    self._model.Add(total_hours <= emp.max_hours)
-                else:
-                    # Can't exceed 40 hours
-                    self._model.Add(total_hours <= min(40, emp.max_hours))
-        
-        # 6. MINIMUM SHIFT LENGTH (simplified)
-        # If working, must work at least min_shift_hours
-        for emp in self.employees:
-            for day in self.days_open:
-                hours_list = self.operating_hours
-                
-                for i, hour in enumerate(hours_list):
-                    # Get all role vars for this employee at this hour
-                    current_working_vars = []
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            current_working_vars.append(self._shift_vars[key])
-                    
-                    if not current_working_vars:
-                        continue
-                    
-                    current_working = self._model.NewBoolVar(f"cw_{emp.id}_{day}_{hour}")
-                    self._model.AddMaxEquality(current_working, current_working_vars)
-                    
-                    # Check if this is a shift start
-                    if i == 0:
-                        is_shift_start = current_working
-                    else:
-                        prev_hour = hours_list[i - 1]
-                        prev_working_vars = []
-                        for role_id in emp.roles:
-                            key = (emp.id, day, prev_hour, role_id)
-                            if key in self._shift_vars:
-                                prev_working_vars.append(self._shift_vars[key])
-                        
-                        if prev_working_vars:
-                            prev_working = self._model.NewBoolVar(f"pw_{emp.id}_{day}_{hour}")
-                            self._model.AddMaxEquality(prev_working, prev_working_vars)
-                            
-                            is_shift_start = self._model.NewBoolVar(f"start_{emp.id}_{day}_{hour}")
-                            self._model.AddBoolAnd([current_working, prev_working.Not()]).OnlyEnforceIf(is_shift_start)
-                            self._model.AddBoolOr([current_working.Not(), prev_working]).OnlyEnforceIf(is_shift_start.Not())
-                        else:
-                            is_shift_start = current_working
-                    
-                    # If shift start, must work min_shift_hours
-                    if i + self.min_shift_hours <= len(hours_list):
-                        for j in range(self.min_shift_hours):
-                            future_hour = hours_list[i + j]
-                            future_vars = []
-                            for role_id in emp.roles:
-                                key = (emp.id, day, future_hour, role_id)
-                                if key in self._shift_vars:
-                                    future_vars.append(self._shift_vars[key])
-                            if future_vars:
-                                future_working = self._model.NewBoolVar(f"fw_{emp.id}_{day}_{future_hour}")
-                                self._model.AddMaxEquality(future_working, future_vars)
-                                self._model.AddImplication(is_shift_start, future_working)
-                    else:
-                        # Not enough hours remaining in the day - cannot start a shift here
-                        # This prevents shifts shorter than min_shift_hours at end of day
-                        self._model.Add(is_shift_start == 0)
-        
-        # 7. MAX SPLIT SHIFTS PER DAY CONSTRAINT
-        # Limit the number of separate shift segments an employee can have in a day
-        for emp in self.employees:
-            for day in self.days_open:
-                hours_list = self.operating_hours
-                shift_start_vars = []
-                
-                for i, hour in enumerate(hours_list):
-                    # Get all role vars for this employee at this hour
-                    current_working_vars = []
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            current_working_vars.append(self._shift_vars[key])
-                    
-                    if not current_working_vars:
-                        continue
-                    
-                    current_working = self._model.NewBoolVar(f"split_cw_{emp.id}_{day}_{hour}")
-                    self._model.AddMaxEquality(current_working, current_working_vars)
-                    
-                    # Check if this is a shift start (working now but not before)
-                    if i == 0:
-                        # First hour - if working, it's a shift start
-                        shift_start_vars.append(current_working)
-                    else:
-                        prev_hour = hours_list[i - 1]
-                        prev_working_vars = []
-                        for role_id in emp.roles:
-                            key = (emp.id, day, prev_hour, role_id)
-                            if key in self._shift_vars:
-                                prev_working_vars.append(self._shift_vars[key])
-                        
-                        if prev_working_vars:
-                            prev_working = self._model.NewBoolVar(f"split_pw_{emp.id}_{day}_{hour}")
-                            self._model.AddMaxEquality(prev_working, prev_working_vars)
-                            
-                            # is_shift_start = current_working AND NOT prev_working
-                            is_shift_start = self._model.NewBoolVar(f"split_start_{emp.id}_{day}_{hour}")
-                            self._model.AddBoolAnd([current_working, prev_working.Not()]).OnlyEnforceIf(is_shift_start)
-                            self._model.AddBoolOr([current_working.Not(), prev_working]).OnlyEnforceIf(is_shift_start.Not())
-                            shift_start_vars.append(is_shift_start)
-                        else:
-                            shift_start_vars.append(current_working)
-                
-                # Total shift starts must not exceed max_splits_per_day
-                if shift_start_vars:
-                    self._model.Add(sum(shift_start_vars) <= self.max_splits_per_day)
-        
-        # 8. MAX SPLIT SHIFTS PER WEEK CONSTRAINT (HARD)
-        # Limit total number of days with split shifts per week
-        for emp in self.employees:
-            split_day_vars = []
-            for day in self.days_open:
-                hours_list = self.operating_hours
-                day_shift_starts = []
-                
-                for i, hour in enumerate(hours_list):
-                    current_working_vars = []
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            current_working_vars.append(self._shift_vars[key])
-                    
-                    if not current_working_vars:
-                        continue
-                    
-                    current_working = self._model.NewBoolVar(f"wk_split_cw_{emp.id}_{day}_{hour}")
-                    self._model.AddMaxEquality(current_working, current_working_vars)
-                    
-                    if i == 0:
-                        day_shift_starts.append(current_working)
-                    else:
-                        prev_hour = hours_list[i - 1]
-                        prev_working_vars = []
-                        for role_id in emp.roles:
-                            key = (emp.id, day, prev_hour, role_id)
-                            if key in self._shift_vars:
-                                prev_working_vars.append(self._shift_vars[key])
-                        
-                        if prev_working_vars:
-                            prev_working = self._model.NewBoolVar(f"wk_split_pw_{emp.id}_{day}_{hour}")
-                            self._model.AddMaxEquality(prev_working, prev_working_vars)
-                            
-                            is_shift_start = self._model.NewBoolVar(f"wk_split_start_{emp.id}_{day}_{hour}")
-                            self._model.AddBoolAnd([current_working, prev_working.Not()]).OnlyEnforceIf(is_shift_start)
-                            self._model.AddBoolOr([current_working.Not(), prev_working]).OnlyEnforceIf(is_shift_start.Not())
-                            day_shift_starts.append(is_shift_start)
-                        else:
-                            day_shift_starts.append(current_working)
-                
-                # Create indicator for "this day has a split shift" (2+ shift starts)
-                if len(day_shift_starts) >= 2:
-                    has_split = self._model.NewBoolVar(f"has_split_{emp.id}_{day}")
-                    self._model.Add(sum(day_shift_starts) >= 2).OnlyEnforceIf(has_split)
-                    self._model.Add(sum(day_shift_starts) <= 1).OnlyEnforceIf(has_split.Not())
-                    split_day_vars.append(has_split)
-            
-            # Limit total split shift days per week (HARD constraint)
-            if split_day_vars:
-                self._model.Add(sum(split_day_vars) <= self.max_split_shifts_per_week)
-        
-        # =================================================================
-        # SOFT CONSTRAINTS (added to objective)
-        # =================================================================
-        
-        # 7. PREFERENCE BONUS
-        for emp in self.employees:
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    if emp.prefers(day, hour):
-                        for role_id in emp.roles:
-                            key = (emp.id, day, hour, role_id)
-                            if key in self._shift_vars:
-                                objective_terms.append(self._shift_vars[key] * self.WEIGHT_PREFERENCE)
-        
-        # 8. MAX DAYS PER WEEK CONSTRAINT
-        # Limit total days worked per week based on employee classification
-        for emp in self.employees:
-            # Get the max days and mode for this employee type
-            if emp.is_full_time:
-                max_days = self.max_days_ft
-                mode = self.max_days_ft_mode
-            else:
-                max_days = self.max_days_pt
-                mode = self.max_days_pt_mode
-            
-            # Skip if constraint is off
-            if mode == 'off':
-                continue
-            
-            # Sum of days worked this week
-            days_worked_vars = [self._works_day_vars[(emp.id, d)] for d in self.days_open]
-            total_days = sum(days_worked_vars)
-            
-            if mode == 'required':
-                # HARD CONSTRAINT: Cannot exceed max_days
-                self._model.Add(total_days <= max_days)
-            elif mode == 'preferred':
-                # SOFT CONSTRAINT: Penalty for each day over the limit
-                # Create indicator variables for days over the max
-                for extra_day in range(1, len(self.days_open) - max_days + 1):
-                    threshold = max_days + extra_day
-                    over_limit = self._model.NewBoolVar(f"over_days_{emp.id}_{threshold}")
-                    self._model.Add(total_days >= threshold).OnlyEnforceIf(over_limit)
-                    self._model.Add(total_days < threshold).OnlyEnforceIf(over_limit.Not())
-                    
-                    # Penalty increases with each day over
-                    penalty = extra_day * (self.WEIGHT_CONSECUTIVE_FT if emp.is_full_time else self.WEIGHT_CONSECUTIVE_PT)
-                    objective_terms.append(-over_limit * penalty)
-        
-        # 9. WEEKEND FAIRNESS
-        # Penalize assigning weekends to employees who already have high weekend counts
-        weekend_days = [d for d in self.days_open if d >= 5]  # Sat=5, Sun=6
-        if weekend_days:
-            avg_weekend_shifts = sum(e.weekend_shifts_worked for e in self.employees) / max(1, len(self.employees))
-            
+                        for h2 in hours:
+                            s_var = self._start.get((emp.id, d + 1, h2))
+                            if s_var is None:
+                                continue
+                            rest = (24 - (h1 + 1)) + h2
+                            if rest >= self.min_rest_hours:
+                                break  # later starts only give more rest
+                            c = m.NewBoolVar(f"clopen_{emp.id}_{d}_{h1}_{h2}")
+                            m.AddBoolOr([e_var.Not(), s_var.Not(), c])
+                            self._clopen_vars.append((emp.id, d, h1, h2, c))
+                            objective.append(-self.WEIGHT_CLOPEN * c)
+
+        # ---------------------------------------------------------------
+        # 9. Supervision (hard)
+        # ---------------------------------------------------------------
+        if self.supervision_required:
+            supervisors = [e for e in self.employees if e.can_supervise]
             for emp in self.employees:
-                if emp.weekend_shifts_worked > avg_weekend_shifts:
-                    excess = emp.weekend_shifts_worked - avg_weekend_shifts
-                    for day in weekend_days:
-                        # Penalty for assigning more weekend shifts
-                        objective_terms.append(-self._works_day_vars[(emp.id, day)] * int(excess * self.WEIGHT_FAIRNESS))
-        
-        # 10. OVERTIME PENALTY
-        # Even when allowed, prefer to avoid overtime
+                if not emp.needs_supervision:
+                    continue
+                for d in self.days_open:
+                    for h in hours:
+                        w = self._w.get((emp.id, d, h))
+                        if w is None:
+                            continue
+                        sup_vars = [self._w[(s.id, d, h)] for s in supervisors
+                                    if s.id != emp.id and (s.id, d, h) in self._w]
+                        if sup_vars:
+                            m.Add(sum(sup_vars) >= 1).OnlyEnforceIf(w)
+                        else:
+                            m.Add(w == 0)
+
+        # ---------------------------------------------------------------
+        # 10. Preferences (soft bonus)
+        # ---------------------------------------------------------------
         for emp in self.employees:
-            weekly_hours = []
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars:
-                            weekly_hours.append(self._shift_vars[key])
-            
-            if weekly_hours and emp.overtime_allowed:
-                # Create var for hours over 40
-                total = sum(weekly_hours)
-                # We can't directly penalize (total - 40), so we use auxiliary variables
-                # For simplicity, penalize any hours over 40 by creating indicator variables
-                for threshold in range(41, emp.max_hours + 1):
-                    over_threshold = self._model.NewBoolVar(f"ot_{emp.id}_{threshold}")
-                    self._model.Add(total >= threshold).OnlyEnforceIf(over_threshold)
-                    self._model.Add(total < threshold).OnlyEnforceIf(over_threshold.Not())
-                    objective_terms.append(-over_threshold * self.WEIGHT_OVERTIME)
-        
-        # =================================================================
-        # EXCLUDE PREVIOUS SOLUTIONS
-        # =================================================================
+            if not emp.preferences:
+                continue
+            for d in self.days_open:
+                for h in hours:
+                    w = self._w.get((emp.id, d, h))
+                    if w is not None and emp.prefers(d, h):
+                        objective.append(self.WEIGHT_PREFERENCE * w)
+
+        # ---------------------------------------------------------------
+        # 11. Role switches mid-shift (soft)
+        # ---------------------------------------------------------------
+        for emp in self.employees:
+            if len(emp.roles) < 2:
+                continue
+            for d in self.days_open:
+                for h in hours:
+                    if (h + 1) not in hour_pos:
+                        continue
+                    w_next = self._w.get((emp.id, d, h + 1))
+                    if w_next is None:
+                        continue
+                    for r in emp.roles:
+                        x_now = self._x.get((emp.id, d, h, r))
+                        if x_now is None:
+                            continue
+                        x_next = self._x.get((emp.id, d, h + 1, r))
+                        # worked role r at h, still working at h+1, but not role r
+                        sw = m.NewBoolVar(f"sw_{emp.id}_{d}_{h}_{r}")
+                        if x_next is None:
+                            m.AddBoolOr([x_now.Not(), w_next.Not(), sw])
+                        else:
+                            m.AddBoolOr([x_now.Not(), w_next.Not(), x_next, sw])
+                        objective.append(-self.WEIGHT_ROLE_SWITCH * sw)
+
+        # ---------------------------------------------------------------
+        # 12. Weekend fairness (soft, uses history from previous weeks)
+        # ---------------------------------------------------------------
+        weekend_days = [d for d in self.days_open if d >= 5]
+        if self.weekend_fairness and weekend_days and self.employees:
+            avg = sum(e.weekend_shifts_worked for e in self.employees) / len(self.employees)
+            for emp in self.employees:
+                excess = emp.weekend_shifts_worked - avg
+                if excess <= 0:
+                    continue
+                penalty = int(round(excess * self.WEIGHT_WEEKEND_FAIRNESS))
+                if penalty <= 0:
+                    continue
+                for d in weekend_days:
+                    objective.append(-penalty * self._day[(emp.id, d)])
+
+        # ---------------------------------------------------------------
+        # 13. Scheduling strategy (soft)
+        # ---------------------------------------------------------------
+        if self.scheduling_strategy != "balanced":
+            sign = -1 if self.scheduling_strategy == "minimize" else 1
+            for emp_id, total in self._hours.items():
+                if isinstance(total, int):
+                    continue
+                objective.append(sign * self.WEIGHT_STRATEGY_HOUR * total)
+
+        # ---------------------------------------------------------------
+        # 14. Alternatives: must differ meaningfully from earlier solutions
+        # ---------------------------------------------------------------
         if exclude_solutions:
-            for prev_sol in exclude_solutions:
-                differences = []
-                for key, val in prev_sol.items():
-                    if key in self._shift_vars:
-                        if val == 1:
-                            differences.append(self._shift_vars[key].Not())
-                        else:
-                            differences.append(self._shift_vars[key])
-                if differences:
-                    self._model.AddBoolOr(differences)
-        
-        # =================================================================
-        # SCHEDULING STRATEGY
-        # =================================================================
-        # Adjust objective based on strategy:
-        # - 'minimize': Penalize hours to use fewest staff hours while meeting coverage
-        # - 'balanced': No adjustment (default behavior)
-        # - 'maximize': Reward hours to give staff as many hours as possible
-        
-        if self.scheduling_strategy == 'minimize':
-            # Penalize each assigned hour to minimize total staffing cost
-            WEIGHT_MINIMIZE_HOURS = 5
-            for emp in self.employees:
-                for day in self.days_open:
-                    for hour in self.operating_hours:
-                        for role_id in emp.roles:
-                            key = (emp.id, day, hour, role_id)
-                            if key in self._shift_vars:
-                                objective_terms.append(-self._shift_vars[key] * WEIGHT_MINIMIZE_HOURS)
-        
-        elif self.scheduling_strategy == 'maximize':
-            # Reward each assigned hour to maximize staff hours
-            WEIGHT_MAXIMIZE_HOURS = 5
-            for emp in self.employees:
-                for day in self.days_open:
-                    for hour in self.operating_hours:
-                        for role_id in emp.roles:
-                            key = (emp.id, day, hour, role_id)
-                            if key in self._shift_vars:
-                                objective_terms.append(self._shift_vars[key] * WEIGHT_MAXIMIZE_HOURS)
-        
-        # 'balanced' strategy: no adjustment, use default objective
-        
-        # =================================================================
-        # OBJECTIVE FUNCTION
-        # =================================================================
-        self._model.Maximize(sum(objective_terms))
-    
-    def solve(self, find_alternative: bool = False, time_limit_seconds: float = 60.0) -> Schedule:
-        """
-        Solve the scheduling problem and return the schedule.
-        
+            all_keys = list(self._w.keys())
+            for prev in exclude_solutions:
+                worked = [self._w[k] for k in all_keys if k in prev]
+                not_worked = [self._w[k] for k in all_keys if k not in prev]
+                # Hamming distance: at least 10% of the previous assignment (min 3 hours)
+                min_diff = max(3, len(worked) // 10)
+                if not worked and not not_worked:
+                    continue
+                m.Add(sum(v.Not() for v in worked) + sum(not_worked) >= min(min_diff, len(all_keys)))
+
+        m.Maximize(sum(objective) if objective else 0)
+
+    # ------------------------------------------------------------------ solve
+
+    def solve(
+        self,
+        find_alternative: bool = False,
+        time_limit_seconds: float = 25.0,
+        stall_seconds: float = 3.0,
+        min_seconds: float = 1.5,
+    ) -> Schedule:
+        """Build and solve the model, returning a populated `Schedule`.
+
         Args:
-            find_alternative: If True, find a different solution
-            time_limit_seconds: Maximum solve time
-            
-        Returns:
-            Schedule object with assignments and metrics
+            find_alternative: force a solution that differs from earlier ones
+            time_limit_seconds: hard wall-clock limit for the search
+            stall_seconds: stop early once no better solution appears for this long
+            min_seconds: never stop before this much time has passed (gives the
+                solver a fair chance on medium problems)
         """
-        start_time = time.time()
-        
-        # Build model
-        exclude = self._previous_solutions if find_alternative else []
+        started = time.time()
+        self._report("building", "Analyzing staff, roles, and coverage needs...")
+        exclude = self._previous_solutions if find_alternative else None
         self._build_model(exclude_solutions=exclude)
-        
-        # Configure solver
+
+        num_vars = len(self._w)
+        self._report(
+            "solving",
+            f"Searching for the best schedule across {num_vars:,} possible assignments...",
+            variables=num_vars,
+        )
+
         solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = time_limit_seconds
-        solver.parameters.num_search_workers = 8
-        
-        # Solve
-        status = solver.Solve(self._model)
-        
-        solve_time = (time.time() - start_time) * 1000
-        
-        # Extract solution
+        solver.parameters.max_time_in_seconds = float(time_limit_seconds)
+        solver.parameters.num_workers = max(2, min(8, os.cpu_count() or 4))
+        solver.parameters.relative_gap_limit = 0.002   # 0.2% of optimum is "good enough"
+        solver.parameters.log_search_progress = False
+
+        # Warm start from the most recent solution (helps alternatives converge quickly)
+        if self._previous_solutions:
+            last = self._previous_solutions[-1]
+            for key, var in self._w.items():
+                self._model.AddHint(var, 1 if key in last else 0)
+
+        callback = _ProgressCallback(
+            list(self._shortfall.values()), stall_seconds, min_seconds,
+            self.progress_callback, started,
+            significant_delta=float(self.WEIGHT_MIN_HOURS),
+        )
+
+        # A small watchdog thread implements the stall-based early stop.
+        import threading
+        stop_event = threading.Event()
+
+        def watchdog():
+            while not stop_event.wait(0.25):
+                if callback.should_stop():
+                    solver.StopSearch()
+                    return
+
+        watcher = threading.Thread(target=watchdog, daemon=True)
+        watcher.start()
+        try:
+            status = solver.Solve(self._model, callback)
+        finally:
+            stop_event.set()
+            watcher.join(timeout=1.0)
+
         schedule = Schedule()
-        schedule.solve_time_ms = solve_time
-        
-        if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-            schedule.is_feasible = True
-            schedule.objective_value = int(solver.ObjectiveValue())
-            
-            # Store solution for exclusion
-            current_solution = {}
-            for key, var in self._shift_vars.items():
-                current_solution[key] = solver.Value(var)
-            self._previous_solutions.append(current_solution)
-            schedule.solution_index = len(self._previous_solutions)
-            
-            # Build coverage matrix and assignments
-            employee_hours = {emp.id: 0 for emp in self.employees}
-            employee_overtime = {emp.id: 0 for emp in self.employees}
-            
-            for emp in self.employees:
-                for day in self.days_open:
-                    for hour in self.operating_hours:
-                        for role_id in emp.roles:
-                            key = (emp.id, day, hour, role_id)
-                            if key in self._shift_vars and solver.Value(self._shift_vars[key]) == 1:
-                                schedule.coverage_matrix[(day, hour, role_id)] = emp.id
-                                
-                                # Track slot assignments
-                                slot_key = (day, hour)
-                                if slot_key not in schedule.slot_assignments:
-                                    schedule.slot_assignments[slot_key] = []
-                                schedule.slot_assignments[slot_key].append((emp.id, role_id))
-                                
-                                employee_hours[emp.id] += 1
-            
-            schedule.employee_hours = employee_hours
-            
-            # Calculate overtime
-            for emp in self.employees:
-                hrs = employee_hours.get(emp.id, 0)
-                if hrs > 40:
-                    employee_overtime[emp.id] = hrs - 40
-            schedule.employee_overtime = employee_overtime
-            
-            # Calculate consecutive days
-            for emp in self.employees:
-                max_consec = 0
-                current_consec = 0
-                for day in sorted(self.days_open):
-                    if solver.Value(self._works_day_vars[(emp.id, day)]) == 1:
-                        current_consec += 1
-                        max_consec = max(max_consec, current_consec)
-                    else:
-                        current_consec = 0
-                schedule.consecutive_days[emp.id] = max_consec
-            
-            # Build shift assignments (consolidated)
-            schedule.assignments = self._extract_shift_assignments(solver)
-            
-            # Calculate metrics
-            schedule.metrics = self._calculate_metrics(solver, schedule)
-            schedule.total_hours_needed = schedule.metrics.total_slots_required
-            schedule.total_hours_filled = schedule.metrics.total_slots_filled
-        else:
+        schedule.solve_time_ms = (time.time() - started) * 1000.0
+
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             schedule.is_feasible = False
             schedule.solution_index = 0
-        
-        return schedule
-    
-    def _extract_shift_assignments(self, solver: cp_model.CpSolver) -> List[ShiftAssignment]:
-        """Extract consolidated shift assignments."""
-        assignments = []
-        
+            schedule.metrics = self._infeasibility_metrics()
+            self._report("done", "No schedule satisfies the hard rules.", feasible=False)
+            return schedule
+
+        schedule.is_feasible = True
+        schedule.objective_value = int(round(solver.ObjectiveValue()))
+        schedule.solver_status = "optimal" if status == cp_model.OPTIMAL else "feasible"
+
+        # Remember this solution so an "alternative" is forced to be different
+        worked = {k for k, v in self._w.items() if solver.Value(v) == 1}
+        self._previous_solutions.append(worked)
+        schedule.solution_index = len(self._previous_solutions)
+
+        # Coverage matrix + per-slot assignments
+        employee_hours = {e.id: 0 for e in self.employees}
+        for (emp_id, d, h, r), var in self._x.items():
+            if solver.Value(var) != 1:
+                continue
+            schedule.coverage_matrix[(d, h, r)] = emp_id
+            schedule.slot_assignments.setdefault((d, h), []).append((emp_id, r))
+            employee_hours[emp_id] += 1
+        for slot in schedule.slot_assignments.values():
+            slot.sort()
+        schedule.employee_hours = employee_hours
+        schedule.employee_overtime = {e.id: max(0, employee_hours[e.id] - 40) for e in self.employees}
+
+        # Consecutive days per employee
         for emp in self.employees:
-            for day in self.days_open:
-                # Track hours worked in each role
-                role_hours = {role_id: [] for role_id in emp.roles}
-                
-                for hour in self.operating_hours:
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars and solver.Value(self._shift_vars[key]) == 1:
-                            role_hours[role_id].append(hour)
-                
-                # Create assignments for each role
-                for role_id, hours in role_hours.items():
-                    if not hours:
-                        continue
-                    
-                    # Consolidate consecutive hours
-                    hours = sorted(hours)
-                    i = 0
-                    while i < len(hours):
-                        start_hour = hours[i]
-                        end_hour = hours[i] + 1
-                        
-                        while i + 1 < len(hours) and hours[i + 1] == end_hour:
-                            end_hour += 1
-                            i += 1
-                        
-                        role = self.roles.get(role_id)
-                        color = role.color if role else emp.color
-                        
-                        assignments.append(ShiftAssignment(
-                            employee_id=emp.id,
-                            employee_name=emp.name,
-                            day=day,
-                            start_hour=start_hour,
-                            end_hour=end_hour,
-                            role_id=role_id,
-                            color=color
-                        ))
+            best = cur = 0
+            prev_day = None
+            for d in self.days_open:
+                if solver.Value(self._day[(emp.id, d)]) == 1:
+                    cur = cur + 1 if prev_day == d - 1 else 1
+                    best = max(best, cur)
+                else:
+                    cur = 0
+                prev_day = d if solver.Value(self._day[(emp.id, d)]) == 1 else None
+            schedule.consecutive_days[emp.id] = best
+
+        schedule.assignments = self._extract_shift_assignments(solver)
+        schedule.metrics = self._calculate_metrics(solver, schedule)
+        schedule.total_hours_needed = schedule.metrics.total_slots_required
+        schedule.total_hours_filled = schedule.metrics.total_slots_filled
+
+        self._report(
+            "done",
+            f"Done in {schedule.solve_time_ms / 1000:.1f}s - {schedule.metrics.to_dict()['coverage_percentage']}% coverage.",
+            feasible=True,
+        )
+        return schedule
+
+    # ------------------------------------------------------------ extraction
+
+    def _extract_shift_assignments(self, solver: cp_model.CpSolver) -> List[ShiftAssignment]:
+        """Merge consecutive worked hours (per role) into shift blocks."""
+        assignments: List[ShiftAssignment] = []
+        for emp in self.employees:
+            for d in self.days_open:
+                # hour -> role worked
+                worked: Dict[int, str] = {}
+                for h in self.operating_hours:
+                    for r in emp.roles:
+                        var = self._x.get((emp.id, d, h, r))
+                        if var is not None and solver.Value(var) == 1:
+                            worked[h] = r
+                if not worked:
+                    continue
+                hrs = sorted(worked)
+                i = 0
+                while i < len(hrs):
+                    start_h = hrs[i]
+                    role_id = worked[start_h]
+                    end_h = start_h + 1
+                    while i + 1 < len(hrs) and hrs[i + 1] == end_h and worked[hrs[i + 1]] == role_id:
+                        end_h += 1
                         i += 1
-        
+                    role = self.roles.get(role_id)
+                    assignments.append(ShiftAssignment(
+                        employee_id=emp.id,
+                        employee_name=emp.name,
+                        day=d,
+                        start_hour=start_h,
+                        end_hour=end_h,
+                        role_id=role_id,
+                        color=role.color if role else emp.color,
+                    ))
+                    i += 1
+        assignments.sort(key=lambda a: (a.day, a.start_hour, a.employee_name))
         return assignments
-    
+
     def _calculate_metrics(self, solver: cp_model.CpSolver, schedule: Schedule) -> ScheduleMetrics:
-        """Calculate detailed schedule metrics."""
+        """Compute coverage, cost, fairness, and diagnostic information."""
         metrics = ScheduleMetrics()
-        
-        # Coverage - calculate what's filled vs required per slot
-        metrics.total_slots_required = 0
-        metrics.total_slots_filled = 0
-        metrics.unfilled_slots = []
-        metrics.unfilled_by_role = {}
         metrics.unfilled_by_day = {d: 0 for d in self.days_open}
-        
+
+        # Per-slot staffing counts from the solution
+        staffed_count: Dict[Tuple[int, int, str], int] = {}
+        for (emp_id, d, h, r), var in self._x.items():
+            if solver.Value(var) == 1:
+                staffed_count[(d, h, r)] = staffed_count.get((d, h, r), 0) + 1
+
+        # Hours/days per employee (for diagnostics)
+        emp_by_id = {e.id: e for e in self.employees}
+        days_worked = {e.id: sum(solver.Value(self._day[(e.id, d)]) for d in self.days_open) for e in self.employees}
+        hours_by_day = {}
+        for (emp_id, d, h), var in self._w.items():
+            if solver.Value(var) == 1:
+                hours_by_day[(emp_id, d)] = hours_by_day.get((emp_id, d), 0) + 1
+
         for req in self.coverage_requirements:
-            if req.day not in self.days_open:
+            key = (req.day, req.hour, req.role_id)
+            if key not in self._req_index or req.min_staff <= 0:
                 continue
-            if req.hour not in self.operating_hours:
-                continue
-                
+            filled = staffed_count.get(key, 0)
             metrics.total_slots_required += req.min_staff
-            
-            # Count how many we actually filled for this role at this time
-            filled = 0
-            eligible = self._get_employees_for_role(req.role_id)
-            for emp in eligible:
-                key = (emp.id, req.day, req.hour, req.role_id)
-                if key in self._shift_vars and solver.Value(self._shift_vars[key]) == 1:
-                    filled += 1
-            
             metrics.total_slots_filled += min(filled, req.min_staff)
-            
-            # Track unfilled
-            if filled < req.min_staff:
-                needed = req.min_staff - filled
-                metrics.unfilled_slots.append({
-                    "day": req.day,
-                    "hour": req.hour,
-                    "role_id": req.role_id,
-                    "role_name": self.roles.get(req.role_id, Role(req.role_id, req.role_id, "#666")).name,
-                    "needed": needed,
-                    "filled": filled,
-                    "required": req.min_staff
-                })
-                
-                # Aggregate by role
-                if req.role_id not in metrics.unfilled_by_role:
-                    metrics.unfilled_by_role[req.role_id] = 0
-                metrics.unfilled_by_role[req.role_id] += needed
-                
-                # Aggregate by day
-                metrics.unfilled_by_day[req.day] += needed
-                
-                # Total hours still needed
-                metrics.total_hours_still_needed += needed
-        
-        # Cost
+            if filled >= req.min_staff:
+                continue
+            needed = req.min_staff - filled
+            role_name = self.roles[req.role_id].name if req.role_id in self.roles else req.role_id
+            metrics.unfilled_slots.append({
+                "day": req.day, "hour": req.hour, "role_id": req.role_id,
+                "role_name": role_name, "needed": needed, "filled": filled,
+                "required": req.min_staff, "is_peak": bool(req.is_peak),
+                "reason": self._explain_gap(req, emp_by_id, days_worked, hours_by_day, schedule),
+            })
+            metrics.unfilled_by_role[req.role_id] = metrics.unfilled_by_role.get(req.role_id, 0) + needed
+            metrics.unfilled_by_day[req.day] = metrics.unfilled_by_day.get(req.day, 0) + needed
+            metrics.total_hours_still_needed += needed
+
+        # Labour cost
         total_cost = 0.0
         for emp in self.employees:
-            hours = schedule.employee_hours.get(emp.id, 0)
-            ot_hours = schedule.employee_overtime.get(emp.id, 0)
-            regular_hours = hours - ot_hours
-            
-            metrics.total_regular_hours += regular_hours
-            metrics.total_overtime_hours += ot_hours
-            
-            # Regular pay + 1.5x overtime
-            total_cost += (regular_hours * emp.hourly_rate) + (ot_hours * emp.hourly_rate * 1.5)
-        
+            hrs = schedule.employee_hours.get(emp.id, 0)
+            ot = schedule.employee_overtime.get(emp.id, 0)
+            regular = hrs - ot
+            metrics.total_regular_hours += regular
+            metrics.total_overtime_hours += ot
+            total_cost += regular * emp.hourly_rate + ot * emp.hourly_rate * 1.5
         metrics.estimated_labor_cost = total_cost
-        
-        # Weekend distribution
+
+        # Weekend distribution + preferences + consecutive days
         weekend_days = [d for d in self.days_open if d >= 5]
         for emp in self.employees:
-            weekend_hours = 0
-            for day in weekend_days:
-                if (emp.id, day) in self._works_day_vars:
-                    if solver.Value(self._works_day_vars[(emp.id, day)]) == 1:
-                        weekend_hours += 1
-            metrics.weekend_distribution[emp.id] = weekend_hours
-        
-        # Preference tracking
+            metrics.weekend_distribution[emp.id] = sum(
+                solver.Value(self._day[(emp.id, d)]) for d in weekend_days
+            )
+            for d in self.days_open:
+                for h in self.operating_hours:
+                    if not emp.prefers(d, h):
+                        continue
+                    w = self._w.get((emp.id, d, h))
+                    if w is not None and solver.Value(w) == 1:
+                        metrics.preference_matches += 1
+                    else:
+                        metrics.preference_misses += 1
+            over = schedule.consecutive_days.get(emp.id, 0) - emp.max_consecutive_days_preferred
+            if over > 0:
+                metrics.consecutive_day_violations += over
+
+        # Per-employee warnings (hours under minimum, clopenings)
         for emp in self.employees:
-            for day in self.days_open:
-                for hour in self.operating_hours:
-                    is_working = False
-                    for role_id in emp.roles:
-                        key = (emp.id, day, hour, role_id)
-                        if key in self._shift_vars and solver.Value(self._shift_vars[key]) == 1:
-                            is_working = True
-                            break
-                    
-                    if emp.prefers(day, hour):
-                        if is_working:
-                            metrics.preference_matches += 1
-                        else:
-                            metrics.preference_misses += 1
-        
-        # Consecutive day violations
-        for emp in self.employees:
-            max_consec = schedule.consecutive_days.get(emp.id, 0)
-            preferred_max = emp.max_consecutive_days_preferred
-            if max_consec > preferred_max:
-                metrics.consecutive_day_violations += (max_consec - preferred_max)
-        
+            hrs = schedule.employee_hours.get(emp.id, 0)
+            if emp.min_hours > 0 and hrs < emp.min_hours:
+                metrics.employees_under_min.append({
+                    "employee_id": emp.id, "employee_name": emp.name,
+                    "hours": hrs, "min_hours": emp.min_hours,
+                })
+        for emp_id, d, h1, h2, var in self._clopen_vars:
+            if solver.Value(var) == 1:
+                metrics.clopenings.append({
+                    "employee_id": emp_id, "employee_name": emp_by_id[emp_id].name,
+                    "close_day": d, "close_hour": h1 + 1, "open_day": d + 1, "open_hour": h2,
+                    "rest_hours": (24 - (h1 + 1)) + h2,
+                })
+
+        metrics.suggestions = self._build_suggestions(metrics)
         return metrics
-    
+
+    def _explain_gap(self, req, emp_by_id, days_worked, hours_by_day, schedule) -> str:
+        """Best-effort, human-readable reason a required slot stayed unfilled."""
+        day_name = _DAY_NAMES[req.day]
+        when = f"{day_name} {_fmt_hour(req.hour)}"
+        role_name = self.roles[req.role_id].name if req.role_id in self.roles else req.role_id
+
+        eligible = [e for e in self.employees if req.role_id in e.roles]
+        if not eligible:
+            return f"No staff member has the {role_name} role."
+        available = [e for e in eligible if e.is_available(req.day, req.hour)]
+        if not available:
+            return f"Nobody with the {role_name} role is available on {when}."
+
+        # Everyone available is already working this hour (in another role) or capped out
+        blocked_reasons = []
+        for e in available:
+            working_now = any(
+                (e.id, req.day, req.hour, r) in self._x and schedule.coverage_matrix.get((req.day, req.hour, r)) == e.id
+                for r in e.roles
+            )
+            if working_now:
+                blocked_reasons.append("already working another role")
+                continue
+            cap = e.max_hours if e.overtime_allowed else min(40, e.max_hours)
+            if schedule.employee_hours.get(e.id, 0) >= cap:
+                blocked_reasons.append("at max weekly hours")
+                continue
+            max_days = self.max_days_ft if e.is_full_time else self.max_days_pt
+            mode = self.max_days_ft_mode if e.is_full_time else self.max_days_pt_mode
+            if mode == "required" and days_worked.get(e.id, 0) >= max_days and hours_by_day.get((e.id, req.day), 0) == 0:
+                blocked_reasons.append("at max days per week")
+                continue
+            if hours_by_day.get((e.id, req.day), 0) >= self.max_hours_per_day:
+                blocked_reasons.append("at max hours for the day")
+                continue
+            if e.needs_supervision and self.supervision_required:
+                blocked_reasons.append("needs a supervisor on shift")
+                continue
+            blocked_reasons.append("shift-length or split-shift rules")
+
+        counts: Dict[str, int] = {}
+        for r in blocked_reasons:
+            counts[r] = counts.get(r, 0) + 1
+        top = max(counts.items(), key=lambda kv: kv[1])[0]
+        return f"{len(available)} available {role_name}(s), but they are {top}."
+
+    def _build_suggestions(self, metrics: ScheduleMetrics) -> List[str]:
+        """Turn the diagnostics into concrete, actionable suggestions."""
+        tips: List[str] = []
+        if metrics.unfilled_slots:
+            reasons = [s["reason"] for s in metrics.unfilled_slots]
+            if any("max weekly hours" in r for r in reasons):
+                tips.append("Some gaps exist because staff hit their weekly max hours. Raising max hours, allowing overtime, or hiring another person for that role would close them.")
+            if any("max days per week" in r for r in reasons):
+                tips.append("Some staff are at their max days per week. Setting 'Max days per week' to 'Preferred' instead of 'Required' lets the scheduler use them when needed.")
+            if any("is available" in r or "has the" in r for r in reasons):
+                tips.append("Some hours have nobody available with the required role. Consider cross-training staff into that role or asking for extra availability on those days.")
+            if any("split-shift" in r for r in reasons):
+                tips.append("Shift-length and split-shift rules are blocking some assignments. Allowing more split shifts per week or a shorter minimum shift may help.")
+            if any("needs a supervisor" in r for r in reasons):
+                tips.append("Staff who need supervision could not be scheduled without a supervisor present. Adding another supervisor gives you more flexibility.")
+            # Single point of failure: a role with only one qualified person
+            role_counts: Dict[str, int] = {}
+            for e in self.employees:
+                for r in e.roles:
+                    role_counts[r] = role_counts.get(r, 0) + 1
+            for rid, cnt in role_counts.items():
+                if cnt == 1 and rid in metrics.unfilled_by_role:
+                    name = self.roles[rid].name if rid in self.roles else rid
+                    tips.append(f"Only one person holds the {name} role, so any call-out leaves it uncovered. Hiring or cross-training a backup is worth considering.")
+        if metrics.clopenings:
+            tips.append(f"{len(metrics.clopenings)} 'clopening' (closing then opening with little rest) could not be avoided. Widening availability on those days would remove them.")
+        if metrics.employees_under_min:
+            names = ", ".join(e["employee_name"] for e in metrics.employees_under_min[:4])
+            tips.append(f"Under their minimum hours this week: {names}. There simply are not enough required hours for everyone; reduce their minimums or add coverage.")
+        return tips
+
+    def _infeasibility_metrics(self) -> ScheduleMetrics:
+        """Explain a hard infeasibility as well as we can (rare after the soft-min change)."""
+        metrics = ScheduleMetrics()
+        metrics.suggestions = [
+            "The hard rules could not all be satisfied at once. This usually means the max hours per day is smaller than the minimum shift length, or every hour of a required role falls outside everyone's availability while a supervision rule applies. Relax one rule and try again."
+        ]
+        return metrics
+
     def reset(self):
-        """Reset solver state."""
+        """Forget previous solutions (so the next solve is not forced to differ)."""
         self._previous_solutions = []
         self._model = None
-        self._shift_vars = {}
-        self._works_day_vars = {}
 
 
-# Backwards compatibility alias
+# Backwards-compatible alias used by older imports
 ScheduleSolver = AdvancedScheduleSolver
 
 
 def format_schedule(schedule: Schedule, business: BusinessScenario) -> str:
-    """Format a schedule as a readable string."""
-    lines = []
-    lines.append("=" * 90)
-    lines.append(f"SCHEDULE #{schedule.solution_index} - {business.name}")
-    lines.append(f"Coverage: {schedule.coverage_percentage:.1f}% | Solve: {schedule.solve_time_ms:.0f}ms | Score: {schedule.objective_value}")
-    lines.append("=" * 90)
-    
-    # Header
+    """Render a schedule as a readable text grid (handy for debugging/tests)."""
+    lines = ["=" * 90,
+             f"SCHEDULE #{schedule.solution_index} - {business.name}",
+             f"Coverage: {schedule.coverage_percentage:.1f}% | Solve: {schedule.solve_time_ms:.0f}ms | Score: {schedule.objective_value}",
+             "=" * 90]
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    header = f"{'Time':<8}"
-    for day in business.days_open:
-        header += f"{days[day]:<12}"
+    header = f"{'Time':<8}" + "".join(f"{days[d]:<12}" for d in business.days_open)
     lines.append(header)
     lines.append("-" * 90)
-    
-    # Build employee lookup
-    emp_lookup = {emp.id: emp.name for emp in business.employees}
-    
-    # Hours
+    names = {e.id: e.name for e in business.employees}
     for hour in business.get_operating_hours():
         row = f"{hour:02d}:00   "
-        for day in business.days_open:
-            slot_key = (day, hour)
-            if slot_key in schedule.slot_assignments:
-                names = []
-                for emp_id, role_id in schedule.slot_assignments[slot_key]:
-                    name = emp_lookup.get(emp_id, emp_id)[:6]
-                    names.append(name)
-                cell = ",".join(names)[:10]
-                row += f"{cell:<12}"
-            else:
-                row += f"{'---':<12}"
+        for d in business.days_open:
+            slot = schedule.slot_assignments.get((d, hour))
+            cell = ",".join(names.get(e, e)[:6] for e, _ in slot)[:10] if slot else "---"
+            row += f"{cell:<12}"
         lines.append(row)
-    
     lines.append("-" * 90)
     lines.append("\nEmployee Summary:")
     for emp in business.employees:
-        hours = schedule.employee_hours.get(emp.id, 0)
+        hrs = schedule.employee_hours.get(emp.id, 0)
         ot = schedule.employee_overtime.get(emp.id, 0)
         consec = schedule.consecutive_days.get(emp.id, 0)
-        status = "OK" if emp.min_hours <= hours <= emp.max_hours else "!!"
-        ot_str = f"+{ot}OT" if ot > 0 else ""
-        lines.append(f"  {emp.name:<12} {hours:>2}hrs {ot_str:<6} consec:{consec} [{status}]")
-    
+        status = "OK" if emp.min_hours <= hrs <= emp.max_hours else "!!"
+        ot_str = f"+{ot}OT" if ot else ""
+        lines.append(f"  {emp.name:<12} {hrs:>2}hrs {ot_str:<6} consec:{consec} [{status}]")
     return "\n".join(lines)
