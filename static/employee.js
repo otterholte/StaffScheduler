@@ -5352,3 +5352,45 @@ document.addEventListener('DOMContentLoaded', initEmployeeTheme);
         if (label) new MutationObserver(sync).observe(label, { childList: true, characterData: true, subtree: true });
     });
 })();
+
+// ==================== NOTIFICATION PREFERENCES ====================
+// Email / text toggles and phone number live in the slide-out menu and are
+// saved immediately through PUT /api/employee/<id>/preferences.
+(function setupNotificationPreferences() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const emailToggle = document.getElementById('notifyEmailToggle');
+        const smsToggle = document.getElementById('notifySmsToggle');
+        const phoneInput = document.getElementById('notifyPhoneInput');
+        const phoneSave = document.getElementById('notifyPhoneSave');
+        if (!emailToggle && !smsToggle) return;
+        const empId = employeeState?.employee?.db_id;
+        if (!empId) return;
+
+        async function save(payload, okMessage) {
+            try {
+                const res = await fetch(`/api/employee/${empId}/preferences`, {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'Could not save');
+                if (typeof showToast === 'function') showToast(okMessage, 'success');
+                return data;
+            } catch (err) {
+                if (typeof showToast === 'function') showToast(err.message || 'Could not save your preference', 'error');
+                return null;
+            }
+        }
+
+        emailToggle?.addEventListener('change', () => save({ notify_email: emailToggle.checked },
+            emailToggle.checked ? 'Email notifications on' : 'Email notifications off'));
+        smsToggle?.addEventListener('change', () => save({ notify_sms: smsToggle.checked },
+            smsToggle.checked ? 'Text notifications on' : 'Text notifications off'));
+        phoneSave?.addEventListener('click', async () => {
+            const data = await save({ phone: phoneInput.value.trim() }, 'Phone number saved');
+            if (data && smsToggle) {
+                const label = smsToggle.parentElement.querySelector('span');
+                if (label) label.textContent = data.phone ? `Text message (${data.phone})` : 'Text message (add a phone number below)';
+            }
+        });
+    });
+})();

@@ -118,6 +118,20 @@
                         <span>My Availability</span>
                     </a>
                     <div class="slide-menu-divider"></div>
+                    <div class="slide-menu-section-title">Notify me by</div>
+                    <label class="slide-menu-toggle" title="Get schedules, swap requests, and time-off decisions by email">
+                        <input type="checkbox" id="notifyEmailToggle" {% if employee_data.notify_email %}checked{% endif %}>
+                        <span>Email{% if employee_data.email %} ({{ employee_data.email }}){% endif %}</span>
+                    </label>
+                    <label class="slide-menu-toggle" title="Get the same updates by text message">
+                        <input type="checkbox" id="notifySmsToggle" {% if employee_data.notify_sms %}checked{% endif %}>
+                        <span>Text message{% if employee_data.phone %} ({{ employee_data.phone }}){% else %} (add a phone number below){% endif %}</span>
+                    </label>
+                    <div class="slide-menu-phone">
+                        <input type="tel" id="notifyPhoneInput" placeholder="Mobile number" value="{{ employee_data.phone or '' }}" autocomplete="tel">
+                        <button type="button" class="btn btn-secondary btn-sm" id="notifyPhoneSave">Save</button>
+                    </div>
+                    <div class="slide-menu-divider"></div>
                     <button type="button" class="slide-menu-item" id="themeToggleItem" title="Switch between dark and light mode">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <circle cx="12" cy="12" r="5"></circle>

@@ -5546,3 +5546,40 @@ button.slide-menu-item {
     line-height: 1.5;
 }
 .eligible-empty span { color: var(--text-secondary); font-size: 0.85rem; }
+
+/* Notification preferences in the slide-out menu */
+.slide-menu-section-title {
+    padding: 0.5rem 1.25rem 0.25rem;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+}
+.slide-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 1.25rem;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    min-height: 44px;
+}
+.slide-menu-toggle input { width: 18px; height: 18px; accent-color: var(--accent-primary); }
+.slide-menu-toggle span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slide-menu-phone {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.25rem 1.25rem 0.75rem;
+}
+.slide-menu-phone input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.5rem 0.65rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font: inherit;
+    min-height: 40px;
+}
