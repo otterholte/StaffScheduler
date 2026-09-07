@@ -116,8 +116,6 @@ function getShiftColor(employeeId, roleIds) {
 }
 
 // ==================== UTILITIES ====================
-const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 // Schedule day indices: 0=Monday, 1=Tuesday, ..., 6=Sunday
 const SCHED_DAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SCHED_DAYS_FULL = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -127,10 +125,6 @@ function formatHour(hour) {
     if (hour === 12) return '12pm';
     if (hour < 12) return `${hour}am`;
     return `${hour - 12}pm`;
-}
-
-function formatAmPm(hour) {
-    return hour < 12 ? 'am' : 'pm';
 }
 
 function formatTime(hour) {
@@ -670,8 +664,8 @@ function renderTimelineView() {
                 ptoBlock.style.width = '100%';
                 ptoBlock.style.cursor = 'pointer';
                 
-                const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
-                const typeLabel = capitalizeFirstEmployee(pto.pto_type);
+                const emoji = getPTOTypeEmoji(pto.pto_type);
+                const typeLabel = capitalizeFirst(pto.pto_type);
                 const name = pto.employee_name || employeeState.employee.name;
                 
                 ptoBlock.innerHTML = `<span class="pto-content">${name} - ${emoji} ${typeLabel}</span>`;
@@ -696,126 +690,6 @@ function renderTimelineView() {
         rowDiv.appendChild(slotsDiv);
         container.appendChild(rowDiv);
     });
-}
-
-function getAllShiftsForDay(schedule, dayIdx) {
-    const shifts = [];
-    
-    if (!schedule || !schedule.slot_assignments) return shifts;
-    
-    // Group assignments by employee for this day
-    const empShifts = {}; // { empId: { roleId, hours: Set, viaSwap: bool } }
-    
-    Object.entries(schedule.slot_assignments).forEach(([slotKey, assignments]) => {
-        const parts = slotKey.split(',');
-        if (parts.length >= 2) {
-            const day = parseInt(parts[0]);
-            const hour = parseInt(parts[1]);
-            
-            if (day === dayIdx) {
-                assignments.forEach(assignment => {
-                    const empId = assignment.employee_id;
-                    const roleId = assignment.role_id;
-                    const key = `${empId}_${roleId}`;
-                    
-                    if (!empShifts[key]) {
-                        empShifts[key] = {
-                            employeeId: empId,
-                            role: roleId,
-                            hours: new Set(),
-                            viaSwap: false,
-                            swappedFrom: null
-                        };
-                    }
-                    empShifts[key].hours.add(hour);
-                    // Track if any hour in the shift was obtained via swap
-                    if (assignment.via_swap) {
-                        empShifts[key].viaSwap = true;
-                        empShifts[key].swappedFrom = assignment.swapped_from;
-                    }
-                });
-            }
-        }
-    });
-    
-    // Convert to shift segments
-    Object.values(empShifts).forEach(empShift => {
-        const hours = Array.from(empShift.hours).sort((a, b) => a - b);
-        if (hours.length === 0) return;
-        
-        // Group consecutive hours into shifts
-        let shiftStart = hours[0];
-        let prevHour = hours[0];
-        
-        for (let i = 1; i <= hours.length; i++) {
-            if (i === hours.length || hours[i] !== prevHour + 1) {
-                shifts.push({
-                    employeeId: empShift.employeeId,
-                    role: empShift.role,
-                    start: shiftStart,
-                    end: prevHour + 1,
-                    viaSwap: empShift.viaSwap,
-                    swappedFrom: empShift.swappedFrom
-                });
-                if (i < hours.length) {
-                    shiftStart = hours[i];
-                }
-            }
-            if (i < hours.length) {
-                prevHour = hours[i];
-            }
-        }
-    });
-    
-    return shifts;
-}
-
-function getMyShiftsForDay(schedule, dayIdx) {
-    const shifts = [];
-    const myId = employeeState.employee.id;
-    
-    if (!schedule || !schedule.slot_assignments) return shifts;
-    
-    // Parse slot assignments to find my shifts
-    Object.entries(schedule.slot_assignments).forEach(([slotKey, assignments]) => {
-        // slotKey format: "day,hour"
-        const parts = slotKey.split(',');
-        if (parts.length >= 2) {
-            const day = parseInt(parts[0]);
-            const hour = parseInt(parts[1]);
-            
-            if (day === dayIdx) {
-                assignments.forEach(assignment => {
-                    if (assignment.employee_id === myId) {
-                        // Check if we already have a shift that extends to this hour
-                        const existingShift = shifts.find(s => 
-                            s.role === assignment.role_id && s.end === hour
-                        );
-                        
-                        if (existingShift) {
-                            existingShift.end = hour + 1;
-                            // Track swap status
-                            if (assignment.via_swap) {
-                                existingShift.viaSwap = true;
-                                existingShift.swappedFrom = assignment.swapped_from;
-                            }
-                        } else {
-                            shifts.push({
-                                employeeId: myId,
-                                start: hour,
-                                end: hour + 1,
-                                role: assignment.role_id,
-                                viaSwap: assignment.via_swap || false,
-                                swappedFrom: assignment.swapped_from || null
-                            });
-                        }
-                    }
-                });
-            }
-        }
-    });
-    
-    return shifts;
 }
 
 // Get continuous work periods for a day (merges consecutive hours regardless of role)
@@ -1123,8 +997,8 @@ function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
         if (block.type === 'pto') {
             // Render PTO block
             const isMine = block.employeeId === myId;
-            const emoji = getPTOTypeEmojiEmployee(block.ptoType);
-            const typeLabel = capitalizeFirstEmployee(block.ptoType);
+            const emoji = getPTOTypeEmoji(block.ptoType);
+            const typeLabel = capitalizeFirst(block.ptoType);
             const name = block.employeeName || 'Unknown';
             
             const ptoBlock = document.createElement('div');
@@ -1208,195 +1082,6 @@ function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
             
             container.appendChild(el);
         }
-    });
-}
-
-// Keep for backwards compatibility but not used in grid view anymore
-function renderGridShifts(schedule, container, showEveryone) {
-    const myId = employeeState.employee.id;
-    const slotAssignments = schedule.slot_assignments || {};
-    
-    // Get grid dimensions
-    const wrapper = document.getElementById('scheduleGridWrapper');
-    const grid = document.getElementById('scheduleGrid');
-    const firstSlot = grid?.querySelector('.slot');
-    const headerRow = grid?.querySelector('thead tr');
-    const timeCell = grid?.querySelector('.time-cell');
-    
-    if (!firstSlot || !wrapper) return;
-    
-    const hSpacing = 8;
-    const vSpacing = 3;
-    const slotWidth = firstSlot.offsetWidth + hSpacing;
-    const slotHeight = firstSlot.offsetHeight + vSpacing;
-    const headerHeight = headerRow?.offsetHeight || 35;
-    const timeCellWidth = (timeCell?.offsetWidth || 50) + hSpacing;
-    
-    // Build shift segments
-    const shiftSegments = [];
-    
-    // Process each day - use colIdx for column position
-    employeeState.daysOpen.forEach((day, colIdx) => {
-        const empHours = {};
-        
-        employeeState.hours.forEach(hour => {
-            const key = `${day},${hour}`;
-            const assignments = slotAssignments[key] || [];
-            
-            assignments.forEach(assignment => {
-                const empId = assignment.employee_id;
-                
-                // Filter by mine/everyone
-                if (!showEveryone && empId !== myId) return;
-                
-                if (!empHours[empId]) {
-                    empHours[empId] = { hours: new Map(), viaSwap: false, swappedFrom: null };
-                }
-                if (!empHours[empId].hours.has(hour)) {
-                    empHours[empId].hours.set(hour, new Set());
-                }
-                empHours[empId].hours.get(hour).add(assignment.role_id);
-                // Track swap info
-                if (assignment.via_swap) {
-                    empHours[empId].viaSwap = true;
-                    empHours[empId].swappedFrom = assignment.swapped_from;
-                }
-            });
-        });
-        
-        // Convert to segments
-        Object.entries(empHours).forEach(([employeeId, data]) => {
-            const hoursList = Array.from(data.hours.keys()).sort((a, b) => a - b);
-            if (hoursList.length === 0) return;
-            
-            let segmentStart = hoursList[0];
-            let prevHour = hoursList[0];
-            let segmentRoles = new Set(data.hours.get(hoursList[0]));
-            
-            for (let i = 1; i <= hoursList.length; i++) {
-                const currentHour = hoursList[i];
-                
-                if (currentHour !== prevHour + 1 || i === hoursList.length) {
-                    shiftSegments.push({
-                        employeeId,
-                        roles: segmentRoles,
-                        day,
-                        colIdx, // Use column index for positioning
-                        startHour: segmentStart,
-                        endHour: prevHour + 1,
-                        viaSwap: data.viaSwap,
-                        swappedFrom: data.swappedFrom
-                    });
-                    
-                    if (i < hoursList.length) {
-                        segmentStart = currentHour;
-                        segmentRoles = new Set(data.hours.get(currentHour));
-                    }
-                } else {
-                    data.hours.get(currentHour).forEach(r => segmentRoles.add(r));
-                }
-                prevHour = currentHour;
-            }
-        });
-    });
-    
-    // Assign columns for overlapping shifts within each day column
-    const blocksByCol = {};
-    employeeState.daysOpen.forEach((day, colIdx) => {
-        blocksByCol[colIdx] = shiftSegments.filter(s => s.colIdx === colIdx);
-    });
-    
-    Object.entries(blocksByCol).forEach(([colIdx, blocks]) => {
-        colIdx = parseInt(colIdx);
-        blocks.sort((a, b) => a.startHour - b.startHour);
-        
-        const columns = [];
-        blocks.forEach(block => {
-            let placed = false;
-            for (let subColIdx = 0; subColIdx < columns.length; subColIdx++) {
-                const hasOverlap = columns[subColIdx].some(s => 
-                    block.startHour < s.endHour && block.endHour > s.startHour
-                );
-                if (!hasOverlap) {
-                    block.subColumn = subColIdx;
-                    columns[subColIdx].push(block);
-                    placed = true;
-                    break;
-                }
-            }
-            if (!placed) {
-                block.subColumn = columns.length;
-                columns.push([block]);
-            }
-        });
-        
-        const numSubColumns = columns.length || 1;
-        blocks.forEach(b => b.totalSubColumns = numSubColumns);
-    });
-    
-    // Render shift blocks
-    shiftSegments.forEach(segment => {
-        const emp = employeeMap[segment.employeeId];
-        if (!emp) return;
-        
-        const isMine = segment.employeeId == myId;
-        const roleNames = Array.from(segment.roles)
-            .map(roleId => roleMap[roleId]?.name || roleId)
-            .join(', ');
-        
-        // Get color based on color mode setting
-        const color = getShiftColor(segment.employeeId, segment.roles);
-        
-        const hourOffset = segment.startHour - employeeState.hours[0];
-        const duration = segment.endHour - segment.startHour;
-        
-        const widthPadding = 6;
-        const availableWidth = slotWidth - widthPadding;
-        const blockWidth = segment.totalSubColumns > 1 
-            ? (availableWidth / segment.totalSubColumns) - 1 
-            : availableWidth;
-        
-        const el = document.createElement('div');
-        el.className = isMine ? 'schedule-shift-block my-shift' : 'schedule-shift-block other-shift';
-        if (segment.viaSwap) {
-            el.classList.add('via-swap');
-        }
-        el.style.backgroundColor = color;
-        
-        // Use colIdx for column position (not day number)
-        const leftPos = timeCellWidth + (segment.colIdx * slotWidth) + (widthPadding / 2) + 
-            ((segment.subColumn || 0) * (blockWidth + 1));
-        el.style.left = `${leftPos}px`;
-        el.style.top = `${headerHeight + hourOffset * slotHeight + 2}px`;
-        el.style.width = `${blockWidth}px`;
-        el.style.height = `${duration * slotHeight - 4}px`;
-        el.style.zIndex = 10 + (segment.subColumn || 0);
-        
-        // Build tooltip
-        let tooltipText = `${emp.name}\nRoles: ${roleNames}\n${formatTime(segment.startHour)} - ${formatTime(segment.endHour)}`;
-        let swapIndicator = '';
-        if (segment.viaSwap) {
-            const swappedFromName = segment.swappedFrom ? (employeeMap[segment.swappedFrom]?.name || 'another employee') : 'another employee';
-            tooltipText += `\n\n🔄 Obtained via shift swap from ${swappedFromName}`;
-            swapIndicator = '<span class="swap-indicator">🔄</span>';
-        }
-        
-        el.innerHTML = `<span class="shift-name">${emp.name}</span>${swapIndicator}`;
-        el.title = tooltipText;
-        
-        // Attach click handler for popover
-        const shiftData = {
-            dayIdx: segment.day,
-            empId: segment.employeeId,
-            roleId: Array.from(segment.roles)[0],
-            startHour: segment.startHour,
-            endHour: segment.endHour,
-            viaSwap: segment.viaSwap,
-            swappedFrom: segment.swappedFrom
-        };
-        el.addEventListener('click', (e) => showShiftPopover(e, shiftData));
-        
-        container.appendChild(el);
     });
 }
 
@@ -1637,7 +1322,7 @@ function renderTableView() {
                 
                 if (hasPTO) {
                     // Show PTO badge for this day (clickable)
-                    const emoji = getPTOTypeEmojiEmployee(pto.days[day]);
+                    const emoji = getPTOTypeEmoji(pto.days[day]);
                     const ptoData = pto.dayPtoData[day];
                     const isMine = emp.id === myId;
                     html += `<td class="shift-times ${dayClass}">
@@ -1649,7 +1334,7 @@ function renderTableView() {
                             data-emp-id="${ptoData.employee_id}"
                             data-emp-name="${ptoData.employee_name}"
                             data-is-mine="${isMine}">
-                            <span class="pto-emoji">${emoji}</span>${capitalizeFirstEmployee(pto.days[day])}
+                            <span class="pto-emoji">${emoji}</span>${capitalizeFirst(pto.days[day])}
                         </span>
                     </td>`;
                 } else if (shifts.length === 0) {
@@ -1909,8 +1594,8 @@ function renderUpcomingShifts() {
         </div>`;
         } else {
             // PTO item
-            const emoji = getPTOTypeEmojiEmployee(item.pto_type);
-            const typeLabel = capitalizeFirstEmployee(item.pto_type);
+            const emoji = getPTOTypeEmoji(item.pto_type);
+            const typeLabel = capitalizeFirst(item.pto_type);
             const isOtherPerson = !item.isMyItem;
             const personLabel = isOtherPerson ? item.employee_name : '';
             
@@ -1935,21 +1620,7 @@ function renderUpcomingShifts() {
     }
 }
 
-function getPTOTypeEmojiEmployee(type) {
-    switch (type) {
-        case 'vacation': return '🌴';
-        case 'sick': return '🤒';
-        case 'personal': return '👤';
-        default: return '📋';
-    }
-}
-
-function capitalizeFirstEmployee(str) {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
 // ==================== AVAILABILITY EDITOR ====================
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // Day conversion: Backend uses Mon=0, Sun=6. Display uses Sun=0, Sat=6.
@@ -1986,7 +1657,6 @@ function initAvailabilityEditor() {
     
     renderAvailabilityTable();
     setupSaveButton();
-    updateAvailabilityStats();
 }
 
 function renderAvailabilityTable() {
@@ -2097,17 +1767,6 @@ function timePartsToDecimal(hour, min, ampm) {
     return hour24 + (minutes / 60);
 }
 
-function formatTime12(time) {
-    const hour = Math.floor(time);
-    const minutes = Math.round((time - hour) * 60);
-    const minuteStr = minutes > 0 ? `:${minutes.toString().padStart(2, '0')}` : '';
-    
-    if (hour === 0) return `12${minuteStr}am`;
-    if (hour === 12) return `12${minuteStr}pm`;
-    if (hour < 12) return `${hour}${minuteStr}am`;
-    return `${hour - 12}${minuteStr}pm`;
-}
-
 function setupAvailabilityTableListeners() {
     // Custom dropdown click handlers
     document.querySelectorAll('.custom-select').forEach(select => {
@@ -2169,7 +1828,6 @@ function setupAvailabilityTableListeners() {
             // Add default all-day range
             employeeState.availability[day].push([employeeState.startHour, employeeState.endHour]);
             renderAvailabilityTable();
-            updateAvailabilityStats();
         });
     });
     
@@ -2184,7 +1842,6 @@ function setupAvailabilityTableListeners() {
                     delete employeeState.availability[day];
                 }
                 renderAvailabilityTable();
-                updateAvailabilityStats();
             }
         });
     });
@@ -2235,60 +1892,15 @@ function updateTimeFromCustomInputs(inputGroup) {
         }
         renderAvailabilityTable();
     }
-    
-    updateAvailabilityStats();
-}
-
-function isHourAvailable(day, hour) {
-    const availability = employeeState.availability || {};
-    const dayAvail = availability[day];
-    
-    if (!dayAvail || !Array.isArray(dayAvail)) return false;
-    
-    // dayAvail is array of [start, end] tuples
-    return dayAvail.some(([start, end]) => hour >= start && hour < end);
 }
 
 // Note: Old grid functions removed - now using cards view
-
-function updateAvailabilityStats() {
-    let totalHours = 0;
-    let daysAvailable = 0;
-    
-    const availability = employeeState.availability || {};
-    
-    Object.entries(availability).forEach(([day, slots]) => {
-        if (slots && slots.length > 0) {
-            daysAvailable++;
-            slots.forEach(([start, end]) => {
-                totalHours += (end - start);
-            });
-        }
-    });
-    
-    const hoursEl = document.getElementById('totalAvailableHours');
-    const daysEl = document.getElementById('daysAvailable');
-    
-    // Format hours nicely (e.g., 8.5 -> "8.5", 8 -> "8")
-    const hoursDisplay = totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1);
-    
-    if (hoursEl) hoursEl.textContent = hoursDisplay;
-    if (daysEl) daysEl.textContent = daysAvailable;
-}
 
 function setupSaveButton() {
     const saveBtn = document.getElementById('saveAvailabilityBtn');
     if (!saveBtn) return;
     
     saveBtn.addEventListener('click', saveAvailability);
-}
-
-function markUnsaved() {
-    const status = document.getElementById('saveStatus');
-    if (status) {
-        status.textContent = 'Unsaved changes';
-        status.className = 'save-status';
-    }
 }
 
 async function saveAvailability() {
@@ -2553,73 +2165,6 @@ async function loadSwapRequests() {
 function updateNotificationBell() {
     // Update the unified notification badge
     updateUnifiedNotificationBadge();
-    
-    // Always update dropdown content (shows empty message if no requests)
-    updateNotificationDropdown();
-}
-
-function updateNotificationDropdown() {
-    const list = document.getElementById('notificationList');
-    if (!list) return;
-    
-    const pending = employeeState.swapRequests.incoming.filter(r => r.my_response === 'pending');
-    
-    // Update header text based on pending count
-    const header = document.querySelector('.notification-header span');
-    if (header) {
-        header.textContent = pending.length > 0 
-            ? `Pending Requests (${pending.length})`
-            : 'No Pending Requests';
-    }
-    
-    if (pending.length === 0) {
-        list.innerHTML = '';
-        return;
-    }
-    
-    list.innerHTML = pending.map(req => {
-        // Get requester name - look up from allEmployees if needed
-        let requesterName = req.requester_name;
-        if (!requesterName || requesterName === 'Unknown') {
-            const requester = employeeState.allEmployees.find(e => 
-                e.db_id == req.requester_employee_id || e.id == req.requester_employee_id
-            );
-            requesterName = requester ? requester.name : 'A coworker';
-        }
-        
-        // Use correct field names from API (original_day, original_start_hour, original_end_hour)
-        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        const dayName = dayNames[req.original_day] || `Day ${req.original_day}`;
-        const timeStr = `${formatTime(req.original_start_hour)} - ${formatTime(req.original_end_hour)}`;
-        
-        // Check if this is a counter offer
-        const isCounterOffer = req.is_counter_offer;
-        const title = isCounterOffer 
-            ? `⇄ Counter offer from ${requesterName}`
-            : `${requesterName} wants to swap`;
-        const itemClass = isCounterOffer ? 'notification-item counter-offer' : 'notification-item';
-        
-        return `
-            <div class="${itemClass}" onclick="showSwapResponseModal('${req.id}'); hideNotificationDropdown();">
-                <div class="notification-item-title">${title}</div>
-                <div class="notification-item-subtitle">${dayName}, ${timeStr}</div>
-            </div>
-        `;
-    }).join('');
-}
-
-function toggleNotificationDropdown() {
-    const dropdown = document.getElementById('unifiedNotificationDropdown');
-    if (dropdown) {
-        dropdown.classList.toggle('visible');
-    }
-}
-
-function hideNotificationDropdown() {
-    const dropdown = document.getElementById('unifiedNotificationDropdown');
-    if (dropdown) {
-        dropdown.classList.remove('visible');
-    }
 }
 
 // Unified Notification Bell
@@ -2706,7 +2251,7 @@ function renderUnifiedNotificationList() {
             type: 'pto',
             id: pto.id,
             title: `Time Off ${pto.status === 'approved' ? 'Approved' : 'Denied'}`,
-            subtitle: `${capitalizeFirstEmployee(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
+            subtitle: `${capitalizeFirst(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
             status: pto.status,
             date: new Date(pto.updated_at || pto.created_at),
             pto: pto // Store full PTO data for navigation
@@ -3026,147 +2571,6 @@ function navigateToSwapOnSchedule(swap) {
     } else {
         afterLoad();
     }
-}
-
-function showSwapNotificationDetail(swap) {
-    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const requesterName = swap.requester_name || 'Someone';
-    const dayName = dayNames[swap.original_day] || 'Unknown';
-    const timeRange = `${formatTime(swap.original_start_hour)} – ${formatTime(swap.original_end_hour)}`;
-    const actionType = swap.my_eligibility_type === 'pickup' ? 'give away' : 'swap';
-    const isCounterOffer = swap.is_counter_offer;
-    
-    // Compute the week date for the "View Schedule" link
-    let weekDateStr = '';
-    if (swap.week_start_date) {
-        const ws = new Date(swap.week_start_date + 'T00:00:00');
-        const shiftDate = new Date(ws);
-        shiftDate.setDate(ws.getDate() + swap.original_day);
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        weekDateStr = `${months[shiftDate.getMonth()]} ${shiftDate.getDate()}`;
-    }
-    
-    // Calculate the week offset needed to view this shift
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dayOfWeek = today.getDay();
-    const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const currentMonday = new Date(today);
-    currentMonday.setDate(today.getDate() - daysToMonday);
-    
-    let targetWeekOffset = 0;
-    if (swap.week_start_date) {
-        const swapMonday = new Date(swap.week_start_date + 'T00:00:00');
-        targetWeekOffset = Math.round((swapMonday - currentMonday) / (7 * 24 * 60 * 60 * 1000));
-    }
-    
-    // Remove existing detail popup if any
-    document.getElementById('swapNotifDetailPopup')?.remove();
-    
-    const popup = document.createElement('div');
-    popup.id = 'swapNotifDetailPopup';
-    popup.className = 'modal-overlay';
-    popup.style.display = 'flex';
-    popup.innerHTML = `
-        <div class="modal-content swap-notif-detail-modal">
-            <div class="modal-header">
-                <h2>${isCounterOffer ? 'Counter Offer' : 'Shift Swap Request'}</h2>
-                <button class="modal-close" id="closeSwapNotifDetail">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="swap-detail-card">
-                    <div class="swap-detail-from">
-                        <span class="swap-detail-label">From</span>
-                        <span class="swap-detail-value">${requesterName}</span>
-                    </div>
-                    <div class="swap-detail-shift">
-                        <span class="swap-detail-label">${isCounterOffer ? 'Offering their shift' : `Wants to ${actionType}`}</span>
-                        <div class="swap-detail-day">${dayName}${weekDateStr ? ` · ${weekDateStr}` : ''}</div>
-                        <div class="swap-detail-time">${timeRange}</div>
-                        ${swap.original_role_id ? `<div class="swap-detail-role">${swap.original_role_id}</div>` : ''}
-                    </div>
-                    ${swap.note ? `
-                        <div class="swap-detail-note">
-                            <span class="swap-detail-label">Note</span>
-                            <p>${swap.note}</p>
-                        </div>
-                    ` : ''}
-                    ${swap.my_eligibility_type === 'swap_only' ? `
-                        <div class="swap-detail-info">
-                            <span class="swap-info-badge">⚠ You'll need to offer one of your shifts in exchange</span>
-                        </div>
-                    ` : `
-                        <div class="swap-detail-info">
-                            <span class="swap-info-badge pickup">✓ You can pick this up without swapping</span>
-                        </div>
-                    `}
-                </div>
-            </div>
-            <div class="modal-footer swap-detail-footer">
-                <button class="btn btn-outline" id="swapDetailViewSchedule">View My Schedule</button>
-                <div class="swap-detail-actions">
-                    <button class="btn btn-secondary" id="swapDetailDecline">Decline</button>
-                    <button class="btn btn-success" id="swapDetailAccept">Accept</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(popup);
-    
-    // Close button
-    popup.querySelector('#closeSwapNotifDetail').addEventListener('click', () => popup.remove());
-    popup.addEventListener('click', (e) => {
-        if (e.target === popup) popup.remove();
-    });
-    
-    // View Schedule button - navigate, highlight the day, show sticky mini-popup
-    popup.querySelector('#swapDetailViewSchedule').addEventListener('click', () => {
-        popup.remove();
-        
-        const needsWeekChange = targetWeekOffset !== employeeState.weekOffset;
-        if (needsWeekChange) {
-            employeeState.weekOffset = targetWeekOffset;
-            updateURLWeek(employeeState.weekOffset);
-            updateWeekDisplay();
-        }
-        
-        // Load schedule then highlight + show sticky popup
-        const afterLoad = () => {
-            clearScheduleHighlights();
-            highlightScheduleDay(swap.original_day, 'schedule-day-highlight');
-            if (swap.is_counter_offer && swap.original_request_day !== undefined) {
-                highlightScheduleDay(swap.original_request_day, 'schedule-day-highlight-green');
-            }
-            
-            showStickySwapAction(swap);
-            
-            setTimeout(() => {
-                const scheduleSection = document.getElementById('scheduleSection') || document.querySelector('.schedule-container');
-                if (scheduleSection) {
-                    scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            }, 100);
-        };
-        
-        if (needsWeekChange) {
-            loadScheduleData().then(afterLoad);
-        } else {
-            afterLoad();
-        }
-    });
-    
-    // Accept button
-    popup.querySelector('#swapDetailAccept').addEventListener('click', () => {
-        popup.remove();
-        handleSwapFromNotification(swap.id, 'accept');
-    });
-    
-    // Decline button
-    popup.querySelector('#swapDetailDecline').addEventListener('click', () => {
-        popup.remove();
-        handleSwapFromNotification(swap.id, 'decline');
-    });
 }
 
 function highlightScheduleDay(dayIdx, highlightClass) {
@@ -3499,17 +2903,6 @@ function showSwapOfferPicker(swap) {
     });
 }
 
-function formatPTODateRange(start, end) {
-    const startDate = new Date(start + 'T00:00:00');
-    const endDate = new Date(end + 'T00:00:00');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
-    if (start === end) {
-        return `${months[startDate.getMonth()]} ${startDate.getDate()}`;
-    }
-    return `${months[startDate.getMonth()]} ${startDate.getDate()} - ${months[endDate.getMonth()]} ${endDate.getDate()}`;
-}
-
 function markPTOAsSeen(ptoId) {
     // Add both string and number versions to be safe
     seenPTOUpdates.add(ptoId);
@@ -3532,8 +2925,8 @@ function showPTOPopover(e, pto, isMine) {
     popover.id = 'ptoPopover';
     popover.className = 'pto-popover';
     
-    const emoji = getPTOTypeEmojiEmployee(pto.pto_type);
-    const typeLabel = capitalizeFirstEmployee(pto.pto_type);
+    const emoji = getPTOTypeEmoji(pto.pto_type);
+    const typeLabel = capitalizeFirst(pto.pto_type);
     const name = isMine ? 'You' : (pto.employee_name || 'Unknown');
     const dateRange = formatPTODateRange(pto.start_date, pto.end_date);
     
@@ -3686,7 +3079,7 @@ function highlightPTOElement(pto) {
             }
         }
         
-        showToast(`Viewing time off: ${capitalizeFirstEmployee(pto.pto_type)}`, 'info');
+        showToast(`Viewing time off: ${capitalizeFirst(pto.pto_type)}`, 'info');
     }, 300);
 }
 
@@ -4342,12 +3735,6 @@ function initShiftPopover() {
     }
 }
 
-// Helper to attach click handlers to shift blocks
-function attachShiftClickHandler(element, shiftData) {
-    element.addEventListener('click', (e) => showShiftPopover(e, shiftData));
-    element.style.cursor = 'pointer';
-}
-
 async function submitSwapRequest() {
     const shift = employeeState.currentSwapShift;
     if (!shift) return;
@@ -4515,41 +3902,6 @@ function showSwapResponseModal(requestId) {
     }
     
     modal.style.display = 'flex';
-}
-
-function getMyShiftsForWeek() {
-    const shifts = [];
-    const schedule = employeeState.schedule;
-    const dates = getWeekDates(employeeState.weekOffset);
-    
-    if (!schedule) return shifts;
-    
-    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
-        const dayShifts = getMyContinuousShiftsForDay(schedule, dayIdx);
-        dayShifts.forEach(shift => {
-            shifts.push({
-                ...shift,
-                dayIdx,
-                date: dates[dayIdx]
-            });
-        });
-    }
-    
-    return shifts;
-}
-
-function selectSwapShift(idx) {
-    const myShifts = getMyShiftsForWeek();
-    employeeState.selectedSwapShift = myShifts[idx];
-    
-    // Update visual state
-    document.querySelectorAll('.my-shift-option').forEach((el, i) => {
-        el.classList.toggle('selected', i === idx);
-    });
-    
-    // Enable accept button
-    const acceptBtn = document.getElementById('acceptSwapBtn');
-    if (acceptBtn) acceptBtn.disabled = false;
 }
 
 function hideSwapResponseModal() {
@@ -4904,11 +4256,6 @@ async function confirmCancelPTO() {
     }
 }
 
-// Keep old function for backwards compatibility
-async function cancelPTORequest(requestId) {
-    showCancelPTOConfirm(requestId, 'time off', 'these dates');
-}
-
 function renderPTORequestsList() {
     const container = document.getElementById('ptoRequestsList');
     const emptyState = document.getElementById('ptoEmptyState');
@@ -5146,24 +4493,6 @@ function renderPTONotificationDropdown(requests) {
             </div>
         `;
     }).join('');
-}
-
-function markAllPTONotificationsAsSeen() {
-    // Get all notification items and mark them as seen
-    const notificationItems = document.querySelectorAll('#ptoNotificationList .notification-item');
-    notificationItems.forEach(item => {
-        const requestId = item.dataset.requestId;
-        if (requestId) {
-            seenPTOUpdates.add(requestId);
-            item.classList.remove('unseen');
-        }
-    });
-    
-    // Save to localStorage
-    localStorage.setItem('seenPTOUpdates', JSON.stringify([...seenPTOUpdates]));
-    
-    // Clear the badge
-    updatePTONotificationBadge(0);
 }
 
 function handlePTONotificationClick(requestId) {

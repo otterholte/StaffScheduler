@@ -378,10 +378,6 @@ body.menu-open {
     display: none;
 }
 
-.employee-user-badge {
-    display: none;
-}
-
 /* Unified Notification List */
 .unified-dropdown {
     width: 340px;
@@ -1518,16 +1514,6 @@ body.menu-open {
     height: 18px;
 }
 
-.employee-user-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.375rem 0.75rem 0.375rem 0.375rem;
-    background: var(--bg-tertiary);
-    border-radius: 24px;
-    border: 1px solid var(--border-color);
-}
-
 .employee-user-badge .user-avatar {
     width: 32px;
     height: 32px;
@@ -1829,11 +1815,6 @@ body.menu-open {
     color: var(--text-tertiary);
     font-size: 0.85rem;
     margin: 0;
-}
-
-.availability-stats {
-    display: flex;
-    gap: 2rem;
 }
 
 .stat-item {
@@ -2177,27 +2158,6 @@ body.menu-open {
         font-size: 1rem;
         margin-right: 0.35rem;
     }
-}
-
-/* Employee Presets - Hidden on mobile for staff */
-.employee-presets {
-    display: none; /* Hidden - using cards view instead */
-}
-
-/* Hide old grid on mobile */
-@media (max-width: 768px) {
-    .availability-grid-container {
-        display: none;
-    }
-}
-
-.employee-presets .presets-label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-tertiary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-right: 0.5rem;
 }
 
 .employee-presets .preset-btn {
@@ -3039,13 +2999,6 @@ body.menu-open {
 
 /* Offer Swap button style */
 /* Info icon + tooltip for counter offer context */
-.notif-info-wrap,
-.sticky-info-wrap {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-}
-
 .notif-info-icon,
 .sticky-info-icon {
     display: inline-flex;
@@ -3067,57 +3020,6 @@ body.menu-open {
 .sticky-info-icon:hover {
     background: var(--employee-accent, #10b981);
     color: white;
-}
-
-/* Notification tooltip - use fixed positioning to escape dropdown bounds */
-.notif-info-tooltip {
-    display: none;
-    position: fixed;
-    z-index: 99999;
-    background: var(--bg-solid-deep);
-    color: var(--text-primary, #f1f5f9);
-    font-size: 0.88rem;
-    padding: 0.6rem 1rem;
-    border-radius: 8px;
-    white-space: nowrap;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
-    border: 1px solid #334155;
-    pointer-events: none;
-}
-
-/* Sticky bar tooltip - absolute is fine here since it's not clipped */
-.sticky-info-tooltip {
-    display: none;
-    position: absolute;
-    bottom: calc(100% + 8px);
-    right: 0;
-    background: var(--bg-solid-deep);
-    color: var(--text-primary, #f1f5f9);
-    font-size: 0.9rem;
-    padding: 0.6rem 1rem;
-    border-radius: 8px;
-    white-space: nowrap;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7);
-    border: 1px solid #334155;
-    z-index: 100;
-    pointer-events: none;
-}
-
-.sticky-info-wrap:hover .sticky-info-tooltip {
-    display: block;
-}
-
-/* Mobile: tap to toggle */
-@media (hover: none) {
-    .notif-info-tooltip,
-    .sticky-info-tooltip {
-        white-space: normal;
-        max-width: 280px;
-    }
-    
-    .sticky-info-wrap:active .sticky-info-tooltip {
-        display: block;
-    }
 }
 
 .notif-btn-offer-swap {
@@ -3962,26 +3864,9 @@ body.menu-open {
         gap: 0.5rem;
     }
     
-    .week-nav-btn {
-        min-width: 44px;
-        min-height: 44px;
-        padding: 0.5rem;
-    }
-    
-    .week-label {
-        font-size: 0.9rem;
-    }
-    
     /* === SCHEDULE TABLE - Horizontal scroll with sticky name === */
     .employee-schedule-layout .schedule-panel {
         padding: 0.5rem;
-    }
-    
-    .schedule-table-wrapper {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin: 0 -0.5rem;
-        padding: 0 0.5rem;
     }
     
     .schedule-table {
@@ -4026,10 +3911,6 @@ body.menu-open {
     }
     
     /* === TIMELINE VIEW === */
-    .timeline-day-row {
-        min-height: 60px;
-    }
-    
     .timeline-day-label {
         min-width: 70px;
         font-size: 0.75rem;
@@ -4046,24 +3927,9 @@ body.menu-open {
         flex-direction: column;
     }
     
-    .availability-stats {
-        width: 100%;
-        justify-content: center;
-    }
-    
     .hours-summary-content {
         flex-wrap: wrap;
         justify-content: center;
-    }
-    
-    .employee-presets {
-        justify-content: center;
-    }
-    
-    .employee-presets .presets-label {
-        width: 100%;
-        text-align: center;
-        margin-bottom: 0.25rem;
     }
     
     /* === MODALS - Full screen on mobile === */
@@ -4119,20 +3985,6 @@ body.menu-open {
     /* === SWAP MODAL SPECIFICS === */
     .swap-shift-details {
         padding: 1rem;
-    }
-    
-    .eligible-staff-list {
-        max-height: none;
-    }
-    
-    .eligible-staff-item {
-        padding: 1rem;
-        min-height: 56px;
-    }
-    
-    .staff-checkbox {
-        width: 24px;
-        height: 24px;
     }
     
     #swapNote {
@@ -4451,19 +4303,6 @@ body.menu-open {
     }
     
     /* Backdrop overlay for mobile popovers */
-    .mobile-popover-backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 9998;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease;
-    }
-    
     .mobile-popover-backdrop.visible {
         opacity: 1;
         visibility: visible;
@@ -4908,17 +4747,6 @@ body.menu-open {
     border-radius: 4px;
 }
 
-.pto-cancel-btn {
-    flex-shrink: 0;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-}
-
-.pto-cancel-btn:hover {
-    color: #ef4444;
-    background: rgba(239, 68, 68, 0.1);
-}
-
 /* PTO Request Modal */
 .pto-modal {
     max-width: 420px;
@@ -5322,11 +5150,6 @@ body.menu-open {
     
     .pto-request-item {
         flex-wrap: wrap;
-    }
-    
-    .pto-cancel-btn {
-        width: 100%;
-        margin-top: 0.5rem;
     }
 }
 

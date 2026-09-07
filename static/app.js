@@ -878,7 +878,6 @@ const dom = {
     employeeCount: document.getElementById('employeeCount'),
     
     // Settings
-    saveSettingsBtn: document.getElementById('saveSettingsBtn'),
     addRoleBtn: document.getElementById('addRoleBtn'),
     
     // Modals
@@ -7787,35 +7786,6 @@ function formatDecimalTime(decimal) {
     return `${hour12}:${mins.toString().padStart(2, '0')}${ampm}`;
 }
 
-async function toggleAvailabilityCellSimple(cell, empId, select) {
-    const day = parseInt(cell.dataset.day);
-    const hour = parseInt(cell.dataset.hour);
-    const emp = employeeMap[empId];
-    if (!emp) return;
-    
-    // Remove all classes first
-    cell.classList.remove('available', 'preferred', 'time-off');
-    
-    let newState = 'none';
-    if (select) {
-        cell.classList.add('available');
-        newState = 'available';
-    }
-    
-    // Save to server
-    await saveAvailabilityCell(empId, day, hour, newState);
-    
-    // Update hours display
-    const availHours = calculateAvailableHoursFromGrid();
-    const hoursEl = document.getElementById('availPanelHours');
-    if (hoursEl) {
-        hoursEl.textContent = `${availHours} hours/week available`;
-    }
-    
-    // Update sidebar
-    updateSidebarHours(empId, availHours);
-}
-
 function calculateAvailableHoursFromGrid() {
     const cells = document.querySelectorAll('#availabilityTableBody .avail-cell');
     let count = 0;
@@ -7834,37 +7804,6 @@ function updateSidebarHours(empId, hours) {
         if (hoursEl) {
             hoursEl.textContent = `${hours} hrs/week available`;
         }
-    }
-}
-
-async function saveAvailabilityCell(empId, day, hour, state) {
-    try {
-        await fetch(`/api/employees/${empId}/availability-cell`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ day, hour, state })
-        });
-        
-        // Update local state
-        const emp = employeeMap[empId];
-        if (emp) {
-            // Remove from all arrays
-            emp.availability = emp.availability.filter(s => !(s.day === day && s.hour === hour));
-            emp.preferences = emp.preferences.filter(s => !(s.day === day && s.hour === hour));
-            emp.time_off = emp.time_off.filter(s => !(s.day === day && s.hour === hour));
-            
-            // Add to appropriate array
-            if (state === 'available') {
-                emp.availability.push({ day, hour });
-            } else if (state === 'preferred') {
-                emp.availability.push({ day, hour });
-                emp.preferences.push({ day, hour });
-            } else if (state === 'time-off') {
-                emp.time_off.push({ day, hour });
-            }
-        }
-    } catch (error) {
-        console.error('Error saving availability cell:', error);
     }
 }
 
@@ -8000,9 +7939,6 @@ async function saveFullAvailability(empId) {
 
 // ==================== SETTINGS TAB ====================
 function setupSettingsTab() {
-    if (dom.saveSettingsBtn) {
-        dom.saveSettingsBtn.addEventListener('click', saveSettings);
-    }
     if (dom.addRoleBtn) {
         dom.addRoleBtn.addEventListener('click', () => openRoleForm());
     }
@@ -8038,44 +7974,6 @@ function setupRequirementsSubTabs() {
     });
 }
 
-// ==================== PEAK PERIODS (OLD UI) ====================
-function renderPeakPeriodsOld() {
-    const container = document.getElementById('peakPeriodsList');
-    if (!container) return; // Element may not exist in new UI
-    container.innerHTML = '';
-    
-    if (state.peakPeriods.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-state-icon">⏰</div>
-                <p>No peak periods defined yet.</p>
-                <p class="text-muted">Add peak periods to schedule extra staff during busy times.</p>
-            </div>
-        `;
-        return;
-    }
-    
-    state.peakPeriods.forEach((period, index) => {
-        const dayNames = period.days.map(d => state.days[d].substring(0, 3)).join(', ');
-        
-        const card = document.createElement('div');
-        card.className = 'peak-period-card';
-        card.innerHTML = `
-            <div class="peak-icon">🔥</div>
-            <div class="peak-period-info">
-                <div class="peak-period-name">${period.name}</div>
-                <div class="peak-period-time">${formatHour(period.start_hour)} - ${formatHour(period.end_hour)}</div>
-                <div class="peak-period-days">${dayNames}</div>
-            </div>
-            <div class="peak-period-actions">
-                <button class="btn-icon-sm" data-tooltip="Edit peak period" onclick="editPeakPeriod(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>
-                <button class="btn-icon-sm" data-tooltip="Remove peak period" onclick="deletePeakPeriod(${index})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
-            </div>
-        `;
-        container.appendChild(card);
-    });
-}
-
 function formatHour(hour) {
     const wholeHour = Math.floor(hour);
     const minutes = Math.round((hour - wholeHour) * 60);
@@ -8085,87 +7983,6 @@ function formatHour(hour) {
     if (wholeHour === 12) return `12${minuteStr}pm`;
     if (wholeHour < 12) return `${wholeHour}${minuteStr}am`;
     return `${wholeHour - 12}${minuteStr}pm`;
-}
-
-function addPeakPeriod() {
-    const name = prompt('Peak period name (e.g., "Busy Hours", "Lunch Time"):');
-    if (!name) return;
-    
-    const startHour = parseInt(prompt('Start hour (0-23):', '8'));
-    if (isNaN(startHour) || startHour < 0 || startHour > 23) {
-        showToast('Invalid start hour', 'error');
-        return;
-    }
-    
-    const endHour = parseInt(prompt('End hour (0-24):', '10'));
-    if (isNaN(endHour) || endHour <= startHour || endHour > 24) {
-        showToast('Invalid end hour', 'error');
-        return;
-    }
-    
-    const newPeriod = {
-        name: name,
-        start_hour: startHour,
-        end_hour: endHour,
-        days: [...state.daysOpen]  // Apply to all open days by default
-    };
-    
-    state.peakPeriods.push(newPeriod);
-    savePeakPeriods();
-}
-
-function editPeakPeriod(index) {
-    const period = state.peakPeriods[index];
-    if (!period) return;
-    
-    const name = prompt('Peak period name:', period.name);
-    if (!name) return;
-    
-    const startHour = parseInt(prompt('Start hour (0-23):', period.start_hour));
-    if (isNaN(startHour) || startHour < 0 || startHour > 23) {
-        showToast('Invalid start hour', 'error');
-        return;
-    }
-    
-    const endHour = parseInt(prompt('End hour (0-24):', period.end_hour));
-    if (isNaN(endHour) || endHour <= startHour || endHour > 24) {
-        showToast('Invalid end hour', 'error');
-        return;
-    }
-    
-    period.name = name;
-    period.start_hour = startHour;
-    period.end_hour = endHour;
-    
-    savePeakPeriods();
-}
-
-function deletePeakPeriod(index) {
-    if (!confirm('Remove this peak period?')) return;
-    state.peakPeriods.splice(index, 1);
-    savePeakPeriods();
-}
-
-async function savePeakPeriods() {
-    try {
-        const response = await fetch('/api/settings/peak-periods', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ peak_periods: state.peakPeriods })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            renderPeakPeriods();
-            renderRoleCoverageEditor();  // Update coverage summaries
-            showToast('Peak periods saved', 'success');
-        } else {
-            showToast(data.message || 'Failed to save peak periods', 'error');
-        }
-    } catch (error) {
-        showToast('Error saving peak periods', 'error');
-    }
 }
 
 // ==================== ROLE COVERAGE ====================
@@ -8603,40 +8420,6 @@ async function deleteRole(roleId) {
         }
     } catch (error) {
         showToast('Error deleting role', 'error');
-    }
-}
-
-async function saveSettings() {
-    showLoading('Saving settings...');
-    
-    // Gather settings
-    const settings = {
-        hours: {
-            start_hour: parseInt(document.getElementById('startHour').value),
-            end_hour: parseInt(document.getElementById('endHour').value)
-        },
-        days_open: Array.from(document.querySelectorAll('#daysOpen input:checked')).map(cb => parseInt(cb.value)),
-        policies: getAllPolicies()
-    };
-    
-    try {
-        const response = await fetch('/api/settings', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(settings)
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            showToast('Settings saved successfully', 'success');
-        } else {
-            showToast(data.message || 'Failed to save settings', 'error');
-        }
-    } catch (error) {
-        showToast('Error saving settings', 'error');
-    } finally {
-        hideLoading();
     }
 }
 
@@ -9254,10 +9037,6 @@ function renderShiftTemplates() {
     });
 }
 
-function renderShiftTimeline() {
-    // This is now handled by the calendar view
-}
-
 function openShiftForm(shiftId = null, preselect = null) {
     const modal = dom.shiftModal;
     const form = document.getElementById('shiftForm');
@@ -9588,7 +9367,6 @@ async function handleShiftSubmit(e) {
             }
             
             renderShiftTemplates();
-            renderShiftTimeline();
             closeAllModals();
             showToast(isNew ? 'Shift added' : 'Shift updated', 'success');
         } else {
@@ -9622,7 +9400,6 @@ async function deleteShift(shiftId) {
         if (data.success) {
             state.shiftTemplates = state.shiftTemplates.filter(s => s.id !== shiftId);
             renderShiftTemplates();
-            renderShiftTimeline();
             showToast('Shift removed', 'success');
         } else {
             showToast(data.message || 'Failed to delete shift', 'error');
