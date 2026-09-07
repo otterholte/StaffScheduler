@@ -10092,3 +10092,142 @@ body.manager-menu-open {
         height: 20px;
     }
 }
+
+/* ---------- Schedule generation progress (loading overlay) ---------- */
+.loading-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    width: min(440px, 92vw);
+    padding: 2rem 1.75rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    text-align: center;
+}
+
+.loading-card .loading-text {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.loading-subtext {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    min-height: 1.2em;
+}
+
+.loading-steps {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    text-align: left;
+}
+
+.loading-step {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.35rem 0.6rem;
+    border-radius: 8px;
+    background: var(--bg-tertiary);
+}
+
+.loading-step.done { color: var(--text-primary); }
+
+.loading-step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: var(--accent-primary);
+    color: #fff;
+    flex-shrink: 0;
+}
+
+.loading-step.pending .loading-step-icon { background: transparent; }
+
+.loading-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    animation: loading-pulse 1s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+    0%, 100% { transform: scale(0.7); opacity: 0.5; }
+    50% { transform: scale(1.1); opacity: 1; }
+}
+
+.loading-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-muted, var(--text-secondary));
+}
+
+.loading-elapsed { font-family: 'JetBrains Mono', monospace; }
+
+.loading-hint { color: var(--text-secondary); }
+
+/* ---------- Scheduler notes under the metrics ---------- */
+.schedule-insights {
+    margin-top: 1rem;
+    padding: 0.9rem 1rem;
+    border-radius: 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.insights-title {
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.insight-group + .insight-group { margin-top: 0.75rem; }
+
+.insight-heading {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent-primary);
+    margin-bottom: 0.25rem;
+}
+
+.schedule-insights ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.schedule-insights li strong {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.insight-slots {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.85;
+}

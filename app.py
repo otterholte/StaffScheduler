@@ -18,7 +18,17 @@ The app is split into small pieces:
 """
 
 import os
+import sys
 import traceback
+
+# Business names and emails can contain emoji; make sure logging never crashes
+# on consoles that default to a narrow code page (Windows).
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
 
 from flask import Flask, jsonify, redirect, render_template, request
 from flask_login import LoginManager

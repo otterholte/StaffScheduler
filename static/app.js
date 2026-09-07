@@ -26,33 +26,35 @@ function slugify(text) {
 }
 
 function getLocationSlug() {
-    // Get from state or URL
+    // Prefer the slug the server sent; fall back to slugifying the name
     const businessData = state.businesses.find(b => b.id === state.business.id);
-    const slug = businessData?.slug || state.business?.slug || (state.business?.name ? slugify(state.business.name) : null);
-    console.log('[DEBUG getLocationSlug]', {
-        businessId: state.business?.id,
-        businessDataSlug: businessData?.slug,
-        stateBusinessSlug: state.business?.slug,
-        businessName: state.business?.name,
-        resultSlug: slug
-    });
-    return slug;
+    return businessData?.slug || state.business?.slug || (state.business?.name ? slugify(state.business.name) : null);
 }
 
 function getLocationSlugSafe() {
     try {
         return getLocationSlug();
     } catch (err) {
-        console.error('[DEBUG getLocationSlugSafe] Error:', err);
         return null;
     }
 }
 
 function getAvailabilityApiUrl(empId) {
-    const locationSlug = getLocationSlugSafe();
-    const url = locationSlug ? `/api/${locationSlug}/employees/${empId}/availability` : `/api/employees/${empId}/availability`;
-    console.log('[DEBUG getAvailabilityApiUrl]', { empId, locationSlug, url });
-    return url;
+    // The API accepts the business id in the path too, which is unambiguous
+    return `/api/${encodeURIComponent(state.business.id)}/employees/${empId}/availability`;
+}
+
+/**
+ * Local (browser-timezone) Monday for a week offset, as YYYY-MM-DD.
+ * Sent to the server so a manager on the US west coast late on Sunday
+ * evening still sees the week they expect.
+ */
+function getWeekStartIso(offset = state.weekOffset) {
+    const monday = getWeekDates(offset)[0];
+    const y = monday.getFullYear();
+    const m = String(monday.getMonth() + 1).padStart(2, '0');
+    const d = String(monday.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 function getCurrentUrlPath() {
@@ -97,8 +99,8 @@ const state = {
     shiftTemplates: INITIAL_DATA.business.shift_templates || [],
     hasCompletedSetup: INITIAL_DATA.business.has_completed_setup !== false,
     editingShift: null,
-    // Schedule view state
-    scheduleViewMode: 'timeline', // 'grid', 'timeline', or 'table'
+    // Schedule view state ('table' is the default: quickest to read)
+    scheduleViewMode: 'table', // 'table', 'grid', or 'timeline'
     scheduleColorMode: 'role', // 'role' or 'employee'
     // Week navigation state
     weekOffset: 0, // 0 = current week, -1 = last week, 1 = next week, etc.
@@ -109,6 +111,30 @@ const state = {
     // Approved PTO for current week
     approvedPTO: [] // [{ employee_id, employee_name, start_date, end_date, pto_type }]
 };
+
+// ==================== BUSINESS-SCOPED API CALLS ====================
+/**
+ * Every /api/ request carries the current business id so the server never
+ * has to guess which location an edit belongs to. This wrapper appends
+ * `businessId` to the query string when a call didn't include one itself.
+ */
+(function installBusinessScopedFetch() {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+        try {
+            const isRequest = typeof Request !== 'undefined' && input instanceof Request;
+            let url = isRequest ? input.url : String(input);
+            const isRelativeApi = url.startsWith('/api/');
+            if (isRelativeApi && state.business && state.business.id && !/[?&]businessId=/.test(url)) {
+                url += (url.includes('?') ? '&' : '?') + 'businessId=' + encodeURIComponent(state.business.id);
+                input = isRequest ? new Request(url, input) : url;
+            }
+        } catch (err) {
+            // Never let the wrapper break a request
+        }
+        return nativeFetch(input, init);
+    };
+})();
 
 // ==================== LOCAL STORAGE PERSISTENCE ====================
 const DEBUG_SCHEDULE = (() => {
@@ -262,7 +288,7 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
     
     try {
         // Try loading from database first
-        const response = await fetch(`/api/schedule/load?businessId=${state.business.id}&weekOffset=${state.weekOffset}`);
+        const response = await fetch(`/api/schedule/load?businessId=${encodeURIComponent(state.business.id)}&weekOffset=${state.weekOffset}&weekStart=${getWeekStartIso()}`);
         const data = await response.json();
         
         if (data.success && data.schedule) {
@@ -338,7 +364,7 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
 
 async function loadApprovedPTOForWeek() {
     try {
-        const response = await fetch(`/api/${state.business.id}/pto/approved?weekOffset=${state.weekOffset}`);
+        const response = await fetch(`/api/${encodeURIComponent(state.business.id)}/pto/approved?weekOffset=${state.weekOffset}&weekStart=${getWeekStartIso()}`);
         const data = await response.json();
         
         if (data.success) {
@@ -1332,12 +1358,65 @@ function showToast(message, type = 'info') {
 }
 
 // ==================== LOADING ====================
-function showLoading(message = 'Loading...') {
-    dom.loadingOverlay.querySelector('.loading-text').textContent = message;
-    dom.loadingOverlay.classList.add('active');
+let loadingTimer = null;
+let loadingStartedAt = 0;
+
+function showLoading(message = 'Loading...', subtext = '') {
+    const overlay = dom.loadingOverlay;
+    overlay.querySelector('.loading-text').textContent = message;
+    const sub = overlay.querySelector('#loadingSubtext');
+    if (sub) sub.textContent = subtext;
+    const steps = overlay.querySelector('#loadingSteps');
+    if (steps) steps.innerHTML = '';
+    const hint = overlay.querySelector('#loadingHint');
+    if (hint) hint.hidden = true;
+    const elapsed = overlay.querySelector('#loadingElapsed');
+    if (elapsed) elapsed.textContent = '';
+    overlay.classList.add('active');
+}
+
+/**
+ * Show the progress of a background schedule job: a running clock, the
+ * solver's latest status line, and (after a while) a reassurance that big
+ * schedules can take up to a minute.
+ */
+function startLoadingProgress() {
+    loadingStartedAt = Date.now();
+    clearInterval(loadingTimer);
+    loadingTimer = setInterval(() => {
+        const secs = Math.floor((Date.now() - loadingStartedAt) / 1000);
+        const elapsed = dom.loadingOverlay.querySelector('#loadingElapsed');
+        if (elapsed) elapsed.textContent = `${secs}s`;
+        const hint = dom.loadingOverlay.querySelector('#loadingHint');
+        if (hint && secs >= 12) hint.hidden = false;
+    }, 500);
+}
+
+function updateLoadingProgress(job) {
+    const overlay = dom.loadingOverlay;
+    const sub = overlay.querySelector('#loadingSubtext');
+    if (sub && job.message) sub.textContent = job.message;
+    const steps = overlay.querySelector('#loadingSteps');
+    if (!steps) return;
+    const p = job.progress || {};
+    const items = [];
+    items.push({ done: true, text: 'Loaded staff, roles, and coverage rules' });
+    items.push({ done: (p.solutions || 0) > 0, text: (p.solutions || 0) > 0 ? `Found ${p.solutions} candidate schedule${p.solutions === 1 ? '' : 's'}` : 'Searching for a first schedule' });
+    if ((p.solutions || 0) > 0) {
+        const unfilled = p.unfilled_slots ?? null;
+        items.push({ done: unfilled === 0, text: unfilled === 0 ? 'Every required hour is covered' : `${unfilled} required hour${unfilled === 1 ? '' : 's'} still open, still searching` });
+        items.push({ done: false, text: 'Balancing hours, preferences, and rest between shifts' });
+    }
+    steps.innerHTML = items.map(i => `
+        <div class="loading-step ${i.done ? 'done' : 'pending'}">
+            <span class="loading-step-icon">${i.done ? '✓' : '<span class="loading-dot"></span>'}</span>
+            <span>${i.text}</span>
+        </div>`).join('');
 }
 
 function hideLoading() {
+    clearInterval(loadingTimer);
+    loadingTimer = null;
     dom.loadingOverlay.classList.remove('active');
 }
 
@@ -2002,26 +2081,12 @@ async function saveBusiness() {
         if (result.success) {
             showToast(idInput.value ? 'Location updated' : 'Location created', 'success');
             dom.businessModal.classList.remove('active');
-            
-            // Update slug in state if this is the current business
-            if (result.slug && idInput.value === state.business.id) {
-                state.business.slug = result.slug;
-                // Update URL to reflect new slug
-                updateUrl(false);
-                // Navigate to new URL to keep it in sync
-                const newPath = getCurrentUrlPath();
-                history.replaceState({ tab: state.currentTab, businessId: state.business.id }, '', newPath);
-            }
-            
-            // Refresh business list
-            await refreshBusinessList();
-            
-            // If this was a new business, switch to it
-            if (!idInput.value && result.business_id) {
-                await switchBusiness(result.business_id);
-            }
+            // A full page load keeps the server-rendered location list, URL,
+            // and session in sync (renames change the URL slug).
+            const pageSlug = TAB_TO_SLUG[state.currentTab] || 'schedule';
+            window.location.href = `/${result.slug}/${pageSlug}`;
         } else {
-            showToast(result.error || 'Failed to save location', 'error');
+            showToast(result.error || result.message || 'Failed to save location', 'error');
         }
     } catch (error) {
         console.error('Error saving business:', error);
@@ -2047,11 +2112,9 @@ async function deleteBusiness() {
         if (result.success) {
             showToast('Location deleted', 'success');
             dom.businessModal.classList.remove('active');
-            
-            // Refresh business list and switch to first business if needed
-            await refreshBusinessList();
+            window.location.href = result.redirect || '/app';
         } else {
-            showToast(result.error || 'Failed to delete location', 'error');
+            showToast(result.error || result.message || 'Failed to delete location', 'error');
         }
     } catch (error) {
         console.error('Error deleting business:', error);
@@ -2505,143 +2568,133 @@ function renderRoleLegend() {
     });
 }
 
-async function generateSchedule() {
+/**
+ * Re-render the schedule in whichever view is active.
+ */
+function renderCurrentScheduleView(schedule) {
+    if (state.scheduleViewMode === 'table') {
+        renderSimpleTableView(schedule || { slot_assignments: {} });
+    } else if (state.scheduleViewMode === 'timeline') {
+        renderTimelineView(schedule || {});
+    } else {
+        rebuildScheduleGrid();
+        if (schedule) renderSchedule(schedule);
+    }
+}
+
+/**
+ * Poll a background schedule job until it finishes.
+ * Resolves with the job record ({status, message, progress, result}).
+ */
+async function pollScheduleJob(jobId, onProgress) {
+    const started = Date.now();
+    let delay = 500;
+    while (Date.now() - started < 180000) {
+        await new Promise(r => setTimeout(r, delay));
+        let job;
+        try {
+            const response = await fetch(`/api/schedule/job/${jobId}`);
+            job = await response.json();
+        } catch (err) {
+            // transient network hiccup: keep polling
+            continue;
+        }
+        if (onProgress) onProgress(job);
+        if (job.status === 'done' || job.status === 'failed') return job;
+        delay = Math.min(1500, delay + 100);
+    }
+    return { status: 'failed', message: 'Timed out waiting for the schedule.' };
+}
+
+/**
+ * Start a generation ("generate") or alternative ("alternative") job and
+ * show its live progress until the result arrives.
+ */
+async function runScheduleJob(kind) {
+    const isAlternative = kind === 'alternative';
     dom.generateBtn.disabled = true;
     dom.alternativeBtn.disabled = true;
-    showLoading('Generating optimal schedule...');
-    updateScheduleStatus('Generating...', 'loading');
-    
-    // Get all current policies from settings
-    const policies = getAllPolicies();
-    
+    showLoading(isAlternative ? 'Finding a different schedule...' : 'Building your schedule...',
+                'Sending your staff, roles, and rules to the scheduler...');
+    startLoadingProgress();
+    updateScheduleStatus(isAlternative ? 'Searching...' : 'Generating...', 'loading');
+
     try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-        
-        const response = await fetch('/api/generate', {
+        const response = await fetch(isAlternative ? '/api/alternative' : '/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies, businessId: state.business.id, weekOffset: state.weekOffset }),
-            signal: controller.signal
+            body: JSON.stringify({
+                policies: getAllPolicies(),
+                businessId: state.business.id,
+                weekOffset: state.weekOffset,
+                weekStart: getWeekStartIso()
+            })
         });
-        
-        clearTimeout(timeoutId);
-        const data = await response.json();
-        
+        const started = await response.json();
+        if (!started.success || !started.job_id) {
+            throw new Error(started.message || 'Could not start the scheduler.');
+        }
+
+        const job = await pollScheduleJob(started.job_id, updateLoadingProgress);
+        if (job.status !== 'done' || !job.result) {
+            throw new Error(job.error || job.message || 'Schedule generation failed.');
+        }
+
+        const data = job.result;
         if (data.success) {
             state.currentSchedule = data.schedule;
             if (data.employees) {
                 state.employees = data.employees;
                 buildLookups();
             }
-            
-            // Save to localStorage
             saveScheduleToStorage();
-            
-            // Mark week as having a generated schedule (draft state)
             markWeekAsGenerated(state.weekOffset, 1);
-            
-            // Render based on current view mode
-            if (state.scheduleViewMode === 'table') {
-                renderSimpleTableView(data.schedule);
-            } else if (state.scheduleViewMode === 'timeline') {
-                renderTimelineView(data.schedule);
-            } else {
-                renderSchedule(data.schedule);
-            }
+            renderCurrentScheduleView(data.schedule);
             updateMetrics(data.schedule);
             updateEmployeeHours(data.schedule);
-            
+
             const coverage = data.schedule.coverage_percentage;
+            const label = `Solution #${data.schedule.solution_index}`;
             if (coverage >= 100) {
-                updateScheduleStatus(`100% Coverage - Solution #${data.schedule.solution_index}`, 'success');
+                updateScheduleStatus(`100% coverage - ${label}`, 'success');
             } else {
-                updateScheduleStatus(`${coverage}% Coverage - ${data.schedule.metrics.total_hours_still_needed}h needed`, 'warning');
+                updateScheduleStatus(`${coverage}% coverage - ${data.schedule.metrics.total_hours_still_needed}h still open - ${label}`, 'warning');
             }
-            
             dom.alternativeBtn.disabled = false;
             dom.exportBtn.disabled = false;
-            showToast(data.message, 'success');
+            showToast(data.message, coverage >= 100 ? 'success' : 'warning');
         } else {
-            updateScheduleStatus('No feasible schedule found', 'error');
-            showToast(data.message || 'Failed to generate schedule', 'error');
-            clearScheduleGrid();
+            updateScheduleStatus(isAlternative ? 'No different schedule found' : 'No schedule possible with these rules', 'error');
+            showToast(data.message || 'No schedule could be generated', 'error');
+            if (data.schedule && data.schedule.metrics) updateMetrics(data.schedule);
+            if (!isAlternative) clearScheduleGrid();
+            dom.alternativeBtn.disabled = !state.currentSchedule;
         }
     } catch (error) {
-        updateScheduleStatus('Error generating schedule', 'error');
-        showToast('Error generating schedule', 'error');
+        console.error(`[${kind}]`, error);
+        updateScheduleStatus(isAlternative ? 'Error finding alternative' : 'Error generating schedule', 'error');
+        showToast(error.message || 'Something went wrong. Please try again.', 'error');
+        dom.alternativeBtn.disabled = !state.currentSchedule;
     } finally {
         dom.generateBtn.disabled = false;
         hideLoading();
     }
 }
 
+async function generateSchedule() {
+    return runScheduleJob('generate');
+}
+
 async function findAlternative() {
-    dom.generateBtn.disabled = true;
-    dom.alternativeBtn.disabled = true;
-    showLoading('Finding alternative schedule...');
-    updateScheduleStatus('Searching...', 'loading');
-    
-    // Get all current policies from settings
-    const policies = getAllPolicies();
-    
-    try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 minute timeout
-        
-        const response = await fetch('/api/alternative', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ policies, businessId: state.business.id, weekOffset: state.weekOffset }),
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        const data = await response.json();
-        
-        if (data.success) {
-            state.currentSchedule = data.schedule;
-            
-            // Save to localStorage
-            saveScheduleToStorage();
-            
-            // Mark week as having a generated schedule (draft state)
-            markWeekAsGenerated(state.weekOffset, 1);
-            
-            // Render based on current view mode
-            if (state.scheduleViewMode === 'table') {
-                renderSimpleTableView(data.schedule);
-            } else if (state.scheduleViewMode === 'timeline') {
-                renderTimelineView(data.schedule);
-            } else {
-                renderSchedule(data.schedule);
-            }
-            updateMetrics(data.schedule);
-            updateEmployeeHours(data.schedule);
-            
-            const coverage = data.schedule.coverage_percentage;
-            updateScheduleStatus(`${coverage}% Coverage - Solution #${data.schedule.solution_index}`, coverage >= 100 ? 'success' : 'warning');
-            
-            dom.alternativeBtn.disabled = false;
-            showToast(data.message, 'success');
-        } else {
-            updateScheduleStatus('No more alternatives', 'warning');
-            showToast(data.message || 'No more alternatives found', 'warning');
-        }
-    } catch (error) {
-        updateScheduleStatus('Error finding alternative', 'error');
-        showToast('Error finding alternative', 'error');
-    } finally {
-        dom.generateBtn.disabled = false;
-        hideLoading();
-    }
+    return runScheduleJob('alternative');
 }
 
 async function resetSchedule() {
     try {
         await fetch('/api/reset', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ businessId: state.business.id, weekOffset: state.weekOffset, weekStart: getWeekStartIso() })
         });
         
         clearScheduleGrid();
@@ -2808,20 +2861,22 @@ async function publishSchedule() {
         const response = await fetch('/api/schedule/publish', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                businessId: state.business.id, 
-                weekOffset: state.weekOffset 
+            body: JSON.stringify({
+                businessId: state.business.id,
+                weekOffset: state.weekOffset,
+                weekStart: getWeekStartIso()
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (data.success) {
             // Mark the week as published locally
             markWeekAsPublished(state.weekOffset);
-            
+
             // Show success toast with week info
-            showToast(`Schedule published for ${weekRange}`, 'success');
+            const notified = data.notified ? ` and ${data.notified} staff notified` : '';
+            showToast(`Schedule published for ${weekRange}${notified}`, 'success');
             
             // Visual feedback - briefly highlight the publish button
             if (dom.publishBtn) {
@@ -4730,6 +4785,69 @@ function updateMetrics(schedule) {
     } else {
         dom.gapsCard.style.display = 'none';
     }
+
+    renderScheduleInsights(schedule);
+}
+
+/**
+ * Plain-English notes from the solver: why hours stayed open, who is under
+ * their minimum hours, clopenings it could not avoid, and what to change.
+ */
+function renderScheduleInsights(schedule) {
+    const container = document.getElementById('scheduleInsights');
+    if (!container) return;
+    const metrics = schedule?.metrics || {};
+    const suggestions = metrics.suggestions || [];
+    const underMin = metrics.employees_under_min || [];
+    const clopenings = metrics.clopenings || [];
+    const unfilled = metrics.unfilled_slots || [];
+
+    if (!suggestions.length && !underMin.length && !clopenings.length && !unfilled.length) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+    }
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    const fmtHour = (h) => { h = ((h % 24) + 24) % 24; return h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`; };
+    const dayName = (d) => (state.days[d] || '').substring(0, 3);
+
+    let html = '<div class="insights-title">Scheduler notes</div>';
+
+    if (unfilled.length) {
+        // Group the open hours by their reason so the list stays short
+        const byReason = {};
+        unfilled.forEach(u => {
+            const key = u.reason || 'Could not be filled.';
+            if (!byReason[key]) byReason[key] = [];
+            byReason[key].push(`${dayName(u.day)} ${fmtHour(u.hour)} (${u.role_name || u.role_id})`);
+        });
+        html += '<div class="insight-group"><div class="insight-heading">Open hours</div><ul>';
+        Object.entries(byReason).slice(0, 6).forEach(([reason, slots]) => {
+            const shown = slots.slice(0, 4).map(esc).join(', ') + (slots.length > 4 ? ` +${slots.length - 4} more` : '');
+            html += `<li><strong>${esc(reason)}</strong><span class="insight-slots">${shown}</span></li>`;
+        });
+        html += '</ul></div>';
+    }
+    if (suggestions.length) {
+        html += '<div class="insight-group"><div class="insight-heading">Suggestions</div><ul>';
+        suggestions.forEach(s => { html += `<li>${esc(s)}</li>`; });
+        html += '</ul></div>';
+    }
+    if (underMin.length) {
+        html += '<div class="insight-group"><div class="insight-heading">Under minimum hours</div><ul>';
+        underMin.forEach(e => { html += `<li>${esc(e.employee_name)}: ${e.hours}h of ${e.min_hours}h minimum</li>`; });
+        html += '</ul></div>';
+    }
+    if (clopenings.length) {
+        html += '<div class="insight-group"><div class="insight-heading">Short rest between shifts</div><ul>';
+        clopenings.forEach(c => {
+            html += `<li>${esc(c.employee_name)} closes ${dayName(c.close_day)} ${fmtHour(c.close_hour)} and opens ${dayName(c.open_day)} ${fmtHour(c.open_hour)} (${c.rest_hours}h rest)</li>`;
+        });
+        html += '</ul></div>';
+    }
+    container.innerHTML = html;
+    container.style.display = 'block';
 }
 
 function clearMetrics() {
@@ -4740,6 +4858,8 @@ function clearMetrics() {
     dom.solveTime.textContent = '—s';
     dom.overtimeHours.textContent = '—';
     if (dom.gapsCard) dom.gapsCard.style.display = 'none';
+    const insights = document.getElementById('scheduleInsights');
+    if (insights) { insights.innerHTML = ''; insights.style.display = 'none'; }
     
     const highlightMetric = dom.hoursStillNeeded?.closest('.metric');
     if (highlightMetric) highlightMetric.classList.remove('covered');

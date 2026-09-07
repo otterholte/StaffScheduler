@@ -101,12 +101,13 @@ def load_saved_schedule():
     from flask import request
     scenario = require_business(request.args.get('businessId'))
     week_start = parse_week_start(request.args.get('weekStart'), request.args.get('weekOffset', 0, type=int))
+    # "Nothing saved yet" is a normal answer, not an error, so it is a 200
     if is_demo_id(scenario.id):
-        return jsonify({'success': False, 'message': 'Demo schedules are not saved on the server.'}), 404
+        return jsonify({'success': False, 'message': 'Demo schedules are not saved on the server.'})
 
     schedule, status = db_service.get_schedule_with_status_from_db(scenario.id, week_start)
     if not schedule:
-        return jsonify({'success': False, 'message': 'No saved schedule for this week'}), 404
+        return jsonify({'success': False, 'message': 'No saved schedule for this week'})
     return jsonify({
         'success': True,
         'schedule': schedule.to_dict(),
