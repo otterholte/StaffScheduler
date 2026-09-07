@@ -5333,3 +5333,22 @@ function initEmployeeTheme() {
     } catch (err) { /* ignore */ }
 })();
 document.addEventListener('DOMContentLoaded', initEmployeeTheme);
+
+// ==================== "TODAY" BUTTON ====================
+(function setupEmployeeTodayButton() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('weekNavToday');
+        if (!btn) return;
+        btn.addEventListener('click', async () => {
+            if (employeeState.weekOffset === 0) return;
+            employeeState.weekOffset = 0;
+            if (typeof updateURLWeek === 'function') updateURLWeek(0);
+            if (typeof updateWeekDisplay === 'function') updateWeekDisplay();
+            if (typeof loadScheduleData === 'function') await loadScheduleData();
+        });
+        const sync = () => { btn.hidden = employeeState.weekOffset === 0; };
+        sync();
+        const label = document.getElementById('weekDateRange');
+        if (label) new MutationObserver(sync).observe(label, { childList: true, characterData: true, subtree: true });
+    });
+})();

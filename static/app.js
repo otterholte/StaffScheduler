@@ -9936,3 +9936,20 @@ function setupMobileSlideMenu() {
 // ==================== START ====================
 setupMobileSlideMenu();
 init();
+
+// ==================== "TODAY" BUTTON ====================
+// Shown only when the user is looking at a different week.
+(function setupTodayButton() {
+    document.addEventListener('DOMContentLoaded', () => {
+        const btn = document.getElementById('weekNavToday');
+        if (!btn) return;
+        btn.addEventListener('click', () => {
+            if (state.weekOffset !== 0) navigateWeek(-state.weekOffset);
+        });
+        const sync = () => { btn.hidden = state.weekOffset === 0; };
+        sync();
+        // Keep in sync whenever the week label is rewritten
+        const label = document.getElementById('weekDateRange');
+        if (label) new MutationObserver(sync).observe(label, { childList: true, characterData: true, subtree: true });
+    });
+})();

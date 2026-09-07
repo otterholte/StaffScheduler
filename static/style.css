@@ -10239,3 +10239,18 @@ body.manager-menu-open {
     font-size: 0.8rem;
     opacity: 0.85;
 }
+
+/* "Today" pill in the week navigator (hidden while viewing the current week) */
+.week-nav-today {
+    margin-left: 0.25rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    min-height: 32px;
+}
+.week-nav-today:hover { color: var(--text-primary); border-color: var(--accent-primary); }
