@@ -67,12 +67,17 @@ class EmailService:
             if text_body:
                 data["text"] = text_body
             
+            # Resend's API sits behind Cloudflare, which rejects Python's
+            # default "Python-urllib" user agent with error 1010. Identify
+            # ourselves like a normal HTTP client.
             req = Request(
                 "https://api.resend.com/emails",
                 data=json.dumps(data).encode('utf-8'),
                 headers={
                     "Authorization": f"Bearer {self.resend_api_key}",
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "User-Agent": "StaffScheduler/2.0 (+https://thestaffscheduler.com)",
                 },
                 method="POST"
             )

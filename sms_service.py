@@ -80,6 +80,8 @@ class SMSService:
             headers={
                 "Authorization": f"Basic {auth}",
                 "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": "StaffScheduler/2.0 (+https://thestaffscheduler.com)",
             },
             method="POST",
         )
