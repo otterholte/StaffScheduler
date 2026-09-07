@@ -5277,3 +5277,43 @@ document.addEventListener('DOMContentLoaded', () => {
         initPTONotifications(); // Also show PTO notifications on availability page
     }
 });
+
+// ==================== THEME (shared with the manager app via localStorage) ====================
+/**
+ * The stylesheet keys light mode off `body[data-theme="light"]`. The choice is
+ * stored in localStorage under 'theme', the same key the manager app and the
+ * settings page use, so it follows the person across every page.
+ */
+function applyEmployeeTheme(theme) {
+    if (theme === 'light') {
+        document.body.setAttribute('data-theme', 'light');
+    } else {
+        document.body.removeAttribute('data-theme');
+    }
+    const label = document.getElementById('themeToggleLabel');
+    if (label) label.textContent = theme === 'light' ? 'Dark mode' : 'Light mode';
+}
+
+function initEmployeeTheme() {
+    let theme = 'dark';
+    try { theme = localStorage.getItem('theme') || 'dark'; } catch (err) { /* private mode */ }
+    applyEmployeeTheme(theme);
+    const toggle = document.getElementById('themeToggleItem');
+    if (toggle) {
+        toggle.addEventListener('click', () => {
+            const next = document.body.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+            try { localStorage.setItem('theme', next); } catch (err) { /* ignore */ }
+            applyEmployeeTheme(next);
+        });
+    }
+}
+
+// Apply as early as possible to avoid a flash of the wrong theme
+(function () {
+    try {
+        if ((localStorage.getItem('theme') || 'dark') === 'light') {
+            document.body.setAttribute('data-theme', 'light');
+        }
+    } catch (err) { /* ignore */ }
+})();
+document.addEventListener('DOMContentLoaded', initEmployeeTheme);

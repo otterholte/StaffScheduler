@@ -131,7 +131,7 @@ body.menu-open {
     width: 320px;
     max-height: 400px;
     overflow-y: auto;
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
@@ -231,7 +231,7 @@ body.menu-open {
     height: 100dvh; /* Dynamic viewport height for mobile */
     width: 300px;
     max-width: 85vw;
-    background: #1a1a2e; /* Solid dark background */
+    background: var(--bg-solid); /* Solid dark background */
     border-left: 1px solid rgba(255, 255, 255, 0.1);
     z-index: 10000;
     transform: translateX(100%);
@@ -257,7 +257,7 @@ body.menu-open {
     justify-content: space-between;
     padding: 1.75rem 1.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    background: #252540;
+    background: var(--bg-tertiary);
     z-index: 1;
 }
 
@@ -841,7 +841,7 @@ body.menu-open {
     left: 0;
     right: 0;
     z-index: 9999;
-    background: #0f172a;
+    background: var(--bg-solid-deep);
     border-top: 2px solid #334155;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.8);
     padding: 1.4rem 1.75rem;
@@ -1143,7 +1143,7 @@ body.menu-open {
 }
 
 .cancel-pto-popup-content {
-    background: #1e1e2e;
+    background: var(--bg-solid-elevated);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 12px;
     padding: 1.5rem;
@@ -1234,7 +1234,7 @@ body.menu-open {
 /* PTO Block Popover */
 .pto-popover {
     position: absolute;
-    background: #1e1e2e;
+    background: var(--bg-solid-elevated);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 10px;
     padding: 1rem;
@@ -1286,7 +1286,7 @@ body.menu-open {
     font-size: 0.85rem;
     color: #cbd5e1;
     padding: 0.5rem 0.75rem;
-    background: #2a2a3e;
+    background: var(--bg-tertiary);
     border-radius: 6px;
     margin-bottom: 0.75rem;
 }
@@ -1333,7 +1333,7 @@ body.menu-open {
     transition: background 0.15s ease;
     border-left: 3px solid #f59e0b;
     margin-bottom: 0.5rem;
-    background: #2a2a1e;
+    background: var(--warning-bg);
 }
 
 .notification-item:hover {
@@ -1343,7 +1343,7 @@ body.menu-open {
 /* Counter offer styling - purple accent */
 .notification-item.counter-offer {
     border-left-color: #8b5cf6;
-    background: #272238;
+    background: var(--bg-tertiary);
 }
 
 .notification-item.counter-offer:hover {
@@ -1400,7 +1400,7 @@ body.menu-open {
 }
 
 .notification-item.pto-approved:hover {
-    background: #243d30;
+    background: var(--success-bg);
 }
 
 .notification-item.pto-approved .pto-status-icon {
@@ -1410,7 +1410,7 @@ body.menu-open {
 /* PTO Notification Items - Denied */
 .notification-item.pto-denied {
     border-left-color: #ef4444;
-    background: #2e1a1a;
+    background: var(--danger-bg);
 }
 
 .notification-item.pto-denied:hover {
@@ -2541,7 +2541,7 @@ body.menu-open {
 /* Alternating day column backgrounds */
 .employee-view .schedule-grid th.day-even,
 .employee-view .schedule-grid .slot.day-even {
-    background: #2c304e;
+    background: var(--bg-tertiary);
 }
 
 .employee-view .schedule-grid th.day-odd,
@@ -2875,7 +2875,7 @@ body.menu-open {
 }
 
 .modal-content {
-    background: #1a1a2e; /* Solid dark background */
+    background: var(--bg-solid); /* Solid dark background */
     border-radius: 16px;
     width: 100%;
     max-width: 500px;
@@ -3074,7 +3074,7 @@ body.menu-open {
     display: none;
     position: fixed;
     z-index: 99999;
-    background: #0f172a;
+    background: var(--bg-solid-deep);
     color: var(--text-primary, #f1f5f9);
     font-size: 0.88rem;
     padding: 0.6rem 1rem;
@@ -3091,7 +3091,7 @@ body.menu-open {
     position: absolute;
     bottom: calc(100% + 8px);
     right: 0;
-    background: #0f172a;
+    background: var(--bg-solid-deep);
     color: var(--text-primary, #f1f5f9);
     font-size: 0.9rem;
     padding: 0.6rem 1rem;
@@ -3180,7 +3180,7 @@ body.menu-open {
     width: 100%;
     max-width: 500px;
     max-height: 70vh;
-    background: #0f172a;
+    background: var(--bg-solid-deep);
     border-radius: 16px;
     padding: 1.5rem;
     margin: auto;
@@ -4266,7 +4266,7 @@ body.menu-open {
         border: none !important;
         z-index: 10001;
         box-shadow: none;
-        background: #12121f;
+        background: var(--bg-solid-deep);
         display: none;
         flex-direction: column;
         transform: none;
@@ -4284,7 +4284,7 @@ body.menu-open {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        background: #1a1a2e;
+        background: var(--bg-solid);
         flex-shrink: 0;
     }
     
@@ -4489,7 +4489,7 @@ body.menu-open {
 }
 
 .popover-content {
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
@@ -4502,7 +4502,7 @@ body.menu-open {
     position: absolute;
     width: 12px;
     height: 12px;
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border: 1px solid var(--border-color);
     border-right: none;
     border-bottom: none;
@@ -4562,7 +4562,7 @@ body.menu-open {
 
 .popover-body {
     padding: 1rem;
-    background: #1a1a2e;
+    background: var(--bg-solid);
 }
 
 .popover-employee {
@@ -4922,22 +4922,22 @@ body.menu-open {
 /* PTO Request Modal */
 .pto-modal {
     max-width: 420px;
-    background: #1a1a2e !important; /* Solid dark background */
+    background: var(--bg-solid) !important; /* Solid dark background */
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .pto-modal .modal-body {
-    background: #1a1a2e;
+    background: var(--bg-solid);
 }
 
 .pto-modal .modal-header {
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding: 1rem 1.25rem;
 }
 
 .pto-modal .modal-footer {
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     padding: 0.75rem 1.25rem;
 }
@@ -5015,7 +5015,7 @@ body.menu-open {
 /* Dark theme for date picker dropdown */
 #ptoStartDate,
 #ptoEndDate {
-    color-scheme: dark;
+    color-scheme: var(--color-scheme, dark);
 }
 
 /* Dark theme for date picker dropdown (Chromium browsers) */
@@ -5039,13 +5039,13 @@ body.menu-open {
 /* Firefox date input styling */
 @-moz-document url-prefix() {
     .pto-form-group input[type="date"] {
-        color-scheme: dark;
+        color-scheme: var(--color-scheme, dark);
     }
 }
 
 /* Force dark color scheme for date picker */
 .pto-form-group input[type="date"] {
-    color-scheme: dark;
+    color-scheme: var(--color-scheme, dark);
 }
 
 .pto-form-group input[type="date"]:focus,
@@ -5333,23 +5333,23 @@ body.menu-open {
 /* ==================== SWAP MODAL - Compact on Mobile ==================== */
 .swap-modal {
     max-width: 480px;
-    background: #1a1a2e !important;
+    background: var(--bg-solid) !important;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .swap-modal .modal-header {
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     padding: 1rem 1.25rem;
 }
 
 .swap-modal .modal-body {
-    background: #1a1a2e;
+    background: var(--bg-solid);
     padding: 1rem 1.25rem;
 }
 
 .swap-modal .modal-footer {
-    background: #1a1a2e;
+    background: var(--bg-solid);
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     padding: 0.75rem 1.25rem;
 }
@@ -5449,7 +5449,7 @@ body.menu-open {
 /* Swap Response Modal - Also compact on mobile */
 .swap-response-modal {
     max-width: 480px;
-    background: #1a1a2e !important;
+    background: var(--bg-solid) !important;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
@@ -5478,3 +5478,14 @@ body.menu-open {
     }
 }
 
+
+/* Theme toggle rendered as a menu row (it's a <button>, not a link) */
+button.slide-menu-item {
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}

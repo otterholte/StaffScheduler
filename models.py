@@ -37,6 +37,9 @@ class User(db.Model, UserMixin):
     is_active = db.Column(db.Boolean, default=True)
     is_verified = db.Column(db.Boolean, default=False)
     must_change_password = db.Column(db.Boolean, default=False)  # True for temp passwords
+
+    # Promo code entered at sign-up (e.g. the founding-members free offer)
+    promo_code = db.Column(db.String(40), nullable=True)
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -80,6 +83,7 @@ class User(db.Model, UserMixin):
             'is_manager': self.is_manager,
             'linked_employee_id': self.linked_employee_id,
             'must_change_password': self.must_change_password,
+            'promo_code': self.promo_code,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'last_login': self.last_login.isoformat() if self.last_login else None
         }
@@ -819,6 +823,7 @@ def init_db(app):
 _COLUMN_MIGRATIONS = [
     ('users', 'linked_employee_id', 'INTEGER REFERENCES db_employees(id)'),
     ('users', 'must_change_password', 'BOOLEAN DEFAULT FALSE'),
+    ('users', 'promo_code', 'VARCHAR(40)'),
     ('businesses', 'coverage_config_json', 'TEXT'),
     ('db_employees', 'notify_email', 'BOOLEAN DEFAULT TRUE'),
     ('db_employees', 'notify_sms', 'BOOLEAN DEFAULT TRUE'),

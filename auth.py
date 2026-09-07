@@ -95,9 +95,11 @@ def register():
         return redirect(default_landing_url())
 
     if request.method == 'POST':
-        email, username, password, confirm, first_name, last_name, company_name = _form(
-            'email', 'username', 'password', 'confirm_password', 'first_name', 'last_name', 'company_name')
+        email, username, password, confirm, first_name, last_name, company_name, promo_code = _form(
+            'email', 'username', 'password', 'confirm_password', 'first_name', 'last_name', 'company_name',
+            'promo_code')
         email = (email or '').lower()
+        promo_code = (promo_code or '').strip().upper()[:40] or None
 
         errors = []
         if not email or '@' not in email or '.' not in email.split('@')[-1]:
@@ -125,7 +127,7 @@ def register():
             return render_template('register.html', form=request.form)
 
         user = User(email=email, username=username, first_name=first_name or None,
-                    last_name=last_name or None, company_name=company_name)
+                    last_name=last_name or None, company_name=company_name, promo_code=promo_code)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()

@@ -1,0 +1,5 @@
+# Normalize line endings so build files never carry CRLF
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

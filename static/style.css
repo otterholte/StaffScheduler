@@ -15,6 +15,10 @@
     /* Solid backgrounds for specific elements */
     --bg-card: rgba(25, 25, 45, 0.85);
     --bg-header: rgba(20, 20, 40, 0.9);
+    --bg-solid: #1a1a2e;          /* fully opaque surface for modals and sheets */
+    --bg-solid-elevated: #1e1e2e;
+    --bg-solid-deep: #12121f;
+    --color-scheme: dark;         /* native controls (date pickers) follow the theme */
     
     /* Text Colors */
     --text-primary: #f0f0f5;
@@ -71,7 +75,11 @@ body[data-theme="light"] {
     --bg-hover: #e8e8f0;
     --bg-card: #ffffff;
     --bg-header: rgba(255, 255, 255, 0.95);
-    
+    --bg-solid: #ffffff;
+    --bg-solid-elevated: #f7f7fb;
+    --bg-solid-deep: #ffffff;
+    --color-scheme: light;
+
     --text-primary: #1a1a2e;
     --text-secondary: #5a5a70;
     --text-muted: #9090a0;

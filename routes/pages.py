@@ -53,7 +53,45 @@ def support_page():
 
 @pages_bp.route('/contact')
 def contact_page():
-    return render_template('contact.html', user=current_user)
+    return render_template('contact.html', user=current_user, support_email=_support_email())
+
+
+def _support_email() -> str:
+    import os
+    return os.environ.get('SUPPORT_EMAIL', 'otterholteli@gmail.com')
+
+
+@pages_bp.route('/api/contact', methods=['POST'])
+def contact_submit():
+    """Contact form: forwards the message to the support inbox by email."""
+    from email_service import get_email_service
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()[:120]
+    email = (data.get('email') or '').strip()[:200]
+    subject = (data.get('subject') or 'general').strip()[:60]
+    company = (data.get('company') or '').strip()[:120]
+    message = (data.get('message') or '').strip()[:4000]
+    if not name or not email or '@' not in email or not message:
+        return jsonify({'success': False, 'message': 'Please fill in your name, email, and a message.'}), 400
+
+    svc = get_email_service()
+    if not svc.is_configured():
+        return jsonify({'success': False,
+                        'message': f'Email is not set up on this server yet. Please write to {_support_email()} directly.'}), 503
+
+    ok, info = svc.send_notification(
+        to_email=_support_email(),
+        subject=f"[Staff Scheduler contact] {subject} from {name}",
+        title="📬 New contact form message",
+        greeting=f"From {name} <{email}>",
+        intro=(f"Company: {company}<br>" if company else '') + f"Topic: {subject}",
+        detail_lines=[line for line in message.splitlines() if line.strip()] or [message],
+        footer_note=f"Reply directly to {email}.",
+    )
+    if not ok:
+        print(f"[CONTACT] send failed: {info}", flush=True)
+        return jsonify({'success': False, 'message': f'We could not send your message. Please email {_support_email()}.'}), 500
+    return jsonify({'success': True, 'message': "Thanks! Your message is on its way. We'll reply within a day."})
 
 
 @pages_bp.route('/api/health')

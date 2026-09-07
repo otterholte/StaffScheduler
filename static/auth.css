@@ -672,3 +672,16 @@ button:focus-visible,
 input:focus-visible {
     outline: none;
 }
+
+/* Optional-field label and helper text (registration promo code) */
+.optional-label {
+    font-weight: 400;
+    color: var(--text-muted, #9090a0);
+    font-size: 0.8em;
+}
+.field-hint {
+    margin: 0.45rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary, #b0b0c0);
+    line-height: 1.4;
+}

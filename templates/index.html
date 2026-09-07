@@ -19,7 +19,11 @@
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
             </svg>
-            <span>Demo Mode - <a href="#" id="demoBannerSignIn">Sign in</a> to save your data</span>
+            {% if user %}
+            <span>Demo Mode - changes here are not saved. <a href="{{ my_business_url or '/app' }}">Back to your business</a></span>
+            {% else %}
+            <span>Demo Mode - <a href="/auth/register" id="demoBannerSignIn">Create a free account</a> to save your data</span>
+            {% endif %}
         </div>
     </div>
     {% endif %}
