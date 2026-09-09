@@ -3124,6 +3124,7 @@ function clearScheduleGrid() {
 }
 
 function renderSchedule(schedule) {
+    setScheduleLegendVisible(true); // the grid has no filter chips, so it keeps the legend
     clearScheduleGrid();
     
     const slotAssignments = schedule.slot_assignments || {};
@@ -3559,17 +3560,23 @@ function renderScheduleLegend() {
 }
 
 // ==================== SIMPLE TABLE VIEW ====================
-let tableFilterWired = false;
+const scheduleFilterWired = {};
 
-/** Search box + role chips above the table view. Chips rebuild on each render; listeners attach once. */
-function renderTableFilterChips() {
-    const bar = document.getElementById('tableFilterBar');
+/**
+ * Search box + role chips above a schedule view ('table' or 'timeline').
+ * Both bars share one filter (state.tableFilter), so switching views keeps it.
+ * Chips rebuild on each render; listeners attach once per bar.
+ */
+function renderScheduleFilterBar(prefix) {
+    const bar = document.getElementById(`${prefix}FilterBar`);
     if (!bar) return;
-    const chips = bar.querySelector('#tableRoleChips');
-    const input = bar.querySelector('#tableSearchInput');
-    const clearBtn = bar.querySelector('#tableFilterClear');
+    const chips = bar.querySelector(`#${prefix}RoleChips`);
+    const input = bar.querySelector(`#${prefix}SearchInput`);
+    const clearBtn = bar.querySelector(`#${prefix}FilterClear`);
     const filter = state.tableFilter;
+    const rerender = () => renderCurrentScheduleView(state.currentSchedule || { slot_assignments: {} });
 
+    if (input.value !== (filter.search || '') && document.activeElement !== input) input.value = filter.search || '';
     chips.innerHTML = '';
     [...state.roles].sort((a, b) => a.name.localeCompare(b.name)).forEach(role => {
         const chip = document.createElement('button');
@@ -3581,7 +3588,7 @@ function renderTableFilterChips() {
         chip.title = filter.roles.has(role.id) ? `Hide ${role.name}` : `Show only ${role.name}${filter.roles.size ? ' (adds to current filter)' : ''}`;
         chip.addEventListener('click', () => {
             if (filter.roles.has(role.id)) filter.roles.delete(role.id); else filter.roles.add(role.id);
-            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+            rerender();
         });
         chips.appendChild(chip);
     });
@@ -3589,19 +3596,29 @@ function renderTableFilterChips() {
     clearBtn.hidden = !active;
     bar.classList.toggle('filter-active', active);
 
-    if (!tableFilterWired) {
-        tableFilterWired = true;
+    if (!scheduleFilterWired[prefix]) {
+        scheduleFilterWired[prefix] = true;
         input.addEventListener('input', () => {
             filter.search = input.value;
-            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+            rerender();
         });
         clearBtn.addEventListener('click', () => {
             filter.search = '';
             filter.roles.clear();
             input.value = '';
-            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+            rerender();
         });
     }
+}
+
+function renderTableFilterChips() {
+    renderScheduleFilterBar('table');
+}
+
+/** The colour legend under the grid is redundant when the filter chips are showing. */
+function setScheduleLegendVisible(visible) {
+    const wrap = document.getElementById('scheduleLegendWrapper');
+    if (wrap) wrap.hidden = !visible;
 }
 
 function renderSimpleTableView(schedule) {
@@ -3803,6 +3820,7 @@ function renderSimpleTableView(schedule) {
     
     // "Still needed" row: one badge per open shift, naming the role, wrapping onto new lines
     renderTableFilterChips();
+    setScheduleLegendVisible(false);
     const openRanges = (schedule?.metrics?.unfilled_ranges?.length
         ? schedule.metrics.unfilled_ranges
         : groupUnfilledRanges(schedule?.metrics?.unfilled_slots || []));
@@ -3973,20 +3991,52 @@ function renderSimpleTableView(schedule) {
             row.innerHTML = html;
             tbody.appendChild(row);
 
-            // Expandable details: availability for the week, then rules/preferences
+            // Expandable details: an "Available" row lined up under the day
+            // columns (so you can compare it with the shifts above at a glance),
+            // then the person's rules and info beneath it.
             const fullEmp = employeeMap[emp.id];
             if (fullEmp) {
-                const detailRow = document.createElement('tr');
-                detailRow.className = 'emp-detail-row';
-                detailRow.hidden = true;
-                detailRow.innerHTML = `<td colspan="9">${buildEmployeeDetailHtml(fullEmp, { availability: true, rules: true })}</td>`;
-                tbody.appendChild(detailRow);
+                const avail = employeeAvailabilityByDay(fullEmp);
+                const prefs = slotsToRangesByDay(fullEmp.preferences);
+                let availHtml = `<td class="name-col emp-avail-label"><span>Available</span></td>`;
+                let availTotal = 0;
+                for (let d = 0; d < 7; d++) {
+                    const dayClass = d % 2 === 0 ? 'day-even' : 'day-odd';
+                    const ranges = avail[d] || [];
+                    ranges.forEach(([s, e]) => { availTotal += (e - s); });
+                    const isOpen = (state.daysOpen || []).includes(d);
+                    const scheduled = (days[d] || []).length > 0;
+                    let cell;
+                    if (ranges.length) {
+                        cell = ranges.map(([s, e]) => `<span class="avail-chip">${formatHourMinute(s)}–${formatHourMinute(e)}</span>`).join('');
+                        if (prefs[d]?.length) cell += `<span class="avail-pref" title="Preferred hours">prefers ${escHtml(formatRangeList(prefs[d]))}</span>`;
+                    } else {
+                        cell = `<span class="avail-none">${isOpen ? 'Not available' : 'Closed'}</span>`;
+                    }
+                    const conflict = scheduled && !ranges.length ? ' avail-conflict' : '';
+                    availHtml += `<td class="avail-cell ${dayClass}${conflict}">${cell}</td>`;
+                }
+                availHtml += `<td class="total-hours avail-total" title="Hours available this week">${Math.round(availTotal)}h</td>`;
+
+                const availRow = document.createElement('tr');
+                availRow.className = 'emp-detail-row emp-avail-row';
+                availRow.hidden = true;
+                availRow.innerHTML = availHtml;
+
+                const rulesRow = document.createElement('tr');
+                rulesRow.className = 'emp-detail-row emp-rules-row';
+                rulesRow.hidden = true;
+                rulesRow.innerHTML = `<td colspan="9">${buildEmployeeDetailHtml(fullEmp, { availability: false, rules: true })}</td>`;
+
+                tbody.appendChild(availRow);
+                tbody.appendChild(rulesRow);
                 row.addEventListener('click', () => {
-                    const open = !detailRow.hidden;
+                    const open = !availRow.hidden;
                     tbody.querySelectorAll('.emp-detail-row').forEach(r => { r.hidden = true; });
                     tbody.querySelectorAll('.emp-row.expanded').forEach(r => r.classList.remove('expanded'));
                     if (!open) {
-                        detailRow.hidden = false;
+                        availRow.hidden = false;
+                        rulesRow.hidden = false;
                         row.classList.add('expanded');
                     }
                 });
@@ -4448,13 +4498,14 @@ const timelineLaneMemory = {};
 const laneKey = (dayIdx, roleId, empId) => `${dayIdx}|${roleId}|${empId}`;
 
 /** Lane packing: keep each bar on its remembered lane when possible, otherwise the first free one. */
-function packIntoLanes(items, dayIdx, roleId) {
+function packIntoLanes(items, dayIdx, roleId, compact = false) {
     const lanes = [];
     const fits = (lane, item) => !lane.some(s => item.startHour < s.endHour && item.endHour > s.startHour);
     items.sort((a, b) => a.startHour - b.startHour || a.endHour - b.endHour);
     items.forEach(item => {
         const key = laneKey(dayIdx, roleId, item.empId);
-        let idx = timelineLaneMemory[key];
+        // compact = ignore remembered lanes (used while a search hides other people)
+        let idx = compact ? undefined : timelineLaneMemory[key];
         if (idx !== undefined && idx < 6) {
             while (lanes.length <= idx) lanes.push([]);
             if (!fits(lanes[idx], item)) idx = undefined;
@@ -4469,7 +4520,7 @@ function packIntoLanes(items, dayIdx, roleId) {
             }
         }
         lanes[idx].push(item);
-        timelineLaneMemory[key] = idx;
+        if (!compact) timelineLaneMemory[key] = idx;
     });
     // Drop trailing empty lanes (a remembered lane that is no longer used)
     while (lanes.length > 1 && lanes[lanes.length - 1].length === 0) lanes.pop();
@@ -4990,8 +5041,17 @@ function renderTimelineView(schedule) {
     });
 
     const weekDates = getWeekDates(state.weekOffset);
-    const rolesSorted = [...state.roles].sort((a, b) => a.name.localeCompare(b.name));
     const knownRoles = new Set(state.roles.map(r => r.id));
+
+    // Search + role chips (shared with the table view); the chips double as the legend
+    renderScheduleFilterBar('timeline');
+    setScheduleLegendVisible(false);
+    const filter = state.tableFilter || { search: '', roles: new Set() };
+    const search = (filter.search || '').trim().toLowerCase();
+    const rolesSorted = [...state.roles]
+        .filter(r => !filter.roles.size || filter.roles.has(r.id))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const personMatches = (empId) => !search || (employeeMap[empId]?.name || '').toLowerCase().includes(search);
 
     // Header: Day | Role | hour columns
     const headerDiv = document.createElement('div');
@@ -5041,8 +5101,8 @@ function renderTimelineView(schedule) {
         });
         if (dayPTO.length > 0) slotsDiv.appendChild(buildTimelinePtoRow(dayPTO));
 
-        // Shifts and open hours for the day, grouped by role
-        const segments = buildTimelineSegmentsForDay(slotAssignments, dayIdx);
+        // Shifts and open hours for the day, grouped by role (search hides other people's bars)
+        const segments = buildTimelineSegmentsForDay(slotAssignments, dayIdx).filter(s => personMatches(s.empId));
         const gaps = hasSchedule ? buildTimelineGapsForDay(schedule, dayIdx) : [];
         const segByRole = {};
         const gapByRole = {};
@@ -5056,7 +5116,7 @@ function renderTimelineView(schedule) {
         });
 
         const roleRows = rolesSorted.map(r => ({ id: r.id, name: r.name, color: r.color }));
-        if (segByRole.__other || gapByRole.__other) roleRows.push({ id: '__other', name: 'Other', color: '#64748b' });
+        if (!filter.roles.size && (segByRole.__other || gapByRole.__other)) roleRows.push({ id: '__other', name: 'Other', color: '#64748b' });
 
         roleRows.forEach(role => {
             const roleRow = document.createElement('div');
@@ -5098,7 +5158,7 @@ function renderTimelineView(schedule) {
                 lanes.appendChild(gapLane);
             }
 
-            const packed = packIntoLanes(shiftsHere, dayIdx, role.id);
+            const packed = packIntoLanes(shiftsHere, dayIdx, role.id, !!search);
             if (packed.length === 0) packed.push([]);
             packed.forEach((laneShifts, laneIndex) => {
                 const lane = document.createElement('div');
@@ -5128,8 +5188,6 @@ function renderTimelineView(schedule) {
         rowDiv.appendChild(slotsDiv);
         container.appendChild(rowDiv);
     });
-
-    renderScheduleLegend();
 }
 
 // ==================== COVERAGE RECOMPUTE (after manual edits) ====================
