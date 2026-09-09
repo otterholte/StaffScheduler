@@ -11617,3 +11617,24 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-header .timeline-he
     .employee-hours-grid .emp-badges { grid-area: info; }
     .employee-hours-grid .emp-roles { grid-area: roles; }
 }
+
+/* Day header contrast: halfway between the subtle and strong versions */
+.timeline-row.day-even .timeline-day-label,
+.timeline-row.day-even .timeline-day-header {
+    background: rgba(36, 40, 68, 0.93);
+}
+
+.timeline-row.day-odd .timeline-day-label,
+.timeline-row.day-odd .timeline-day-header {
+    background: rgba(72, 77, 121, 0.93);
+}
+
+body[data-theme="light"] .timeline-row.day-even .timeline-day-label,
+body[data-theme="light"] .timeline-row.day-even .timeline-day-header {
+    background: rgba(234, 238, 245, 1);
+}
+
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-label,
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
+    background: rgba(203, 213, 226, 1);
+}
