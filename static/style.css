@@ -10761,3 +10761,290 @@ body[data-theme="light"] .avail-meta-pill.pill-pt { color: #047857; }
         padding: 0 0.35rem;
     }
 }
+
+/* =============================================================================
+   TIMELINE REDESIGN
+   Three fixed columns (Day | Role | hours) with a sticky hour header, faint
+   hour grid lines, role rows tinted by their role colour, and bars with
+   breathing room. These rules intentionally override the older timeline
+   styles above.
+   ============================================================================= */
+:root {
+    --tl-day-col: 78px;
+    --tl-role-col: 132px;
+    --tl-lane-h: 32px;
+    --tl-line: rgba(255, 255, 255, 0.07);
+    --tl-line-strong: rgba(255, 255, 255, 0.12);
+    --tl-row-a: rgba(255, 255, 255, 0.015);
+    --tl-row-b: rgba(255, 255, 255, 0.04);
+}
+
+body[data-theme="light"] {
+    --tl-line: rgba(15, 23, 42, 0.07);
+    --tl-line-strong: rgba(15, 23, 42, 0.14);
+    --tl-row-a: rgba(15, 23, 42, 0.015);
+    --tl-row-b: rgba(15, 23, 42, 0.04);
+}
+
+.timeline-grid {
+    gap: 0;
+    border: 1px solid var(--tl-line-strong);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+/* ---- Header: sticks to the top while you scroll the week ---------------- */
+.timeline-header {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--tl-line-strong);
+    box-shadow: 0 1px 0 var(--tl-line);
+}
+
+.timeline-header-day,
+.timeline-header-role {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.55rem 0.75rem;
+    border-right: 1px solid var(--tl-line);
+    background: transparent;
+}
+
+.timeline-header-day {
+    width: var(--tl-day-col);
+}
+
+.timeline-header-role {
+    width: var(--tl-role-col);
+}
+
+.timeline-header-hours {
+    background-image: linear-gradient(to right, var(--tl-line) 1px, transparent 1px);
+    background-size: calc(100% / var(--hours, 12)) 100%;
+}
+
+.timeline-hour-label {
+    padding: 0.55rem 0 0.55rem 6px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* ---- Day rows ----------------------------------------------------------- */
+.timeline-row,
+.timeline-row.day-even,
+.timeline-row.day-odd {
+    background: transparent;
+    border-radius: 0;
+    border-bottom: 2px solid var(--tl-line-strong);
+    min-height: 0;
+}
+
+.timeline-row:last-child {
+    border-bottom: none;
+}
+
+.timeline-day-label,
+body[data-theme="light"] .timeline-day-label {
+    width: var(--tl-day-col);
+    padding: 0.6rem 0.75rem;
+    background: rgba(0, 0, 0, 0.14);
+    border-right: 1px solid var(--tl-line);
+    border-radius: 0;
+    justify-content: flex-start;
+    position: sticky;
+    left: 0;
+    z-index: 3;
+}
+
+body[data-theme="light"] .timeline-day-label {
+    background: rgba(15, 23, 42, 0.05);
+}
+
+.timeline-day-label .day-name {
+    font-size: 0.8rem;
+}
+
+.timeline-day-label .day-date {
+    font-size: 0.68rem;
+}
+
+.timeline-row.day-even .timeline-slots,
+.timeline-row.day-odd .timeline-slots,
+.timeline-slots {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    gap: 0;
+    min-height: 0;
+}
+
+.timeline-row.day-even .timeline-slots:hover,
+.timeline-row.day-odd .timeline-slots:hover,
+.timeline-slots:hover {
+    background: transparent;
+    border-color: transparent;
+}
+
+/* ---- Role rows ---------------------------------------------------------- */
+.timeline-role-row {
+    border-top: 1px solid var(--tl-line);
+    background: var(--tl-row-a);
+}
+
+.timeline-role-row:first-child {
+    border-top: none;
+}
+
+.timeline-role-row:nth-child(even) {
+    background: var(--tl-row-b);
+}
+
+.timeline-role-label,
+body[data-theme="light"] .timeline-role-label {
+    width: var(--tl-role-col);
+    padding: 0 0.75rem 0 0.65rem;
+    gap: 8px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--role-color, #64748b) 9%, transparent);
+    border-right: 1px solid var(--tl-line);
+    box-shadow: inset 3px 0 0 var(--role-color, #64748b);
+    position: sticky;
+    left: var(--tl-day-col);
+    z-index: 2;
+}
+
+.timeline-role-label .role-dot {
+    width: 9px;
+    height: 9px;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--role-color, #64748b) 30%, transparent);
+}
+
+/* ---- Lanes: hour grid lines, hover states, drop targets ------------------ */
+.timeline-role-lanes {
+    padding: 4px 0;
+    gap: 3px;
+    border-radius: 0;
+    background-image: linear-gradient(to right, var(--tl-line) 1px, transparent 1px);
+    background-size: calc(100% / var(--hours, 12)) 100%;
+}
+
+.timeline-role-lanes.drop-ready {
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.35);
+}
+
+.timeline-role-lanes.drag-over {
+    background-color: rgba(99, 102, 241, 0.12);
+    box-shadow: inset 0 0 0 2px var(--accent-primary);
+}
+
+.timeline-slots-row {
+    height: var(--tl-lane-h);
+}
+
+.timeline-role-lanes .timeline-slots-row.timeline-empty-row {
+    height: var(--tl-lane-h);
+}
+
+.timeline-role-lanes .timeline-slots-row:not(.timeline-gap-row):hover {
+    background: rgba(99, 102, 241, 0.06);
+}
+
+.timeline-role-lanes .timeline-slots-row.timeline-empty-row:hover::after {
+    content: '+ Add shift';
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    pointer-events: none;
+}
+
+/* ---- Shift bars ---------------------------------------------------------- */
+.timeline-shift-block {
+    top: 3px;
+    height: calc(100% - 6px);
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    /* transparent right edge = a visible gap between back-to-back bars */
+    border-right: 3px solid transparent;
+    background-clip: padding-box;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+}
+
+.timeline-shift-block:hover {
+    transform: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+    filter: brightness(1.08);
+}
+
+.timeline-shift-block .shift-person {
+    font-weight: 700;
+}
+
+.timeline-shift-block .shift-role {
+    font-weight: 500;
+    opacity: 0.85;
+}
+
+/* ---- Open shifts (still needed) ---------------------------------------- */
+.timeline-gap-row {
+    background: transparent !important;
+}
+
+.timeline-gap-block {
+    top: 3px;
+    height: calc(100% - 6px);
+    border-radius: 6px;
+    border: 1.5px dashed var(--danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.timeline-gap-block .gap-label {
+    background: transparent;
+    padding: 0 4px;
+    font-size: 0.68rem;
+}
+
+/* ---- Time off row -------------------------------------------------------- */
+.timeline-pto-role-row .timeline-role-label {
+    color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+    :root {
+        --tl-day-col: 62px;
+        --tl-role-col: 88px;
+    }
+    .timeline-role-label,
+    body[data-theme="light"] .timeline-role-label {
+        font-size: 0.66rem;
+        padding: 0 0.4rem 0 0.5rem;
+    }
+    .timeline-header-day,
+    .timeline-header-role,
+    .timeline-day-label {
+        padding-left: 0.4rem;
+        padding-right: 0.4rem;
+    }
+}
+
+/* Details panels are left-aligned even inside centered table cells */
+.emp-detail,
+.emp-detail-list,
+.emp-detail-day {
+    text-align: left;
+}

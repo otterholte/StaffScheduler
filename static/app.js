@@ -4417,7 +4417,7 @@ function buildTimelineShiftBlock(shift, schedule, weeklyStats, totalHours, role)
 
     block.innerHTML = `
         <div class="shift-resize-handle left" data-edge="left"></div>
-        <span class="shift-name">${escHtml(shift.emp.name)} - ${escHtml(roleName)}</span>
+        <span class="shift-name"><span class="shift-person">${escHtml(shift.emp.name)}</span><span class="shift-role"> - ${escHtml(roleName)}</span></span>
         <div class="shift-resize-handle right" data-edge="right"></div>
     `;
     block.title = `${shift.emp.name} - ${roleName} (${empType})\n${timeDisplay}\n\nThis week: ${stats.hours}h of ${shift.emp.min_hours || 0}-${shift.emp.max_hours || 40}h, ${stats.days.size} day${stats.days.size === 1 ? '' : 's'}\n\nDrag to move (within this row or to another day/role) · Drag the edges to resize · Click to edit`;
@@ -4538,6 +4538,8 @@ function buildTimelinePtoRow(dayPTO) {
     label.innerHTML = `<span class="role-dot" style="background:#8b5cf6"></span><span class="role-label-text">Time off</span>`;
     const lanes = document.createElement('div');
     lanes.className = 'timeline-role-lanes';
+    lanes.style.setProperty('--hours', state.hours.length);
+    roleRow.style.setProperty('--role-color', '#8b5cf6');
     const lane = document.createElement('div');
     lane.className = 'timeline-slots-row timeline-pto-row';
     dayPTO.forEach(pto => {
@@ -4595,6 +4597,7 @@ function renderTimelineView(schedule) {
     roleHead.textContent = 'Role';
     const hoursHead = document.createElement('div');
     hoursHead.className = 'timeline-header-hours';
+    hoursHead.style.setProperty('--hours', totalHours);
     state.hours.forEach(hour => {
         const label = document.createElement('div');
         label.className = 'timeline-hour-label';
@@ -4653,6 +4656,7 @@ function renderTimelineView(schedule) {
             roleRow.className = 'timeline-role-row';
             roleRow.dataset.dayIdx = dayIdx;
             roleRow.dataset.roleId = role.id;
+            roleRow.style.setProperty('--role-color', role.color || '#64748b');
 
             const shiftsHere = segByRole[role.id] || [];
             const gapsHere = gapByRole[role.id] || [];
@@ -4665,6 +4669,7 @@ function renderTimelineView(schedule) {
             lanes.className = 'timeline-role-lanes';
             lanes.dataset.dayIdx = dayIdx;
             lanes.dataset.roleId = role.id;
+            lanes.style.setProperty('--hours', totalHours); // drives the hour grid lines
 
             // Open hours for this role sit in their own lane at the top of the row
             if (gapsHere.length) {

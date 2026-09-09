@@ -30,7 +30,7 @@ for _stream in (sys.stdout, sys.stderr):
         except Exception:
             pass
 
-from flask import Flask, jsonify, redirect, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, url_for
 from flask_login import LoginManager
 from werkzeug.exceptions import HTTPException
 
@@ -74,6 +74,23 @@ def create_app() -> Flask:
     app.register_blueprint(employee_api_bp)
 
     _register_error_handlers(app)
+
+    # Versioned static URLs: /static/style.css?v=<file mtime>. Browsers and
+    # Cloudflare may cache static files for hours, so every deploy that changes
+    # a file changes its URL and users never see a stale stylesheet or script.
+    _asset_versions = {}
+
+    @app.template_global('asset')
+    def asset_url(filename: str) -> str:
+        version = _asset_versions.get(filename)
+        if version is None:
+            path = os.path.join(app.static_folder, filename)
+            try:
+                version = str(int(os.path.getmtime(path)))
+            except OSError:
+                version = '0'
+            _asset_versions[filename] = version
+        return f"{url_for('static', filename=filename)}?v={version}"
 
     @app.after_request
     def no_cache_for_html(response):
