@@ -5053,30 +5053,29 @@ function renderTimelineView(schedule) {
         .sort((a, b) => a.name.localeCompare(b.name));
     const personMatches = (empId) => !search || (employeeMap[empId]?.name || '').toLowerCase().includes(search);
 
-    // Header: Day | Role | hour columns
-    const headerDiv = document.createElement('div');
-    headerDiv.className = 'timeline-header';
-    const dayHead = document.createElement('div');
-    dayHead.className = 'timeline-header-day';
-    dayHead.textContent = 'Day';
-    const roleHead = document.createElement('div');
-    roleHead.className = 'timeline-header-role';
-    roleHead.textContent = 'Role';
-    const hoursHead = document.createElement('div');
-    hoursHead.className = 'timeline-header-hours';
-    hoursHead.style.setProperty('--hours', totalHours);
-    state.hours.forEach(hour => {
-        const label = document.createElement('div');
-        label.className = 'timeline-hour-label';
-        label.textContent = formatHour(hour);
-        hoursHead.appendChild(label);
-    });
-    const closingLabel = document.createElement('div');
-    closingLabel.className = 'timeline-hour-label timeline-closing-hour';
-    closingLabel.textContent = formatHour(state.endHour);
-    hoursHead.appendChild(closingLabel);
-    headerDiv.append(dayHead, roleHead, hoursHead);
-    container.appendChild(headerDiv);
+    // Each day card gets its own hour header (Role spacer | hour columns)
+    const buildHourHeader = () => {
+        const header = document.createElement('div');
+        header.className = 'timeline-day-header';
+        const roleHead = document.createElement('div');
+        roleHead.className = 'timeline-header-role';
+        roleHead.textContent = 'Role';
+        const hoursHead = document.createElement('div');
+        hoursHead.className = 'timeline-header-hours';
+        hoursHead.style.setProperty('--hours', totalHours);
+        state.hours.forEach(hour => {
+            const label = document.createElement('div');
+            label.className = 'timeline-hour-label';
+            label.textContent = formatHour(hour);
+            hoursHead.appendChild(label);
+        });
+        const closingLabel = document.createElement('div');
+        closingLabel.className = 'timeline-hour-label timeline-closing-hour';
+        closingLabel.textContent = formatHour(state.endHour);
+        hoursHead.appendChild(closingLabel);
+        header.append(roleHead, hoursHead);
+        return header;
+    };
 
     state.daysOpen.forEach(dayIdx => {
         const rowDiv = document.createElement('div');
@@ -5092,6 +5091,7 @@ function renderTimelineView(schedule) {
         const slotsDiv = document.createElement('div');
         slotsDiv.className = 'timeline-slots';
         slotsDiv.dataset.dayIdx = dayIdx;
+        slotsDiv.appendChild(buildHourHeader());
 
         // Approved time off shows first
         const dayPTO = (state.approvedPTO || []).filter(pto => {

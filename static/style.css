@@ -11368,3 +11368,82 @@ body[data-theme="light"] .role-badge {
     border: none;
     background: transparent;
 }
+
+/* =============================================================================
+   TIMELINE: one rounded card per day, each with its own hour header,
+   alternating day tints like the grid view
+   ============================================================================= */
+.timeline-grid {
+    border: none;
+    background: transparent;
+    overflow: visible;
+    gap: 14px;
+}
+
+.timeline-row,
+.timeline-row.day-even,
+.timeline-row.day-odd {
+    border: 1px solid var(--tl-line-strong);
+    border-bottom: 1px solid var(--tl-line-strong);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+/* Day label tints: even days one shade, odd days another (matches the grid) */
+.timeline-row.day-even .timeline-day-label,
+body[data-theme="light"] .timeline-row.day-even .timeline-day-label {
+    background: rgba(45, 50, 80, 0.9);
+}
+
+.timeline-row.day-odd .timeline-day-label,
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-label {
+    background: rgba(65, 70, 110, 0.9);
+}
+
+body[data-theme="light"] .timeline-row.day-even .timeline-day-label {
+    background: rgba(226, 232, 240, 0.9);
+}
+
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-label {
+    background: rgba(203, 213, 225, 0.9);
+}
+
+/* Per-day hour header */
+.timeline-day-header {
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--tl-line-strong);
+}
+
+.timeline-row.day-even .timeline-day-header {
+    background: rgba(45, 50, 80, 0.55);
+}
+
+.timeline-row.day-odd .timeline-day-header {
+    background: rgba(65, 70, 110, 0.55);
+}
+
+body[data-theme="light"] .timeline-row.day-even .timeline-day-header {
+    background: rgba(226, 232, 240, 0.6);
+}
+
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
+    background: rgba(203, 213, 225, 0.6);
+}
+
+.timeline-day-header .timeline-header-role {
+    position: sticky;
+    left: var(--tl-day-col);
+    z-index: 2;
+    background: transparent;
+}
+
+.timeline-day-header .timeline-hour-label {
+    padding: 0.45rem 0 0.45rem 6px;
+}
+
+/* The first role row no longer needs a top divider (the header has one) */
+.timeline-slots .timeline-day-header + .timeline-role-row {
+    border-top: none;
+}
