@@ -4612,13 +4612,15 @@ function evaluateShiftChange(p) {
     const newHours = [];
     for (let h = p.toStart; h < p.toEnd; h++) newHours.push(h);
 
-    // The person's own hours after the move (old shift removed, new one added)
+    // The person's own hours after the change. For a move, the old shift is
+    // taken out first; for an add (fromDay == null) everything stays.
+    const isMove = p.fromDay !== null && p.fromDay !== undefined;
     const hoursByDay = {};
     Object.entries(slots).forEach(([key, list]) => {
         const [d, h] = key.split(',').map(Number);
         (list || []).forEach(a => {
             if (a.employee_id !== p.empId) return;
-            if (d === p.fromDay && h >= p.fromStart && h < p.fromEnd) return; // being moved
+            if (isMove && d === p.fromDay && h >= p.fromStart && h < p.fromEnd) return; // being moved
             (hoursByDay[d] = hoursByDay[d] || new Set()).add(h);
         });
     });
@@ -4645,7 +4647,13 @@ function evaluateShiftChange(p) {
     const overlap = newHours.filter(h => sameDay.has(h));
     if (overlap.length) {
         const ranges = slotsToRangesByDay(overlap.map(h => ({ day: p.toDay, hour: h })))[p.toDay] || [];
-        warn(`${emp.name} is already working ${dayName} ${formatRangeList(ranges)}; those hours would overlap.`);
+        const otherRoles = [...new Set(overlap.map(h => (slots[`${p.toDay},${h}`] || []).find(a => a.employee_id === p.empId)?.role_id).filter(Boolean))]
+            .map(r => roleMap[r]?.name || r).join(', ');
+        if (isMove) {
+            warn(`${emp.name} is already working ${dayName} ${formatRangeList(ranges)}; those hours would overlap.`);
+        } else {
+            warn(`${emp.name} is already working ${dayName} ${formatRangeList(ranges)}${otherRoles ? ` as ${otherRoles}` : ''}; those hours would switch to ${roleMap[p.toRole]?.name || 'this role'}, which may open a gap there.`);
+        }
     }
 
     // Daily and weekly hours
@@ -4703,7 +4711,7 @@ function evaluateShiftChange(p) {
     const req = getWeekCoverageRequirements();
     const over = newHours.filter(h => {
         const r = req[`${p.toDay},${h},${p.toRole}`];
-        const have = (slots[`${p.toDay},${h}`] || []).filter(a => a.role_id === p.toRole && !(a.employee_id === p.empId && p.fromDay === p.toDay && h >= p.fromStart && h < p.fromEnd)).length;
+        const have = (slots[`${p.toDay},${h}`] || []).filter(a => a.role_id === p.toRole && !(isMove && a.employee_id === p.empId && p.fromDay === p.toDay && h >= p.fromStart && h < p.fromEnd)).length;
         return !r ? true : have >= r.max;
     });
     if (over.length) {
@@ -4711,7 +4719,7 @@ function evaluateShiftChange(p) {
         info(`No extra ${roleMap[p.toRole]?.name || 'staff'} is needed ${dayName} ${formatRangeList(ranges)}, so this adds hours beyond what coverage calls for.`);
     }
     const opened = [];
-    for (let h = p.fromStart; h < p.fromEnd; h++) {
+    for (let h = isMove ? p.fromStart : 0; isMove && h < p.fromEnd; h++) {
         if (p.fromDay === p.toDay && h >= p.toStart && h < p.toEnd && p.fromRole === p.toRole) continue;
         const r = req[`${p.fromDay},${h},${p.fromRole}`];
         if (!r || r.min <= 0) continue;
@@ -4775,7 +4783,10 @@ function confirmShiftChange(p, onConfirm) {
 
     const roleName = roleMap[p.toRole]?.name || 'that role';
     const roleChanged = p.toRole !== p.fromRole;
-    const summary = `Move ${emp?.name || 'this shift'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)}${roleChanged ? ` as ${roleName}` : ''}?`;
+    const isAdd = p.fromDay === null || p.fromDay === undefined;
+    const summary = isAdd
+        ? `Add ${emp?.name || 'this person'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)} as ${roleName}?`
+        : `Move ${emp?.name || 'this shift'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)}${roleChanged ? ` as ${roleName}` : ''}?`;
     modal.classList.toggle('is-clean', clean);
     modal.classList.toggle('is-warning', !clean);
     document.getElementById('shiftChangeTitle').textContent = clean ? 'This change follows all your rules' : 'Are you sure? This change breaks a rule';
@@ -5594,48 +5605,65 @@ function findAvailableEmployeesForGap(gap) {
             }
         }
         
-        // Check if employee can take more hours
-        const hoursAvailable = emp.max_hours - currentHours;
-        const gapDuration = gap.endHour - gap.startHour;
-        
-        if (hoursAvailable < gapDuration) return; // Can't fit this shift
-        
-        // Check if employee has the required role (if specified)
-        if (gap.roleId && emp.roles && emp.roles.length > 0) {
-            if (!emp.roles.includes(gap.roleId)) return; // Doesn't have required role
+        // Everyone who holds the role is listed. Instead of silently hiding
+        // people, each card shows exactly which rules adding them would break.
+        if (gap.roleId && !(emp.roles || []).includes(gap.roleId)) return;
+        // Someone already covering this role during the gap cannot fill it a second time
+        let alreadyInRole = false;
+        for (let h = gap.startHour; h < gap.endHour; h++) {
+            if ((slotAssignments[`${gap.day},${h}`] || []).some(a => a.employee_id === emp.id && a.role_id === gap.roleId)) alreadyInRole = true;
         }
-        
-        // Check availability for the gap time slot
-        const isAvailable = checkEmployeeAvailability(emp, gap.day, gap.startHour, gap.endHour);
-        if (!isAvailable) return;
-        
-        // Check if already scheduled during this time
-        const alreadyScheduled = weeklySchedule[gap.day].some(shift => 
-            gap.startHour < shift.end && gap.endHour > shift.start
-        );
-        if (alreadyScheduled) return;
-        
+        if (alreadyInRole) return;
+
+        const hoursAvailable = Math.max(0, emp.max_hours - currentHours);
+        const issues = evaluateShiftChange({
+            empId: emp.id, fromDay: null, fromStart: null, fromEnd: null, fromRole: gap.roleId,
+            toDay: gap.day, toStart: gap.startHour, toEnd: gap.endHour, toRole: gap.roleId,
+        });
+        const warnings = issues.filter(i => i.level === 'warn');
+
         availableEmps.push({
             employee: emp,
             currentHours,
             hoursAvailable,
-            weeklySchedule
+            weeklySchedule,
+            issues,
+            clean: warnings.length === 0,
         });
     });
-    
-    // Sort by who has most hours available (prioritize those who need hours)
+
+    // Clean picks first (people under their minimum hours at the very top),
+    // then everyone else, fewest broken rules first
     availableEmps.sort((a, b) => {
-        // Prioritize those under minimum hours
+        if (a.clean !== b.clean) return a.clean ? -1 : 1;
         const aUnderMin = a.currentHours < a.employee.min_hours;
         const bUnderMin = b.currentHours < b.employee.min_hours;
-        if (aUnderMin && !bUnderMin) return -1;
-        if (!aUnderMin && bUnderMin) return 1;
-        
-        // Then sort by hours available (descending)
+        if (aUnderMin !== bUnderMin) return aUnderMin ? -1 : 1;
+        const aWarn = a.issues.filter(i => i.level === 'warn').length;
+        const bWarn = b.issues.filter(i => i.level === 'warn').length;
+        if (aWarn !== bWarn) return aWarn - bWarn;
         return b.hoursAvailable - a.hoursAvailable;
     });
-    
+
     return availableEmps;
+}
+
+/** Give someone a shift (hour by hour) in the current schedule, then refresh everything. */
+function addShiftToSchedule(empId, dayIdx, startHour, endHour, roleId) {
+    if (!state.currentSchedule) return false;
+    const slots = state.currentSchedule.slot_assignments = state.currentSchedule.slot_assignments || {};
+    for (let h = startHour; h < endHour; h++) {
+        const key = `${dayIdx},${h}`;
+        slots[key] = slots[key] || [];
+        const existing = slots[key].find(a => a.employee_id === empId);
+        if (existing) {
+            existing.role_id = roleId; // already on the clock: switch that hour to this role
+        } else {
+            slots[key].push({ employee_id: empId, role_id: roleId });
+        }
+    }
+    afterManualScheduleEdit();
+    return true;
 }
 
 function checkEmployeeAvailability(emp, day, startHour, endHour) {
@@ -5656,24 +5684,11 @@ function createAvailableEmployeeCard(empData, gap) {
     const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
     
     const card = document.createElement('div');
-    card.className = 'available-employee-card';
-    
-    // Build badges
-    let badgesHtml = '';
-    if (emp.classification === 'full_time') {
-        badgesHtml += '<span class="badge badge-ft">FT</span>';
-    } else {
-        badgesHtml += '<span class="badge badge-pt">PT</span>';
-    }
-    if (emp.can_supervise) {
-        badgesHtml += '<span class="badge badge-sup">SUP</span>';
-    }
-    if (emp.needs_supervision) {
-        badgesHtml += '<span class="badge badge-new">NEW</span>';
-    }
-    if (emp.overtime_allowed) {
-        badgesHtml += '<span class="badge badge-ot">OT</span>';
-    }
+    card.className = 'available-employee-card' + (empData.clean ? ' is-clean' : ' has-warnings');
+    card.title = empData.clean ? `Click to give ${emp.name} this shift` : `Click to give ${emp.name} this shift anyway`;
+
+    // Badges spelled out (Full-time, Supervisor, ...), never abbreviations
+    const badgesHtml = getBadgesHTML(emp);
     
     // Build weekly schedule display
     let scheduleHtml = '';
@@ -5710,8 +5725,26 @@ function createAvailableEmployeeCard(empData, gap) {
             <div class="emp-schedule">
                 ${scheduleHtml ? `<span>Current schedule:</span><div class="emp-schedule-days">${scheduleHtml}</div>` : '<span>No shifts scheduled yet</span>'}
             </div>
+            ${(empData.issues || []).length ? `<ul class="gap-emp-issues">${empData.issues.map(i => `<li class="issue-${i.level}"><span class="issue-icon">${i.level === 'warn' ? '!' : 'i'}</span><span>${escHtml(i.text)}</span></li>`).join('')}</ul>` : ''}
+        </div>
+        <div class="gap-emp-pick">
+            <span class="gap-emp-status ${empData.clean ? 'clean' : 'warn'}">${empData.clean ? 'Follows all rules' : `Breaks ${empData.issues.filter(i => i.level === 'warn').length} rule${empData.issues.filter(i => i.level === 'warn').length === 1 ? '' : 's'}`}</span>
+            <span class="gap-emp-cta">Add to shift →</span>
         </div>
     `;
+
+    // Click = confirm popup (green when clean, amber with the reasons when not), then add the shift
+    card.addEventListener('click', () => {
+        const proposal = {
+            empId: emp.id, fromDay: null, fromStart: null, fromEnd: null, fromRole: gap.roleId,
+            toDay: gap.day, toStart: gap.startHour, toEnd: gap.endHour, toRole: gap.roleId,
+        };
+        confirmShiftChange(proposal, () => {
+            closeAllModals();
+            addShiftToSchedule(emp.id, gap.day, gap.startHour, gap.endHour, gap.roleId);
+            showToast(`${emp.name} added ${state.days[gap.day]} ${formatHour(gap.startHour)}-${formatHour(gap.endHour)} as ${roleMap[gap.roleId]?.name || 'staff'}`, 'success');
+        });
+    });
     
     // Add click to assign (future feature)
     card.title = `Click to view ${emp.name}'s details`;

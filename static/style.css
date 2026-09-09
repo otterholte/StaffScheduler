@@ -11644,3 +11644,104 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
 .timeline-row.day-odd .timeline-day-header {
     background: rgba(57, 62, 98, 0.93);
 }
+
+/* Coverage gap popup: clickable people with the rules each one would break */
+.available-employee-card {
+    cursor: pointer;
+    align-items: flex-start;
+}
+
+.available-employee-card.is-clean:hover {
+    border-color: var(--success);
+}
+
+.available-employee-card.has-warnings:hover {
+    border-color: var(--warning);
+}
+
+.gap-emp-issues {
+    list-style: none;
+    margin: 0.6rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.gap-emp-issues li {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--text-primary);
+}
+
+.gap-emp-issues .issue-icon {
+    flex-shrink: 0;
+    width: 17px;
+    height: 17px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.66rem;
+    font-weight: 800;
+    color: #fff;
+    background: var(--warning);
+    margin-top: 1px;
+}
+
+.gap-emp-issues li.issue-info .issue-icon {
+    background: var(--accent-primary);
+}
+
+.gap-emp-pick {
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.4rem;
+    flex-shrink: 0;
+    padding-left: 0.75rem;
+}
+
+.gap-emp-status {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.gap-emp-status.clean {
+    color: var(--success);
+    background: rgba(16, 185, 129, 0.14);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.gap-emp-status.warn {
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.gap-emp-cta {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    white-space: nowrap;
+}
+
+/* Employee Hours: the three info columns hug the left, hours sit at the right */
+.emp-hours-head,
+.employee-hours-grid .emp-hours-row {
+    grid-template-columns: 190px 240px 280px 1fr;
+    gap: 0.5rem 1.25rem;
+}
+
+@media (max-width: 900px) {
+    .employee-hours-grid .emp-hours-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+}
