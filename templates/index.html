@@ -582,36 +582,11 @@
                             <div class="table-role-chips" id="hoursRoleChips" aria-label="Filter by role"></div>
                             <button type="button" class="table-filter-clear" id="hoursFilterClear" hidden>Clear</button>
                         </div>
+                        <div class="emp-hours-head" aria-hidden="true">
+                            <span>Name</span><span>Info</span><span>Roles</span><span class="emp-hours-head-hours">Hours this week</span>
+                        </div>
                         <div id="employeeHoursList" class="employee-hours-list employee-hours-grid">
-                            {% for emp in employees %}
-                            <div class="emp-hours-row" data-id="{{ emp.id }}">
-                                <div class="emp-hours-info">
-                                    <span class="emp-color-dot" style="background: {{ emp.color }}" data-tooltip="{{ emp.name }}"></span>
-                                    <span class="emp-name" data-tooltip="{{ emp.name }}">{{ emp.name }}</span>
-                                    <div class="emp-badges">
-                                        {% if emp.classification == 'full_time' %}
-                                        <span class="badge badge-ft"><span class="badge-short">FT</span><span class="badge-full">Full-Time</span></span>
-                                        {% else %}
-                                        <span class="badge badge-pt"><span class="badge-short">PT</span><span class="badge-full">Part-Time</span></span>
-                                        {% endif %}
-                                        {% if emp.needs_supervision %}
-                                        <span class="badge badge-new"><span class="badge-short">NEW</span><span class="badge-full">New Hire</span></span>
-                                        {% endif %}
-                                        {% if emp.can_supervise %}
-                                        <span class="badge badge-sup"><span class="badge-short">SUP</span><span class="badge-full">Supervisor</span></span>
-                                        {% endif %}
-                                        {% if emp.overtime_allowed %}
-                                        <span class="badge badge-ot"><span class="badge-short">OT</span><span class="badge-full">Overtime</span></span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                <div class="emp-hours-stats">
-                                    <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
-                                    <span class="emp-range" data-tooltip="Required hours range (min-max)">({{ emp.min_hours }}-{{ emp.max_hours }})</span>
-                                    <span class="emp-status" data-tooltip="Schedule status">—</span>
-                                </div>
-                            </div>
-                            {% endfor %}
+                            <!-- Rows are rendered by app.js (alphabetical, filtered, with role badges) -->
                         </div>
                     </div>
                 </div>

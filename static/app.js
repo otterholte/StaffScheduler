@@ -2664,14 +2664,15 @@ function renderEmployeeHoursList() {
         row.dataset.id = emp.id;
         row.title = 'Click for full details';
 
+        // Four columns: Name | Info badges | Roles | Hours
         row.innerHTML = `
-            <div class="emp-hours-info">
+            <div class="emp-hours-col emp-hours-info">
                 <span class="emp-color-dot" style="background: ${escHtml(emp.color)}"></span>
                 <span class="emp-name">${escHtml(emp.name)}</span>
-                ${roleBadgesHtml(emp)}
-                <div class="emp-badges">${getBadgesHTML(emp)}</div>
             </div>
-            <div class="emp-hours-stats">
+            <div class="emp-hours-col emp-badges">${getBadgesHTML(emp)}</div>
+            <div class="emp-hours-col emp-roles">${roleBadgesHtml(emp) || '<span class="emp-no-roles">No roles yet</span>'}</div>
+            <div class="emp-hours-col emp-hours-stats">
                 <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
                 <span class="emp-range" data-tooltip="Weekly hours range (min-max)">(${emp.min_hours}-${emp.max_hours})</span>
                 <span class="emp-status" data-tooltip="Schedule status">—</span>

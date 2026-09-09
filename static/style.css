@@ -11518,3 +11518,102 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-header .timeline-he
         font-size: 0.9rem;
     }
 }
+
+/* =============================================================================
+   EMPLOYEE HOURS: four aligned columns (Name | Info | Roles | Hours)
+   ============================================================================= */
+.emp-hours-head,
+.employee-hours-grid .emp-hours-row {
+    display: grid;
+    grid-template-columns: minmax(170px, 1.1fr) minmax(190px, 1fr) minmax(180px, 1.2fr) 168px;
+    align-items: center;
+    gap: 0.75rem 1rem;
+}
+
+.emp-hours-head {
+    padding: 0.2rem 0.75rem 0.45rem;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0.35rem;
+}
+
+.emp-hours-head-hours {
+    text-align: right;
+}
+
+.employee-hours-grid .emp-hours-row {
+    padding: 0.55rem 0.75rem;
+    flex-wrap: nowrap;
+}
+
+.employee-hours-grid .emp-hours-row:hover {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.employee-hours-grid .emp-hours-col {
+    min-width: 0;
+}
+
+.employee-hours-grid .emp-hours-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: initial;
+}
+
+.employee-hours-grid .emp-name {
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.employee-hours-grid .emp-badges,
+.employee-hours-grid .emp-roles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.employee-hours-grid .emp-roles .emp-role-badges {
+    margin: 0;
+}
+
+.emp-no-roles {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.employee-hours-grid .emp-hours-stats {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.emp-hours-details {
+    grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+    .emp-hours-head {
+        display: none;
+    }
+    .employee-hours-grid .emp-hours-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "name hours"
+            "info info"
+            "roles roles";
+        gap: 0.35rem 0.75rem;
+    }
+    .employee-hours-grid .emp-hours-info { grid-area: name; }
+    .employee-hours-grid .emp-hours-stats { grid-area: hours; }
+    .employee-hours-grid .emp-badges { grid-area: info; }
+    .employee-hours-grid .emp-roles { grid-area: roles; }
+}
