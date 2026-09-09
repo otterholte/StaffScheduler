@@ -524,6 +524,7 @@ class ScheduleMetrics:
     employees_under_min: List[Dict] = field(default_factory=list)  # [{employee_id, employee_name, hours, min_hours}]
     clopenings: List[Dict] = field(default_factory=list)           # [{employee_id, close_day, close_hour, open_day, open_hour, rest_hours}]
     suggestions: List[str] = field(default_factory=list)           # plain-English tips for the manager
+    unfilled_ranges: List[Dict] = field(default_factory=list)      # unfilled_slots merged into shift-sized ranges
 
     def to_dict(self) -> dict:
         return {
@@ -544,7 +545,8 @@ class ScheduleMetrics:
             "unsupervised_violations": self.unsupervised_violations,
             "employees_under_min": self.employees_under_min,
             "clopenings": self.clopenings,
-            "suggestions": self.suggestions
+            "suggestions": self.suggestions,
+            "unfilled_ranges": self.unfilled_ranges
         }
 
 

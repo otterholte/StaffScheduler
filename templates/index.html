@@ -145,21 +145,14 @@
                         </svg>
                         <span class="tab-text">Schedule</span>
                     </button>
-                    <button class="nav-tab" data-tab="employees">
+                    <button class="nav-tab" data-tab="settings">
                         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                             <circle cx="9" cy="7" r="4"></circle>
                             <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                             <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                         </svg>
-                        <span class="tab-text">Staff</span>
-                    </button>
-                    <button class="nav-tab" data-tab="settings">
-                        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="3"></circle>
-                            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
-                        </svg>
-                        <span class="tab-text">Availability</span>
+                        <span class="tab-text">Staff Availability</span>
                     </button>
                     <button class="nav-tab" data-tab="help">
                         <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -315,27 +308,7 @@
                                 <div class="toolbar-left">
                                     <!-- View Toggle -->
                                     <div class="view-toggle" id="viewToggle">
-                                        <button class="view-toggle-btn active" data-view="table" title="Quick overview of everyone's weekly hours">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <line x1="8" y1="6" x2="21" y2="6"></line>
-                                                <line x1="8" y1="12" x2="21" y2="12"></line>
-                                                <line x1="8" y1="18" x2="21" y2="18"></line>
-                                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
-                                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
-                                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
-                                            </svg>
-                                            Table
-                                        </button>
-                                        <button class="view-toggle-btn" data-view="grid" title="Visual daily layout, great for small teams">
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                                <rect x="3" y="3" width="7" height="7"></rect>
-                                                <rect x="14" y="3" width="7" height="7"></rect>
-                                                <rect x="3" y="14" width="7" height="7"></rect>
-                                                <rect x="14" y="14" width="7" height="7"></rect>
-                                            </svg>
-                                            Grid
-                                        </button>
-                                        <button class="view-toggle-btn" data-view="timeline" title="Hour-by-hour view, best for larger teams">
+                                        <button class="view-toggle-btn active" data-view="timeline" title="Timeline: hour-by-hour bars for each day, grouped by role">
                                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <line x1="3" y1="6" x2="21" y2="6"></line>
                                                 <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -345,6 +318,26 @@
                                                 <rect x="7" y="16" width="5" height="4" rx="1"></rect>
                                             </svg>
                                             Timeline
+                                        </button>
+                                        <button class="view-toggle-btn" data-view="grid" title="Grid: an hourly layout, best for small teams with no more than 3 people working at once">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <rect x="3" y="3" width="7" height="7"></rect>
+                                                <rect x="14" y="3" width="7" height="7"></rect>
+                                                <rect x="3" y="14" width="7" height="7"></rect>
+                                                <rect x="14" y="14" width="7" height="7"></rect>
+                                            </svg>
+                                            Grid
+                                        </button>
+                                        <button class="view-toggle-btn" data-view="table" title="Table: a quick overview of everyone's weekly hours, with search and role filters">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="8" y1="6" x2="21" y2="6"></line>
+                                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                                <line x1="8" y1="18" x2="21" y2="18"></line>
+                                                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                                                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                                                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                                            </svg>
+                                            Table
                                         </button>
                                     </div>
                                 </div>
@@ -425,17 +418,28 @@
                                 </div>
                             </div>
 
-                            <!-- Timeline View (Days as rows, Hours as columns) -->
-                            <div class="schedule-view schedule-view-timeline" id="scheduleViewTimeline">
+                            <!-- Timeline View (default): days as rows, one lane group per role -->
+                            <div class="schedule-view schedule-view-timeline active" id="scheduleViewTimeline">
                                 <div class="timeline-wrapper" id="timelineWrapper">
                                     <div class="timeline-grid" id="timelineGrid">
                                         <!-- Will be populated by JS -->
                                     </div>
                                 </div>
                             </div>
-                            
-                            <!-- Table View (default) -->
-                            <div class="schedule-view schedule-view-table active" id="scheduleViewTable">
+
+                            <!-- Table View -->
+                            <div class="schedule-view schedule-view-table" id="scheduleViewTable">
+                                <div class="table-filter-bar" id="tableFilterBar">
+                                    <div class="table-search">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                            <circle cx="11" cy="11" r="8"></circle>
+                                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                        </svg>
+                                        <input type="text" id="tableSearchInput" placeholder="Find a team member" aria-label="Find a team member" autocomplete="off">
+                                    </div>
+                                    <div class="table-role-chips" id="tableRoleChips" aria-label="Filter by role"></div>
+                                    <button type="button" class="table-filter-clear" id="tableFilterClear" hidden>Clear</button>
+                                </div>
                                 <table class="simple-schedule-table" id="simpleScheduleTable">
                                     <thead>
                                         <tr>
@@ -598,67 +602,26 @@
                 </div>
             </section>
 
-            <!-- ==================== EMPLOYEES TAB ==================== -->
-            <section id="tab-employees" class="tab-content">
-                <div class="tab-header">
-                    <div class="tab-header-left">
-                        <h1>Team Members</h1>
-                        <span class="count-badge" id="employeeCount">{{ employees|length }} employees</span>
-                    </div>
-                    <div class="tab-header-right">
-                        <div class="search-box">
-                            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="11" cy="11" r="8"></circle>
-                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                            </svg>
-                            <input type="text" id="employeeSearch" placeholder="Search employees...">
-                        </div>
-                        <div class="filter-dropdown" id="employeeFilterDropdown">
-                            <button class="filter-btn" id="employeeFilterBtn" data-tooltip="Filter employees">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                                </svg>
-                                <span class="filter-label" id="filterLabel">All</span>
-                                <svg class="filter-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </button>
-                            <div class="filter-menu" id="employeeFilterMenu">
-                                <div class="filter-menu-section">Filter by</div>
-                                <button class="filter-option active" data-filter="all">All Employees</button>
-                                <button class="filter-option" data-filter="full_time">Full-Time Only</button>
-                                <button class="filter-option" data-filter="part_time">Part-Time Only</button>
-                                <button class="filter-option" data-filter="supervisors">Supervisors</button>
-                                <button class="filter-option" data-filter="new_hires">New Hires</button>
-                                <div class="filter-menu-section">By Role</div>
-                                <div id="roleFilterOptions"></div>
-                            </div>
-                        </div>
-                        <button id="addEmployeeBtn" class="btn btn-primary">
-                            <span class="btn-icon">+</span>
-                            Add Employee
-                        </button>
-                    </div>
-                </div>
-
-                <div class="employees-grid" id="employeesGrid">
-                    <!-- Employee cards will be dynamically generated -->
-                </div>
-            </section>
-
             <!-- ==================== AVAILABILITY TAB ==================== -->
             <section id="tab-settings" class="tab-content">
                 <div class="tab-header">
                     <div class="tab-header-left">
-                        <h1>Availability</h1>
-                        <p class="tab-subtitle">Set when each team member can work</p>
+                        <h1>Staff Availability</h1>
+                        <p class="tab-subtitle">Your team, their details, and when each person can work</p>
+                    </div>
+                    <div class="tab-header-right">
+                        <span class="count-badge" id="employeeCount">{{ employees|length }} team member{% if employees|length != 1 %}s{% endif %}</span>
+                        <button id="addEmployeeBtn" class="btn btn-primary">
+                            <span class="btn-icon">+</span>
+                            Add Team Member
+                        </button>
                     </div>
                 </div>
 
                 <div class="availability-layout">
                     <!-- Left sidebar: Staff list -->
                     <div class="availability-sidebar">
-                        <h3 class="sidebar-title">Select Staff</h3>
+                        <h3 class="sidebar-title">Team</h3>
                         
                         <!-- Search and Filter Controls -->
                         <div class="availability-filters">
@@ -719,7 +682,13 @@
                                         <p id="availPanelHours">0 hours/week available</p>
                                     </div>
                                 </div>
+                                <div class="availability-panel-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" id="availEditEmpBtnFull">Edit details</button>
+                                    <button type="button" class="btn btn-sm btn-ghost" id="availDeleteEmpBtn" title="Remove this person from the team">Remove</button>
+                                </div>
                             </div>
+                            <div class="availability-details-card" id="availPanelDetails"></div>
+                            <h3 class="availability-section-title">Availability</h3>
                             <!-- Table View -->
                             <div class="availability-table-view manager-avail-table" id="managerAvailTableView">
                                 <!-- Dynamically generated -->

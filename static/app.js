@@ -6,14 +6,13 @@
 // ==================== URL ROUTING HELPERS ====================
 const PAGE_SLUGS = INITIAL_DATA.pageSlugs || {
     'schedule': 'schedule',
-    'staff': 'employees', 
+    'staff': 'settings',
     'availability': 'settings',
     'requirements': 'help'
 };
 
 const TAB_TO_SLUG = INITIAL_DATA.tabToSlug || {
     'schedule': 'schedule',
-    'employees': 'staff',
     'settings': 'availability',
     'help': 'requirements'
 };
@@ -100,7 +99,8 @@ const state = {
     hasCompletedSetup: INITIAL_DATA.business.has_completed_setup !== false,
     editingShift: null,
     // Schedule view state ('table' is the default: quickest to read)
-    scheduleViewMode: 'table', // 'table', 'grid', or 'timeline'
+    scheduleViewMode: 'timeline', // 'timeline' (default), 'grid', or 'table'
+    tableFilter: { search: '', roles: new Set() }, // search/role filter for the table view
     scheduleColorMode: 'role', // 'role' or 'employee'
     // Week navigation state
     weekOffset: 0, // 0 = current week, -1 = last week, 1 = next week, etc.
@@ -346,7 +346,17 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
     
     // Load approved PTO for the current week
     await loadApprovedPTOForWeek();
-    
+
+    // Metrics, notes and per-person hours for whatever we loaded
+    if (scheduleLoaded && state.currentSchedule) {
+        try {
+            if (state.currentSchedule.metrics) updateMetrics(state.currentSchedule); else clearMetrics();
+        } catch (err) { console.warn('Could not refresh metrics:', err); }
+        try { updateEmployeeHours(state.currentSchedule); } catch (err) { /* panel may be collapsed */ }
+    } else {
+        try { clearMetrics(); } catch (err) { /* ignore */ }
+    }
+
     // Re-render the schedule view if requested
     if (renderAfterLoad && state.currentTab === 'schedule') {
         if (state.scheduleViewMode === 'timeline') {
@@ -927,7 +937,8 @@ function init() {
     initPTONotifications();
     
     // Initial render
-    renderEmployeesGrid();
+    renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
+    wireEmployeeHoursList();
     renderRolesList();
     renderCoverageUI();
     
@@ -2382,7 +2393,7 @@ async function switchBusiness(businessId, updateHistory = true) {
             rebuildScheduleGrid();
             renderEmployeeHoursList();
             renderRoleLegend();
-            renderEmployeesGrid();
+            renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
             renderRolesList();
             renderCoverageUI();
             
@@ -2500,52 +2511,154 @@ function rebuildScheduleGrid() {
     });
 }
 
+/** Turn a list of {day, hour} slots into per-day ranges: { day: [[start, end], ...] }. */
+function slotsToRangesByDay(slots) {
+    const byDay = {};
+    (slots || []).forEach(s => (byDay[s.day] = byDay[s.day] || []).push(parseInt(s.hour)));
+    const out = {};
+    Object.entries(byDay).forEach(([day, hours]) => {
+        hours.sort((a, b) => a - b);
+        const ranges = [];
+        hours.forEach(h => {
+            const last = ranges[ranges.length - 1];
+            if (last && h === last[1]) last[1] = h + 1;
+            else ranges.push([h, h + 1]);
+        });
+        out[day] = ranges;
+    });
+    return out;
+}
+
+/** Availability ranges per day for an employee, from ranges when present or hourly slots otherwise. */
+function employeeAvailabilityByDay(emp) {
+    const ranges = emp.availability_ranges;
+    if (ranges && Object.keys(ranges).length) {
+        const out = {};
+        Object.entries(ranges).forEach(([d, list]) => { out[parseInt(d)] = (list || []).map(([s, e]) => [s, e]); });
+        return out;
+    }
+    return slotsToRangesByDay(emp.availability);
+}
+
+function formatRangeList(ranges) {
+    if (!ranges || !ranges.length) return '';
+    return ranges.map(([s, e]) => `${formatHourMinute(s)}–${formatHourMinute(e)}`).join(', ');
+}
+
+/**
+ * Full, unabbreviated details for one team member. Used by the schedule
+ * table (row expansion), the Employee Hours panel and the Staff Availability page.
+ * opts.availability adds a 7-day availability strip, opts.rules the rules/info list.
+ */
+function buildEmployeeDetailHtml(emp, opts = { availability: true, rules: true }) {
+    const dayShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    let html = '<div class="emp-detail">';
+
+    if (opts.availability) {
+        const avail = employeeAvailabilityByDay(emp);
+        const prefs = slotsToRangesByDay(emp.preferences);
+        html += '<div class="emp-detail-section"><div class="emp-detail-heading">Available this week</div><div class="emp-detail-days">';
+        for (let d = 0; d < 7; d++) {
+            const isOpen = (state.daysOpen || []).includes(d);
+            const ranges = avail[d] || [];
+            const cls = ranges.length ? 'has-avail' : 'no-avail';
+            const text = ranges.length ? formatRangeList(ranges) : (isOpen ? 'Not available' : 'Closed');
+            const pref = prefs[d] && prefs[d].length ? `<span class="emp-detail-pref" title="Preferred hours">prefers ${escHtml(formatRangeList(prefs[d]))}</span>` : '';
+            html += `<div class="emp-detail-day ${cls}"><span class="emp-detail-dayname">${dayShort[d]}</span><span class="emp-detail-dayval">${escHtml(text)}</span>${pref}</div>`;
+        }
+        html += '</div></div>';
+    }
+
+    if (opts.rules) {
+        const roles = (emp.roles || []).map(r => roleMap[r]?.name || r);
+        const items = [
+            ['Status', emp.classification === 'full_time' ? 'Full-time' : 'Part-time'],
+            ['Weekly hours', `${emp.min_hours ?? 0} to ${emp.max_hours ?? 40} hours`],
+            ['Roles', roles.length ? roles.join(', ') : 'No roles yet'],
+            ['Overtime', emp.overtime_allowed ? 'Allowed (over 40 hours is fine)' : 'Not allowed (capped at 40 hours)'],
+            ['Supervision', emp.can_supervise ? 'Can supervise others' : (emp.needs_supervision ? 'Needs a supervisor on shift' : 'Works unsupervised')],
+            ['Hourly rate', `$${Number(emp.hourly_rate || 0).toFixed(2)}`],
+        ];
+        if (emp.email || emp.phone) items.push(['Contact', [emp.email, emp.phone].filter(Boolean).join(' · ')]);
+        html += '<div class="emp-detail-section"><div class="emp-detail-heading">Rules and info</div><dl class="emp-detail-list">';
+        items.forEach(([k, v]) => { html += `<div class="emp-detail-item"><dt>${escHtml(k)}</dt><dd>${escHtml(v)}</dd></div>`; });
+        html += '</dl></div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+let employeeHoursListWired = false;
+
 function renderEmployeeHoursList() {
     if (!dom.employeeHoursList) return;
     dom.employeeHoursList.innerHTML = '';
-    
+
     state.employees.forEach(emp => {
         const row = document.createElement('div');
         row.className = 'emp-hours-row';
         row.dataset.id = emp.id;
-        
-        let badges = getBadgesHTML(emp);
-        
+        row.title = 'Click for full details';
+
         row.innerHTML = `
             <div class="emp-hours-info">
-                <span class="emp-color-dot" style="background: ${emp.color}" data-tooltip="${emp.name}"></span>
-                <span class="emp-name" data-tooltip="${emp.name}">${emp.name}</span>
-                <div class="emp-badges">${badges}</div>
+                <span class="emp-color-dot" style="background: ${escHtml(emp.color)}"></span>
+                <span class="emp-name">${escHtml(emp.name)}</span>
+                <div class="emp-badges">${getBadgesHTML(emp)}</div>
             </div>
             <div class="emp-hours-stats">
                 <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
-                <span class="emp-range" data-tooltip="Required hours range (min-max)">(${emp.min_hours}-${emp.max_hours})</span>
+                <span class="emp-range" data-tooltip="Weekly hours range (min-max)">(${emp.min_hours}-${emp.max_hours})</span>
                 <span class="emp-status" data-tooltip="Schedule status">—</span>
             </div>
         `;
-        
         dom.employeeHoursList.appendChild(row);
     });
+
+    wireEmployeeHoursList();
 }
 
-// Helper function to generate badge HTML with tooltips
-// fullText = true uses longer labels for desktop, false uses abbreviations
-function getBadgesHTML(emp, fullText = false) {
+/** Click a row in Employee Hours to expand that person's full details. Safe to call repeatedly. */
+function wireEmployeeHoursList() {
+    if (!dom.employeeHoursList) return;
+    // One delegated listener handles rows rendered by the server and by JS
+    if (!employeeHoursListWired) {
+        employeeHoursListWired = true;
+        dom.employeeHoursList.addEventListener('click', (e) => {
+            const row = e.target.closest('.emp-hours-row');
+            if (!row || !dom.employeeHoursList.contains(row)) return;
+            const emp = employeeMap[row.dataset.id];
+            if (!emp) return;
+            const existing = row.nextElementSibling;
+            if (existing && existing.classList.contains('emp-hours-details')) {
+                existing.remove();
+                row.classList.remove('expanded');
+                return;
+            }
+            dom.employeeHoursList.querySelectorAll('.emp-hours-details').forEach(d => d.remove());
+            dom.employeeHoursList.querySelectorAll('.emp-hours-row.expanded').forEach(r => r.classList.remove('expanded'));
+            const details = document.createElement('div');
+            details.className = 'emp-hours-details';
+            details.innerHTML = buildEmployeeDetailHtml(emp, { availability: true, rules: true });
+            row.classList.add('expanded');
+            row.after(details);
+        });
+    }
+}
+
+// Badge HTML. Full words on desktop, short codes only on small screens (CSS decides which shows).
+function getBadgesHTML(emp) {
+    const badge = (cls, short, full, tip) =>
+        `<span class="badge ${cls}" data-tooltip="${tip}"><span class="badge-short">${short}</span><span class="badge-full">${full}</span></span>`;
     let badges = '';
     if (emp.classification === 'full_time') {
-        badges += `<span class="badge badge-ft" data-tooltip="Full-Time Employee">${fullText ? 'Full-time' : 'FT'}</span>`;
+        badges += badge('badge-ft', 'FT', 'Full-time', 'Full-time employee');
     } else {
-        badges += `<span class="badge badge-pt" data-tooltip="Part-Time Employee">${fullText ? 'Part-time' : 'PT'}</span>`;
+        badges += badge('badge-pt', 'PT', 'Part-time', 'Part-time employee');
     }
-    if (emp.needs_supervision) {
-        badges += `<span class="badge badge-new" data-tooltip="New Employee - Needs Supervision">${fullText ? 'New' : 'NEW'}</span>`;
-    }
-    if (emp.can_supervise) {
-        badges += `<span class="badge badge-sup" data-tooltip="Supervisor - Can train others">${fullText ? 'Supervisor' : 'SUP'}</span>`;
-    }
-    if (emp.overtime_allowed) {
-        badges += `<span class="badge badge-ot" data-tooltip="Overtime Allowed">${fullText ? 'Overtime' : 'OT'}</span>`;
-    }
+    if (emp.needs_supervision) badges += badge('badge-new', 'NEW', 'New hire', 'Needs a supervisor on shift');
+    if (emp.can_supervise) badges += badge('badge-sup', 'SUP', 'Supervisor', 'Can supervise others');
+    if (emp.overtime_allowed) badges += badge('badge-ot', 'OT', 'Overtime', 'Overtime allowed');
     return badges;
 }
 
@@ -3143,8 +3256,10 @@ function renderSchedule(schedule) {
         el.style.height = `${duration * slotHeight - 4}px`;
         el.style.zIndex = 50 + (gap.column || 0); // Higher z-index than shifts
         
-        el.innerHTML = `<span class="gap-label">+${gap.needed}</span>`;
-        el.title = `Need ${gap.needed} more ${role?.name || 'staff'}\nClick to see available employees`;
+        // Show the role name whenever the block is tall enough to fit it
+        const roleLabel = duration >= 2 && role?.name ? ` ${escHtml(role.name)}` : '';
+        el.innerHTML = `<span class="gap-label">+${gap.needed}${roleLabel}</span>`;
+        el.title = `Still need ${gap.needed} ${role?.name || 'staff'} ${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}\nClick to see who is available`;
         
         // Add click handler to show available employees
         el.addEventListener('click', () => {
@@ -3371,6 +3486,51 @@ function renderScheduleLegend() {
 }
 
 // ==================== SIMPLE TABLE VIEW ====================
+let tableFilterWired = false;
+
+/** Search box + role chips above the table view. Chips rebuild on each render; listeners attach once. */
+function renderTableFilterChips() {
+    const bar = document.getElementById('tableFilterBar');
+    if (!bar) return;
+    const chips = bar.querySelector('#tableRoleChips');
+    const input = bar.querySelector('#tableSearchInput');
+    const clearBtn = bar.querySelector('#tableFilterClear');
+    const filter = state.tableFilter;
+
+    chips.innerHTML = '';
+    [...state.roles].sort((a, b) => a.name.localeCompare(b.name)).forEach(role => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'role-chip' + (filter.roles.has(role.id) ? ' active' : '');
+        chip.dataset.roleId = role.id;
+        chip.style.setProperty('--chip-color', role.color);
+        chip.innerHTML = `<span class="role-chip-dot"></span>${escHtml(role.name)}`;
+        chip.title = filter.roles.has(role.id) ? `Hide ${role.name}` : `Show only ${role.name}${filter.roles.size ? ' (adds to current filter)' : ''}`;
+        chip.addEventListener('click', () => {
+            if (filter.roles.has(role.id)) filter.roles.delete(role.id); else filter.roles.add(role.id);
+            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+        });
+        chips.appendChild(chip);
+    });
+    const active = !!(filter.search || filter.roles.size);
+    clearBtn.hidden = !active;
+    bar.classList.toggle('filter-active', active);
+
+    if (!tableFilterWired) {
+        tableFilterWired = true;
+        input.addEventListener('input', () => {
+            filter.search = input.value;
+            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+        });
+        clearBtn.addEventListener('click', () => {
+            filter.search = '';
+            filter.roles.clear();
+            input.value = '';
+            renderSimpleTableView(state.currentSchedule || { slot_assignments: {} });
+        });
+    }
+}
+
 function renderSimpleTableView(schedule) {
     const tbody = document.getElementById('simpleScheduleBody');
     const table = document.getElementById('simpleScheduleTable');
@@ -3414,23 +3574,25 @@ function renderSimpleTableView(schedule) {
         employeeSchedules[emp.id] = {
             employee: emp,
             days: { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] },
-            totalHours: 0
+            totalHours: 0,
+            rolesWorked: new Set()
         };
     });
-    
+
     // Process slot assignments to build shift segments
     for (let day = 0; day < 7; day++) {
         const empHoursToday = {}; // { empId: [hours...] }
-        
+
         state.hours.forEach(hour => {
             const key = `${day},${hour}`;
             const assignments = slotAssignments[key] || [];
-            
+
             assignments.forEach(assignment => {
                 if (!empHoursToday[assignment.employee_id]) {
                     empHoursToday[assignment.employee_id] = [];
                 }
                 empHoursToday[assignment.employee_id].push(hour);
+                employeeSchedules[assignment.employee_id]?.rolesWorked.add(assignment.role_id);
             });
         });
         
@@ -3566,25 +3728,35 @@ function renderSimpleTableView(schedule) {
         return; // Don't render anything else
     }
     
-    // Render gap row first if there are gaps (only when schedule exists)
-    if (gaps.totalHours > 0) {
+    // "Still needed" row: one badge per open shift, naming the role, wrapping onto new lines
+    renderTableFilterChips();
+    const openRanges = (schedule?.metrics?.unfilled_ranges?.length
+        ? schedule.metrics.unfilled_ranges
+        : groupUnfilledRanges(schedule?.metrics?.unfilled_slots || []));
+    if (openRanges.length > 0 || gaps.totalHours > 0) {
         const row = document.createElement('tr');
         row.className = 'gap-row';
-        
-        let html = `<td class="name-col"><div class="emp-name"><span>⚠ Still Needed</span></div></td>`;
-        
+        const totalOpen = openRanges.length
+            ? openRanges.reduce((sum, r) => sum + (r.end_hour - r.start_hour) * r.needed, 0)
+            : gaps.totalHours;
+
+        let html = `<td class="name-col"><div class="emp-name"><span>⚠ Still needed</span></div></td>`;
         for (let day = 0; day < 7; day++) {
             const dayClass = day % 2 === 0 ? 'day-even' : 'day-odd';
-            const shifts = gaps.days[day];
-            if (shifts.length === 0) {
+            const ranges = openRanges.length
+                ? openRanges.filter(r => r.day === day)
+                : gaps.days[day].map(s => ({ start_hour: s.start, end_hour: s.end, needed: 1, role_name: '' }));
+            if (ranges.length === 0) {
                 html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
             } else {
-                const shiftStrs = shifts.map(s => `<span class="shift-block">${formatHour(s.start)}-${formatHour(s.end)}</span>`).join('');
-                html += `<td class="shift-times ${dayClass}">${shiftStrs}</td>`;
+                const badges = ranges.map(r => {
+                    const who = r.role_name ? `${r.needed > 1 ? r.needed + ' ' : ''}${escHtml(r.role_name)}` : `+${r.needed}`;
+                    return `<span class="gap-badge" title="Still need ${r.needed} ${escHtml(r.role_name || 'staff')} ${formatHour(r.start_hour)}-${formatHour(r.end_hour)}"><span class="gap-badge-role">${who}</span><span class="gap-badge-time">${formatHour(r.start_hour)}–${formatHour(r.end_hour)}</span></span>`;
+                }).join('');
+                html += `<td class="shift-times ${dayClass}">${badges}</td>`;
             }
         }
-        
-        html += `<td class="total-hours">${gaps.totalHours}h</td>`;
+        html += `<td class="total-hours">${totalOpen}h</td>`;
         row.innerHTML = html;
         tbody.appendChild(row);
     }
@@ -3674,13 +3846,33 @@ function renderSimpleTableView(schedule) {
         return a.emp.name.localeCompare(b.emp.name);
     });
     
+    // Search + role filter (table view only)
+    const filter = state.tableFilter || { search: '', roles: new Set() };
+    const search = (filter.search || '').trim().toLowerCase();
+    const visibleData = combinedEmployeeData.filter(({ emp }) => {
+        if (search && !(emp.name || '').toLowerCase().includes(search)) return false;
+        if (filter.roles.size) {
+            const worked = employeeSchedules[emp.id]?.rolesWorked || new Set();
+            const held = new Set(employeeMap[emp.id]?.roles || []);
+            const match = [...filter.roles].some(r => worked.has(r) || (worked.size === 0 && held.has(r)));
+            if (!match) return false;
+        }
+        return true;
+    });
+
     // Render employee rows (including PTO in same row)
-    combinedEmployeeData.forEach(({ emp, totalHours, days, pto }) => {
+    visibleData.forEach(({ emp, totalHours, days, pto }) => {
             const row = document.createElement('tr');
-            
+            row.className = 'emp-row';
+            row.dataset.empId = emp.id;
+            row.title = 'Click to see availability, rules and preferences';
+            const rolesWorked = [...(employeeSchedules[emp.id]?.rolesWorked || [])].map(r => roleMap[r]?.name || r);
+
             let html = `<td class="name-col"><div class="emp-name">
-                <span class="emp-color" style="background: ${emp.color || '#666'}"></span>
-                <span>${emp.name}</span>
+                <span class="emp-color" style="background: ${escHtml(emp.color || '#666')}"></span>
+                <span class="emp-name-text">${escHtml(emp.name)}</span>
+                ${rolesWorked.length ? `<span class="emp-name-role">${escHtml(rolesWorked.join(', '))}</span>` : ''}
+                <svg class="emp-row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="6 9 12 15 18 9"></polyline></svg>
             </div></td>`;
             
             for (let day = 0; day < 7; day++) {
@@ -3707,13 +3899,33 @@ function renderSimpleTableView(schedule) {
         html += `<td class="total-hours">${hoursDisplay}</td>`;
             row.innerHTML = html;
             tbody.appendChild(row);
+
+            // Expandable details: availability for the week, then rules/preferences
+            const fullEmp = employeeMap[emp.id];
+            if (fullEmp) {
+                const detailRow = document.createElement('tr');
+                detailRow.className = 'emp-detail-row';
+                detailRow.hidden = true;
+                detailRow.innerHTML = `<td colspan="9">${buildEmployeeDetailHtml(fullEmp, { availability: true, rules: true })}</td>`;
+                tbody.appendChild(detailRow);
+                row.addEventListener('click', () => {
+                    const open = !detailRow.hidden;
+                    tbody.querySelectorAll('.emp-detail-row').forEach(r => { r.hidden = true; });
+                    tbody.querySelectorAll('.emp-row.expanded').forEach(r => r.classList.remove('expanded'));
+                    if (!open) {
+                        detailRow.hidden = false;
+                        row.classList.add('expanded');
+                    }
+                });
+            }
         });
-    
-    // If no employees have hours, show a message
-    if (tbody.children.length === 0) {
+
+    // Nothing matched the filter / nothing scheduled yet
+    if (visibleData.length === 0) {
         const row = document.createElement('tr');
+        const filtered = search || filter.roles.size;
         row.innerHTML = `<td colspan="9" style="text-align: center; color: var(--text-muted); padding: 2rem;">
-            No schedule generated yet. Click "Generate Schedule" to create one.
+            ${filtered ? 'No team members match your search or filter.' : 'No schedule generated yet. Click "Generate Schedule" to create one.'}
         </td>`;
         tbody.appendChild(row);
     }
@@ -3799,11 +4011,12 @@ function createGhostPreview(shift, targetHour, slotsContainer) {
 }
 
 // Move shift to new position
-function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toStart) {
+function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toStart, toRoleId = null) {
     if (!state.currentSchedule) return false;
-    
+
     const slotAssignments = state.currentSchedule.slot_assignments;
     const duration = fromEnd - fromStart;
+    const newRoleId = toRoleId || roleId;
     
     // Round to nearest hour for storage
     const toStartHour = Math.floor(toStart);
@@ -3836,24 +4049,20 @@ function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toSt
         if (!slotAssignments[key].some(a => a.employee_id === empId)) {
             slotAssignments[key].push({
                 employee_id: empId,
-                role_id: roleId
+                role_id: newRoleId
             });
         }
     }
-    
-    // Re-render timeline
-    renderTimelineView(state.currentSchedule);
-    
-    // Save to localStorage
-    saveScheduleToStorage();
-    
-    // Mark as having unpublished edits
-    incrementWeekEditCount(state.weekOffset);
-    
+    // A moved shift loses any 15-minute precision it had
+    if (state.currentSchedule.shift_times) delete state.currentSchedule.shift_times[`${empId}_${fromDayIdx}`];
+
+    afterManualScheduleEdit();
+
     const emp = employeeMap[empId];
     const dayName = state.days[toDayIdx];
-    showToast(`${emp?.name}'s shift moved to ${dayName} ${formatHour(toStartHour)}-${formatHour(toEndHour)}`, 'success');
-    
+    const roleNote = newRoleId !== roleId ? ` as ${roleMap[newRoleId]?.name || 'a new role'}` : '';
+    showToast(`${emp?.name}'s shift moved to ${dayName} ${formatHour(toStartHour)}-${formatHour(toEndHour)}${roleNote}`, 'success');
+
     return true;
 }
 
@@ -3929,16 +4138,9 @@ function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) 
         end: preciseEnd,
         roleId: roleId
     };
-    
-    // Re-render timeline
-    renderTimelineView(state.currentSchedule);
-    
-    // Save to localStorage
-    saveScheduleToStorage();
-    
-    // Mark as having unpublished edits
-    incrementWeekEditCount(state.weekOffset);
-    
+
+    afterManualScheduleEdit();
+
     const emp = employeeMap[empId];
     showToast(`${emp?.name}'s shift adjusted to ${formatHourMinute(preciseStart)}-${formatHourMinute(preciseEnd)}`, 'success');
     
@@ -3974,15 +4176,11 @@ function deleteShiftFromTimeline(empId, dayIdx, startHour, endHour) {
         }
     }
     
-    // Re-render timeline
-    renderTimelineView(state.currentSchedule);
-    
-    // Save to localStorage
-    saveScheduleToStorage();
-    
+    afterManualScheduleEdit();
+
     const emp = employeeMap[empId];
     showToast(`${emp?.name}'s shift deleted`, 'success');
-    
+
     return true;
 }
 
@@ -4000,7 +4198,8 @@ function startResize(e, block, edge, dayIdx, shift) {
     document.body.style.userSelect = 'none';
     
     // Get the slots container for this day
-    const slotsContainer = block.closest('.timeline-slots');
+    // The lanes container spans exactly the hour columns (the role label sits outside it)
+    const slotsContainer = block.closest('.timeline-role-lanes') || block.closest('.timeline-slots');
     
     // Store initial mouse position and block dimensions
     const blockRect = block.getBoundingClientRect();
@@ -4106,627 +4305,563 @@ function startResize(e, block, edge, dayIdx, shift) {
     document.addEventListener('mouseup', onMouseUp);
 }
 
+// ==================== TIMELINE VIEW (days as rows, one lane group per role) ====================
+
+/** Escape text before dropping it into innerHTML. */
+function escHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+/**
+ * Break one day's slot assignments into shift segments per employee AND role.
+ * Someone who switches roles mid-day gets one bar per role, so every bar can
+ * live in the row of the role it belongs to.
+ */
+function buildTimelineSegmentsForDay(slotAssignments, dayIdx) {
+    const byEmp = {};
+    state.hours.forEach(hour => {
+        (slotAssignments[`${dayIdx},${hour}`] || []).forEach(a => {
+            (byEmp[a.employee_id] = byEmp[a.employee_id] || []).push({ hour, roleId: a.role_id });
+        });
+    });
+    const segments = [];
+    Object.entries(byEmp).forEach(([empId, entries]) => {
+        const emp = employeeMap[empId];
+        if (!emp) return;
+        entries.sort((a, b) => a.hour - b.hour);
+        let cur = null;
+        entries.forEach(({ hour, roleId }) => {
+            if (cur && hour === cur.endHour && roleId === cur.roleId) {
+                cur.endHour = hour + 1;
+                return;
+            }
+            cur = { empId, emp, roleId, startHour: hour, endHour: hour + 1, day: state.days[dayIdx], dayIdx };
+            segments.push(cur);
+        });
+    });
+    return segments;
+}
+
+/** Open (unfilled) hours for one day, merged into ranges per role. */
+function buildTimelineGapsForDay(schedule, dayIdx) {
+    const unfilled = (schedule?.metrics?.unfilled_slots || []).filter(s => parseInt(s.day) === parseInt(dayIdx));
+    const byRole = {};
+    unfilled.forEach(s => {
+        const role = s.role_id || '';
+        const hour = parseInt(s.hour);
+        byRole[role] = byRole[role] || {};
+        byRole[role][hour] = (byRole[role][hour] || 0) + (s.needed || 1);
+    });
+    const gaps = [];
+    Object.entries(byRole).forEach(([roleId, hours]) => {
+        const sorted = Object.keys(hours).map(Number).sort((a, b) => a - b);
+        let cur = null;
+        sorted.forEach(h => {
+            if (cur && h === cur.endHour) {
+                cur.endHour = h + 1;
+                cur.needed = Math.max(cur.needed, hours[h]);
+                return;
+            }
+            cur = { isGap: true, day: dayIdx, dayIdx: state.daysOpen.indexOf(dayIdx), roleId, startHour: h, endHour: h + 1, needed: hours[h] };
+            gaps.push(cur);
+        });
+    });
+    return gaps;
+}
+
+/** Greedy lane packing: overlapping bars go on separate lanes. */
+function packIntoLanes(items) {
+    const lanes = [];
+    items.sort((a, b) => a.startHour - b.startHour || a.endHour - b.endHour);
+    items.forEach(item => {
+        let lane = lanes.find(l => !l.some(s => item.startHour < s.endHour && item.endHour > s.startHour));
+        if (!lane) {
+            lane = [];
+            lanes.push(lane);
+        }
+        lane.push(item);
+    });
+    return lanes;
+}
+
+/** One draggable, resizable shift bar labelled "Name - Role". */
+function buildTimelineShiftBlock(shift, schedule, weeklyStats, totalHours, role) {
+    const dayIdx = shift.dayIdx;
+    const preciseTimes = schedule?.shift_times?.[`${shift.empId}_${dayIdx}`];
+    const displayStart = preciseTimes ? preciseTimes.start : shift.startHour;
+    const displayEnd = preciseTimes ? preciseTimes.end : shift.endHour;
+    const duration = displayEnd - displayStart;
+
+    const block = document.createElement('div');
+    block.className = 'timeline-shift-block';
+    block.draggable = true;
+    block.dataset.empId = shift.empId;
+    block.dataset.roleId = shift.roleId;
+    block.dataset.dayIdx = dayIdx;
+    block.dataset.startHour = displayStart;
+    block.dataset.endHour = displayEnd;
+    block.style.left = `${((displayStart - state.startHour) / totalHours) * 100}%`;
+    block.style.width = `${(duration / totalHours) * 100}%`;
+
+    const roleName = role?.name || roleMap[shift.roleId]?.name || 'Staff';
+    const blockColor = state.scheduleColorMode === 'employee'
+        ? (shift.emp.color || '#666')
+        : (role?.color || roleMap[shift.roleId]?.color || '#666');
+    block.style.background = blockColor;
+
+    const stats = weeklyStats[shift.empId] || { hours: 0, days: new Set() };
+    const empType = shift.emp.classification === 'full_time' ? 'Full-time' : 'Part-time';
+    const timeDisplay = preciseTimes
+        ? `${formatHourMinute(displayStart)} - ${formatHourMinute(displayEnd)}`
+        : `${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
+
+    block.innerHTML = `
+        <div class="shift-resize-handle left" data-edge="left"></div>
+        <span class="shift-name">${escHtml(shift.emp.name)} - ${escHtml(roleName)}</span>
+        <div class="shift-resize-handle right" data-edge="right"></div>
+    `;
+    block.title = `${shift.emp.name} - ${roleName} (${empType})\n${timeDisplay}\n\nThis week: ${stats.hours}h of ${shift.emp.min_hours || 0}-${shift.emp.max_hours || 40}h, ${stats.days.size} day${stats.days.size === 1 ? '' : 's'}\n\nDrag to move (within this row or to another day/role) · Drag the edges to resize · Click to edit`;
+
+    block._shiftData = { ...shift, startHour: displayStart, endHour: displayEnd };
+
+    block.addEventListener('click', (e) => {
+        if (e.target.classList.contains('shift-resize-handle') || timelineDragState.isDragging || timelineDragState.isResizing) return;
+        openShiftEditor(shift);
+    });
+
+    block.addEventListener('dragstart', (e) => {
+        if (e.target.classList.contains('shift-resize-handle')) {
+            e.preventDefault();
+            return;
+        }
+        timelineDragState.isDragging = true;
+        timelineDragState.activeShift = block._shiftData;
+        timelineDragState.originalDayIdx = dayIdx;
+        timelineDragState.originalStartHour = shift.startHour;
+        timelineDragState.originalEndHour = shift.endHour;
+        block.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', JSON.stringify(block._shiftData));
+        document.querySelectorAll('.timeline-role-lanes').forEach(l => l.classList.add('drop-ready'));
+    });
+
+    block.addEventListener('dragend', () => {
+        block.classList.remove('dragging');
+        timelineDragState.isDragging = false;
+        timelineDragState.activeShift = null;
+        hideTimelineDropZones();
+    });
+
+    block.querySelector('.shift-resize-handle.left').addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startResize(e, block, 'left', dayIdx, shift);
+    });
+    block.querySelector('.shift-resize-handle.right').addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        startResize(e, block, 'right', dayIdx, shift);
+    });
+    return block;
+}
+
+/**
+ * Every role's lane group is a drop target, so a shift can be dropped right
+ * where it is (same row), on another day, or onto another role the person
+ * holds. The ghost preview follows the mouse inside the target row.
+ */
+function attachTimelineDropHandlers(lanes, dayIdx, roleId) {
+    const targetStartFor = (e) => {
+        const shift = timelineDragState.activeShift;
+        const duration = shift.endHour - shift.startHour;
+        const mouseHour = getTimelineHourFromPosition(e.clientX, lanes);
+        return Math.max(state.startHour, Math.min(Math.round(mouseHour - duration / 2), state.endHour - duration));
+    };
+
+    lanes.addEventListener('dragover', (e) => {
+        if (!timelineDragState.activeShift) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        lanes.classList.add('drag-over');
+        const start = targetStartFor(e);
+        timelineDragState.currentTargetDay = dayIdx;
+        timelineDragState.currentTargetHour = start;
+        const ghost = createGhostPreview(timelineDragState.activeShift, start, lanes);
+        if (ghost) {
+            ghost.style.top = '2px';
+            ghost.style.height = '30px';
+            lanes.appendChild(ghost);
+        }
+    });
+
+    lanes.addEventListener('dragleave', (e) => {
+        if (!lanes.contains(e.relatedTarget)) {
+            lanes.classList.remove('drag-over');
+            lanes.querySelectorAll('.timeline-ghost-preview').forEach(g => g.remove());
+        }
+    });
+
+    lanes.addEventListener('drop', (e) => {
+        e.preventDefault();
+        lanes.classList.remove('drag-over');
+        const shift = timelineDragState.activeShift;
+        if (!shift) return;
+
+        const start = targetStartFor(e);
+        const targetRole = roleId === '__other' ? shift.roleId : roleId;
+        const emp = employeeMap[shift.empId];
+        const finish = () => {
+            timelineDragState.isDragging = false;
+            timelineDragState.activeShift = null;
+            hideTimelineDropZones();
+        };
+
+        if (targetRole !== shift.roleId && emp && !(emp.roles || []).includes(targetRole)) {
+            showToast(`${emp.name} is not set up for the ${roleMap[targetRole]?.name || 'that'} role. Edit them under Staff Availability to add it.`, 'error');
+            finish();
+            return;
+        }
+        const unchanged = dayIdx === timelineDragState.originalDayIdx && start === timelineDragState.originalStartHour && targetRole === shift.roleId;
+        if (!unchanged) {
+            moveShift(shift.empId, shift.roleId, timelineDragState.originalDayIdx,
+                timelineDragState.originalStartHour, timelineDragState.originalEndHour, dayIdx, start, targetRole);
+        }
+        finish();
+    });
+}
+
+function buildTimelinePtoRow(dayPTO) {
+    const roleRow = document.createElement('div');
+    roleRow.className = 'timeline-role-row timeline-pto-role-row';
+    const label = document.createElement('div');
+    label.className = 'timeline-role-label';
+    label.innerHTML = `<span class="role-dot" style="background:#8b5cf6"></span><span class="role-label-text">Time off</span>`;
+    const lanes = document.createElement('div');
+    lanes.className = 'timeline-role-lanes';
+    const lane = document.createElement('div');
+    lane.className = 'timeline-slots-row timeline-pto-row';
+    dayPTO.forEach(pto => {
+        const ptoBlock = document.createElement('div');
+        ptoBlock.className = 'timeline-pto-block';
+        ptoBlock.style.left = '0';
+        ptoBlock.style.width = '100%';
+        const empName = pto.employee_name || 'Employee';
+        ptoBlock.innerHTML = `<span class="pto-icon">${getPTOTypeEmoji(pto.pto_type)}</span><span class="pto-label">${escHtml(empName)} - ${escHtml(capitalizeFirst(pto.pto_type))}</span>`;
+        ptoBlock.title = `${empName}: ${capitalizeFirst(pto.pto_type)} (${pto.start_date} - ${pto.end_date})`;
+        lane.appendChild(ptoBlock);
+    });
+    lanes.appendChild(lane);
+    roleRow.append(label, lanes);
+    return roleRow;
+}
+
 function renderTimelineView(schedule) {
     const container = document.getElementById('timelineGrid');
     if (!container) return;
-    
     container.innerHTML = '';
-    
-    // Make sure state is initialized
-    if (!state.hours || state.hours.length === 0 || !state.daysOpen || state.daysOpen.length === 0) {
-        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 2rem;">
-            Loading schedule data...
-        </div>`;
+
+    if (!state.hours?.length || !state.daysOpen?.length) {
+        container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading schedule data...</div>`;
         return;
     }
-    
+
     const slotAssignments = schedule?.slot_assignments || {};
-    
-    // Calculate weekly stats for each employee (hours worked, days worked)
-    const employeeWeeklyStats = {}; // { empId: { hoursWorked: number, daysWorked: Set } }
-    
-    for (let day = 0; day < 7; day++) {
-        state.hours.forEach(hour => {
-            const key = `${day},${hour}`;
-            const assignments = slotAssignments[key] || [];
-            assignments.forEach(assignment => {
-                const empId = assignment.employee_id;
-                if (!employeeWeeklyStats[empId]) {
-                    employeeWeeklyStats[empId] = { hoursWorked: 0, daysWorked: new Set() };
-                }
-                employeeWeeklyStats[empId].hoursWorked += 1; // Each slot is 1 hour
-                employeeWeeklyStats[empId].daysWorked.add(day);
-            });
+    const totalHours = state.hours.length;
+    const hasSchedule = Object.values(slotAssignments).some(arr => arr && arr.length > 0);
+
+    // Weekly hours/days per person (for tooltips)
+    const weeklyStats = {};
+    Object.entries(slotAssignments).forEach(([key, list]) => {
+        const day = parseInt(key.split(',')[0]);
+        (list || []).forEach(a => {
+            const s = weeklyStats[a.employee_id] = weeklyStats[a.employee_id] || { hours: 0, days: new Set() };
+            s.hours += 1;
+            s.days.add(day);
         });
-    }
-    
-    // Get week dates based on current offset
+    });
+
     const weekDates = getWeekDates(state.weekOffset);
-    
-    // Build header row with hours
+    const rolesSorted = [...state.roles].sort((a, b) => a.name.localeCompare(b.name));
+    const knownRoles = new Set(state.roles.map(r => r.id));
+
+    // Header: Day | Role | hour columns
     const headerDiv = document.createElement('div');
     headerDiv.className = 'timeline-header';
-    
-    // Day column header (simple label, week nav is now in the bar above)
-    const dayLabelHeader = document.createElement('div');
-    dayLabelHeader.className = 'timeline-header-day';
-    dayLabelHeader.textContent = 'Day';
-    headerDiv.appendChild(dayLabelHeader);
-    
-    const hoursHeader = document.createElement('div');
-    hoursHeader.className = 'timeline-header-hours';
-    
+    const dayHead = document.createElement('div');
+    dayHead.className = 'timeline-header-day';
+    dayHead.textContent = 'Day';
+    const roleHead = document.createElement('div');
+    roleHead.className = 'timeline-header-role';
+    roleHead.textContent = 'Role';
+    const hoursHead = document.createElement('div');
+    hoursHead.className = 'timeline-header-hours';
     state.hours.forEach(hour => {
-        const hourLabel = document.createElement('div');
-        hourLabel.className = 'timeline-hour-label';
-        hourLabel.textContent = formatHour(hour);
-        hoursHeader.appendChild(hourLabel);
+        const label = document.createElement('div');
+        label.className = 'timeline-hour-label';
+        label.textContent = formatHour(hour);
+        hoursHead.appendChild(label);
     });
-    
-    // Add the closing hour label (e.g., 6pm for a 6am-6pm business)
     const closingLabel = document.createElement('div');
     closingLabel.className = 'timeline-hour-label timeline-closing-hour';
     closingLabel.textContent = formatHour(state.endHour);
-    hoursHeader.appendChild(closingLabel);
-    
-    headerDiv.appendChild(hoursHeader);
+    hoursHead.appendChild(closingLabel);
+    headerDiv.append(dayHead, roleHead, hoursHead);
     container.appendChild(headerDiv);
-    
-    // Build a row for each day
+
     state.daysOpen.forEach(dayIdx => {
         const rowDiv = document.createElement('div');
         rowDiv.className = 'timeline-row ' + (dayIdx % 2 === 0 ? 'day-even' : 'day-odd');
         rowDiv.dataset.dayIdx = dayIdx;
-        
-        // Day label with date
+
+        const dayDate = weekDates[dayIdx];
         const dayLabel = document.createElement('div');
         dayLabel.className = 'timeline-day-label';
-        const dayDate = weekDates[dayIdx];
-        dayLabel.innerHTML = `
-            <span class="day-name">${state.days[dayIdx].substring(0, 3)}</span>
-            <span class="day-date">${formatShortDate(dayDate)}</span>
-        `;
+        dayLabel.innerHTML = `<span class="day-name">${state.days[dayIdx].substring(0, 3)}</span><span class="day-date">${formatShortDate(dayDate)}</span>`;
         rowDiv.appendChild(dayLabel);
-        
-        // Slots container
+
         const slotsDiv = document.createElement('div');
         slotsDiv.className = 'timeline-slots';
         slotsDiv.dataset.dayIdx = dayIdx;
-        
-        // Create drop zone row (hidden by default, shown during drag)
-        const dropZone = document.createElement('div');
-        dropZone.className = 'timeline-drop-zone timeline-slots-row';
-        dropZone.dataset.dayIdx = dayIdx;
-        
-        // Add hour markers to drop zone for visual guidance
-        state.hours.forEach((hour, idx) => {
-            const marker = document.createElement('div');
-            marker.className = 'drop-zone-hour-marker';
-            marker.style.left = `${(idx / state.hours.length) * 100}%`;
-            marker.style.width = `${100 / state.hours.length}%`;
-            marker.dataset.hour = hour;
-            dropZone.appendChild(marker);
-        });
-        
-        // Drop zone event handlers
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            
-            if (!timelineDragState.activeShift) return;
-            
-            dropZone.classList.add('drag-over');
-            
-            // Calculate target hour from mouse position (this is where center of shift should go)
-            const mouseHour = getTimelineHourFromPosition(e.clientX, dropZone);
-            const shift = timelineDragState.activeShift;
-            const duration = shift.endHour - shift.startHour;
-            
-            // Center the shift on mouse position
-            const centeredStartHour = Math.round(mouseHour - duration / 2);
-            // Clamp to valid range
-            const clampedStartHour = Math.max(state.startHour, Math.min(centeredStartHour, state.endHour - duration));
-            
-            timelineDragState.currentTargetDay = dayIdx;
-            timelineDragState.currentTargetHour = clampedStartHour;
-            
-            // Update ghost preview
-            const existingGhost = dropZone.querySelector('.timeline-ghost-preview');
-            if (existingGhost) existingGhost.remove();
-            
-            const ghost = createGhostPreview(shift, clampedStartHour, dropZone);
-            if (ghost) {
-                dropZone.appendChild(ghost);
-            }
-        });
-        
-        dropZone.addEventListener('dragleave', (e) => {
-            // Only remove if leaving the drop zone entirely
-            if (!dropZone.contains(e.relatedTarget)) {
-                dropZone.classList.remove('drag-over');
-                const ghost = dropZone.querySelector('.timeline-ghost-preview');
-                if (ghost) ghost.remove();
-            }
-        });
-        
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('drag-over');
-            
-            if (!timelineDragState.activeShift) return;
-            
-            const shift = timelineDragState.activeShift;
-            const mouseHour = getTimelineHourFromPosition(e.clientX, dropZone);
-            const duration = shift.endHour - shift.startHour;
-            
-            // Center the shift on mouse position
-            const centeredStartHour = Math.round(mouseHour - duration / 2);
-            // Clamp to valid range
-            const targetStartHour = Math.max(state.startHour, Math.min(centeredStartHour, state.endHour - duration));
-            const targetDayIdx = dayIdx;
-            
-            // Move the shift
-            moveShift(
-                shift.empId,
-                shift.roleId,
-                timelineDragState.originalDayIdx,
-                timelineDragState.originalStartHour,
-                timelineDragState.originalEndHour,
-                targetDayIdx,
-                targetStartHour
-            );
-            
-            // Reset drag state
-            timelineDragState.isDragging = false;
-            timelineDragState.activeShift = null;
-            hideTimelineDropZones();
-        });
-        
-        slotsDiv.appendChild(dropZone);
-        
-        // Build shift blocks for this day
-        const dayAssignments = {};
-        
-        // Gather all assignments for this day (use integer hours for compatibility)
-        state.hours.forEach(hour => {
-            const key = `${dayIdx},${hour}`;
-            const assignments = slotAssignments[key] || [];
-            assignments.forEach(assignment => {
-                const empId = assignment.employee_id;
-                if (!dayAssignments[empId]) {
-                    dayAssignments[empId] = { hours: [], roleId: assignment.role_id };
-                }
-                dayAssignments[empId].hours.push(hour);
-            });
-        });
-        
-        // Convert to shift segments (each employee can have multiple segments if split shift)
-        const allShifts = [];
-        Object.entries(dayAssignments).forEach(([empId, data]) => {
-            const emp = employeeMap[empId];
-            if (!emp) return;
-            
-            const hours = data.hours.sort((a, b) => a - b);
-            
-            // Find continuous segments (consecutive hours)
-            let segStart = hours[0];
-            let prevHour = hours[0];
-            
-            for (let i = 1; i <= hours.length; i++) {
-                const currentHour = hours[i];
-                
-                // Check if continuous (consecutive hours)
-                const isGap = currentHour === undefined || currentHour !== prevHour + 1;
-                
-                if (isGap || i === hours.length) {
-                    allShifts.push({
-                        empId,
-                        emp,
-                        roleId: data.roleId,
-                        startHour: segStart,
-                        endHour: prevHour + 1
-                    });
-                    
-                    if (i < hours.length) {
-                        segStart = currentHour;
-                    }
-                }
-                prevHour = currentHour;
-            }
-        });
-        
-        // Assign shifts to rows (greedy algorithm - place each shift in first row where it fits)
-        const shiftRows = [];
-        allShifts.sort((a, b) => a.startHour - b.startHour);
-        
-        allShifts.forEach(shift => {
-            let placed = false;
-            for (let rowIdx = 0; rowIdx < shiftRows.length; rowIdx++) {
-                const rowShifts = shiftRows[rowIdx];
-                const hasOverlap = rowShifts.some(s => 
-                    shift.startHour < s.endHour && shift.endHour > s.startHour
-                );
-                if (!hasOverlap) {
-                    shift.row = rowIdx;
-                    rowShifts.push(shift);
-                    placed = true;
-                    break;
-                }
-            }
-            if (!placed) {
-                shift.row = shiftRows.length;
-                shiftRows.push([shift]);
-            }
-        });
-        
-        // Add gap indicators (only if a schedule has been generated with actual data)
-        const gapShifts = [];
-        const hasSchedule = Object.keys(slotAssignments).length > 0 && 
-            Object.values(slotAssignments).some(arr => arr && arr.length > 0);
-        
-        if (hasSchedule) {
-            // Use unfilled_slots from schedule metrics if available
-            const unfilledSlots = schedule?.metrics?.unfilled_slots || [];
-            // Use parseInt to handle potential type mismatches from JSON
-            const dayUnfilled = unfilledSlots.filter(s => parseInt(s.day) === parseInt(dayIdx));
-            
-            if (dayUnfilled.length > 0) {
-                // Group by hour (ensure integers) and track role/needed info
-                const hourData = {};
-                dayUnfilled.forEach(slot => {
-                    const hour = parseInt(slot.hour);
-                    if (!hourData[hour]) {
-                        hourData[hour] = { needed: 0, roleId: slot.role_id };
-                    }
-                    hourData[hour].needed += slot.needed || 1;
-                    hourData[hour].roleId = slot.role_id;
-                });
-                
-                const gapHours = Object.keys(hourData).map(h => parseInt(h)).sort((a, b) => a - b);
-                
-                // Convert to segments
-                if (gapHours.length > 0) {
-                    let segStart = gapHours[0];
-                    let prevHour = gapHours[0];
-                    let maxNeeded = hourData[gapHours[0]].needed;
-                    let roleId = hourData[gapHours[0]].roleId;
-                    
-                    for (let i = 1; i <= gapHours.length; i++) {
-                        const currentHour = gapHours[i];
-                        
-                        if (currentHour !== prevHour + 1 || i === gapHours.length) {
-                            gapShifts.push({
-                                isGap: true,
-                                day: dayIdx,
-                                dayIdx: state.daysOpen.indexOf(dayIdx),
-                                roleId: roleId,
-                                startHour: segStart,
-                                endHour: prevHour + 1,
-                                needed: maxNeeded
-                            });
-                            
-                            if (i < gapHours.length) {
-                                segStart = currentHour;
-                                maxNeeded = hourData[currentHour].needed;
-                                roleId = hourData[currentHour].roleId;
-                            }
-                        } else {
-                            maxNeeded = Math.max(maxNeeded, hourData[currentHour].needed);
-                        }
-                        prevHour = currentHour;
-                    }
-                }
-            } else {
-                // Fallback to shift templates
-                const shiftTemplates = state.shiftTemplates || [];
-                const hourData = {}; // { hour: { needed, roleId } }
-                
-                state.hours.forEach(hour => {
-                    const key = `${dayIdx},${hour}`;
-                    const assignments = slotAssignments[key] || [];
-                    
-                    const assignedByRole = {};
-                    assignments.forEach(a => {
-                        assignedByRole[a.role_id] = (assignedByRole[a.role_id] || 0) + 1;
-                    });
-                    
-                    let totalGap = 0;
-                    let gapRoleId = null;
-                    shiftTemplates.forEach(shift => {
-                        if (!shift.days || !shift.days.includes(dayIdx)) return;
-                        if (hour < shift.start_hour || hour >= shift.end_hour) return;
-                        
-                        (shift.roles || []).forEach(roleReq => {
-                            const needed = roleReq.count || 0;
-                            const assigned = assignedByRole[roleReq.role_id] || 0;
-                            if (needed > assigned) {
-                                totalGap += (needed - assigned);
-                                gapRoleId = roleReq.role_id;
-                            }
-                        });
-                    });
-                    
-                    if (totalGap > 0) {
-                        hourData[hour] = { needed: totalGap, roleId: gapRoleId };
-                    }
-                });
-                
-                // Convert to segments
-                const gapHours = Object.keys(hourData).map(h => parseInt(h)).sort((a, b) => a - b);
-                
-                if (gapHours.length > 0) {
-                    let segStart = gapHours[0];
-                    let prevHour = gapHours[0];
-                    let maxNeeded = hourData[gapHours[0]].needed;
-                    let roleId = hourData[gapHours[0]].roleId;
-                    
-                    for (let i = 1; i <= gapHours.length; i++) {
-                        const currentHour = gapHours[i];
-                        
-                        if (currentHour !== prevHour + 1 || i === gapHours.length) {
-                            gapShifts.push({
-                                isGap: true,
-                                day: dayIdx,
-                                dayIdx: state.daysOpen.indexOf(dayIdx),
-                                roleId: roleId,
-                                startHour: segStart,
-                                endHour: prevHour + 1,
-                                needed: maxNeeded
-                            });
-                            
-                            if (i < gapHours.length) {
-                                segStart = currentHour;
-                                maxNeeded = hourData[currentHour].needed;
-                                roleId = hourData[currentHour].roleId;
-                            }
-                        } else {
-                            maxNeeded = Math.max(maxNeeded, hourData[currentHour].needed);
-                        }
-                        prevHour = currentHour;
-                    }
-                }
-            }
-        }
-        
-        // Create row containers and render shifts using percentage positioning
-        const totalHours = state.hours.length;
-        const blockPadding = 2; // Small padding in pixels for visual spacing (applied via CSS)
-        
-        // Add gap row FIRST (at the top) if there are gaps
-        if (gapShifts.length > 0) {
-            const gapRowContainer = document.createElement('div');
-            gapRowContainer.className = 'timeline-slots-row timeline-gap-row';
-            
-            gapShifts.forEach(gap => {
-                const startIdx = state.hours.indexOf(gap.startHour);
-                const duration = gap.endHour - gap.startHour;
-                
-                const gapBlock = document.createElement('div');
-                gapBlock.className = 'timeline-gap-block';
-                
-                // Calculate percentage positions - align exactly with hour columns
-                const leftPercent = (startIdx / totalHours) * 100;
-                const widthPercent = (duration / totalHours) * 100;
-                gapBlock.style.left = `${leftPercent}%`;
-                gapBlock.style.width = `${widthPercent}%`;
-                gapBlock.innerHTML = `<span class="gap-label">+${duration}h</span>`;
-                gapBlock.title = `Click to see available employees`;
-                
-                // Add click handler to show available employees
-                gapBlock.addEventListener('click', () => {
-                    openGapModal(gap);
-                });
-                
-                gapRowContainer.appendChild(gapBlock);
-            });
-            
-            slotsDiv.appendChild(gapRowContainer);
-        }
-        
-        // Add employee shift rows
-        const numShiftRows = shiftRows.length;
-        
-        for (let rowIdx = 0; rowIdx < numShiftRows; rowIdx++) {
-            const rowContainer = document.createElement('div');
-            rowContainer.className = 'timeline-slots-row';
-            rowContainer.dataset.dayIdx = dayIdx;
-            
-            // Add click handler to create shift in blank space
-            rowContainer.addEventListener('click', (e) => handleTimelineRowClick(e, dayIdx, slotsDiv));
-            rowContainer.addEventListener('mousedown', (e) => handleTimelineRowMouseDown(e, dayIdx, slotsDiv));
-            
-            // Add shifts for this row
-            const rowShifts = shiftRows[rowIdx] || [];
-            rowShifts.forEach(shift => {
-                // Check for precise times in shift_times
-                const shiftKey = `${shift.empId}_${dayIdx}`;
-                const preciseTimes = schedule?.shift_times?.[shiftKey];
-                
-                // Use precise times if available, otherwise use hourly slot times
-                const displayStart = preciseTimes ? preciseTimes.start : shift.startHour;
-                const displayEnd = preciseTimes ? preciseTimes.end : shift.endHour;
-                const duration = displayEnd - displayStart;
-                
-                const block = document.createElement('div');
-                block.className = 'timeline-shift-block';
-                block.draggable = true;
-                
-                // Add data attributes for drag/drop identification
-                block.dataset.empId = shift.empId;
-                block.dataset.roleId = shift.roleId;
-                block.dataset.dayIdx = dayIdx;
-                block.dataset.startHour = displayStart;
-                block.dataset.endHour = displayEnd;
-                
-                // Calculate percentage positions using precise times
-                const leftPercent = ((displayStart - state.startHour) / totalHours) * 100;
-                const widthPercent = (duration / totalHours) * 100;
-                block.style.left = `${leftPercent}%`;
-                block.style.width = `${widthPercent}%`;
-                
-                // Color based on mode
-                const role = roleMap[shift.roleId];
-                const blockColor = state.scheduleColorMode === 'employee' 
-                    ? (shift.emp.color || '#666') 
-                    : (role?.color || '#666');
-                block.style.background = blockColor;
-                
-                // Better tooltip with name, hours, and role
-                const roleName = role?.name || 'Staff';
-                
-                // Get employee weekly stats
-                const empStats = employeeWeeklyStats[shift.empId] || { hoursWorked: 0, daysWorked: new Set() };
-                const hoursWorked = empStats.hoursWorked;
-                const daysWorked = empStats.daysWorked.size;
-                const minHours = shift.emp.min_hours || 0;
-                const maxHours = shift.emp.max_hours || shift.emp.maxHours || 40;
-                const empType = shift.emp.classification === 'full_time' ? 'Full-Time' : 'Part-Time';
-                
-                // Create inner content with resize handles
-                block.innerHTML = `
-                    <div class="shift-resize-handle left" data-edge="left"></div>
-                    <span class="shift-name">${shift.emp.name}</span>
-                    <div class="shift-resize-handle right" data-edge="right"></div>
-                `;
-                const timeDisplay = preciseTimes 
-                    ? `${formatHourMinute(displayStart)} - ${formatHourMinute(displayEnd)}`
-                    : `${formatHour(shift.startHour)} - ${formatHour(shift.endHour)}`;
-                block.title = `${shift.emp.name} (${empType})\nRole: ${roleName}\n${timeDisplay}\n\nWeekly: ${hoursWorked}h / ${minHours}-${maxHours}h range\nDays this week: ${daysWorked}\n\nDrag to move · Drag edges to resize`;
-                
-                // Add day info to shift for the editor
-                shift.day = state.days[dayIdx];
-                shift.dayIdx = dayIdx;
-                
-                // Store shift reference for drag operations (use precise times)
-                block._shiftData = { 
-                    ...shift,
-                    startHour: displayStart,
-                    endHour: displayEnd
-                };
-                
-                // Click handler to edit shift (only if not dragging/resizing)
-                block.addEventListener('click', (e) => {
-                    // Don't open editor if clicking on resize handles or during drag
-                    if (e.target.classList.contains('shift-resize-handle') || timelineDragState.isDragging || timelineDragState.isResizing) {
-                        return;
-                    }
-                    openShiftEditor(shift);
-                });
-                
-                // Drag start handler
-                block.addEventListener('dragstart', (e) => {
-                    // Don't allow drag if starting from resize handle
-                    if (e.target.classList.contains('shift-resize-handle')) {
-                        e.preventDefault();
-                        return;
-                    }
-                    
-                    timelineDragState.isDragging = true;
-                    timelineDragState.activeShift = block._shiftData;
-                    timelineDragState.originalDayIdx = dayIdx;
-                    timelineDragState.originalStartHour = shift.startHour;
-                    timelineDragState.originalEndHour = shift.endHour;
-                    
-                    block.classList.add('dragging');
-                    
-                    // Set drag data
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', JSON.stringify(block._shiftData));
-                    
-                    // Show drop zones
-                    setTimeout(() => showTimelineDropZones(), 0);
-                });
-                
-                block.addEventListener('dragend', (e) => {
-                    block.classList.remove('dragging');
-                    timelineDragState.isDragging = false;
-                    timelineDragState.activeShift = null;
-                    hideTimelineDropZones();
-                });
-                
-                // Resize handle events
-                const leftHandle = block.querySelector('.shift-resize-handle.left');
-                const rightHandle = block.querySelector('.shift-resize-handle.right');
-                
-                if (leftHandle) {
-                    leftHandle.addEventListener('mousedown', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        startResize(e, block, 'left', dayIdx, shift);
-                    });
-                }
-                
-                if (rightHandle) {
-                    rightHandle.addEventListener('mousedown', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        startResize(e, block, 'right', dayIdx, shift);
-                    });
-                }
-                
-                rowContainer.appendChild(block);
-            });
-            
-            slotsDiv.appendChild(rowContainer);
-        }
-        
-        // If no shifts and no gaps, add an empty row
-        if (numShiftRows === 0 && gapShifts.length === 0) {
-            const emptyRow = document.createElement('div');
-            emptyRow.className = 'timeline-slots-row timeline-empty-row';
-            emptyRow.dataset.dayIdx = dayIdx;
-            emptyRow.style.minHeight = '40px';
-            emptyRow.title = 'Click or drag to add a shift';
-            
-            // Add click handler to create shift
-            emptyRow.addEventListener('click', (e) => handleTimelineRowClick(e, dayIdx, slotsDiv));
-            emptyRow.addEventListener('mousedown', (e) => handleTimelineRowMouseDown(e, dayIdx, slotsDiv));
-            
-            slotsDiv.appendChild(emptyRow);
-        }
-        
-        // Add PTO blocks for this day
-        // dayDate already defined above in this forEach
-        const dayDateStr = dayDate.toISOString().split('T')[0];
-        
+
+        // Approved time off shows first
         const dayPTO = (state.approvedPTO || []).filter(pto => {
             const ptoStart = new Date(pto.start_date + 'T00:00:00');
             const ptoEnd = new Date(pto.end_date + 'T00:00:00');
             return dayDate >= ptoStart && dayDate <= ptoEnd;
         });
-        
-        if (dayPTO.length > 0) {
-            const ptoRowContainer = document.createElement('div');
-            ptoRowContainer.className = 'timeline-slots-row timeline-pto-row';
-            ptoRowContainer.style.position = 'relative';
-            ptoRowContainer.style.minHeight = '32px';
-            
-            dayPTO.forEach(pto => {
-                const ptoBlock = document.createElement('div');
-                ptoBlock.className = 'timeline-pto-block';
-                ptoBlock.style.left = '0';
-                ptoBlock.style.width = '100%';
-                
-                const emoji = getPTOTypeEmoji(pto.pto_type);
-                const empName = pto.employee_name || 'Employee';
-                
-                ptoBlock.innerHTML = `
-                    <span class="pto-icon">${emoji}</span>
-                    <span class="pto-label">${empName} - ${capitalizeFirst(pto.pto_type)}</span>
-                `;
-                ptoBlock.title = `${empName}: ${capitalizeFirst(pto.pto_type)} (${pto.start_date} - ${pto.end_date})`;
-                
-                ptoRowContainer.appendChild(ptoBlock);
+        if (dayPTO.length > 0) slotsDiv.appendChild(buildTimelinePtoRow(dayPTO));
+
+        // Shifts and open hours for the day, grouped by role
+        const segments = buildTimelineSegmentsForDay(slotAssignments, dayIdx);
+        const gaps = hasSchedule ? buildTimelineGapsForDay(schedule, dayIdx) : [];
+        const segByRole = {};
+        const gapByRole = {};
+        segments.forEach(s => {
+            const k = knownRoles.has(s.roleId) ? s.roleId : '__other';
+            (segByRole[k] = segByRole[k] || []).push(s);
+        });
+        gaps.forEach(g => {
+            const k = knownRoles.has(g.roleId) ? g.roleId : '__other';
+            (gapByRole[k] = gapByRole[k] || []).push(g);
+        });
+
+        const roleRows = rolesSorted.map(r => ({ id: r.id, name: r.name, color: r.color }));
+        if (segByRole.__other || gapByRole.__other) roleRows.push({ id: '__other', name: 'Other', color: '#64748b' });
+
+        roleRows.forEach(role => {
+            const roleRow = document.createElement('div');
+            roleRow.className = 'timeline-role-row';
+            roleRow.dataset.dayIdx = dayIdx;
+            roleRow.dataset.roleId = role.id;
+
+            const shiftsHere = segByRole[role.id] || [];
+            const gapsHere = gapByRole[role.id] || [];
+            const label = document.createElement('div');
+            label.className = 'timeline-role-label';
+            label.innerHTML = `<span class="role-dot" style="background:${escHtml(role.color)}"></span><span class="role-label-text">${escHtml(role.name)}</span>`;
+            label.title = `${role.name} on ${state.days[dayIdx]}: ${shiftsHere.length} shift${shiftsHere.length === 1 ? '' : 's'}${gapsHere.length ? `, ${gapsHere.length} still open` : ''}`;
+
+            const lanes = document.createElement('div');
+            lanes.className = 'timeline-role-lanes';
+            lanes.dataset.dayIdx = dayIdx;
+            lanes.dataset.roleId = role.id;
+
+            // Open hours for this role sit in their own lane at the top of the row
+            if (gapsHere.length) {
+                const gapLane = document.createElement('div');
+                gapLane.className = 'timeline-slots-row timeline-gap-row';
+                gapsHere.forEach(gap => {
+                    const gapBlock = document.createElement('div');
+                    gapBlock.className = 'timeline-gap-block';
+                    gapBlock.style.left = `${(state.hours.indexOf(gap.startHour) / totalHours) * 100}%`;
+                    gapBlock.style.width = `${((gap.endHour - gap.startHour) / totalHours) * 100}%`;
+                    gapBlock.innerHTML = `<span class="gap-label">+${gap.needed} ${escHtml(role.name)}</span>`;
+                    gapBlock.title = `Still need ${gap.needed} ${role.name} ${formatHour(gap.startHour)} - ${formatHour(gap.endHour)}\nClick to see who is available`;
+                    gapBlock.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        openGapModal(gap);
+                    });
+                    gapLane.appendChild(gapBlock);
+                });
+                lanes.appendChild(gapLane);
+            }
+
+            const packed = packIntoLanes(shiftsHere);
+            if (packed.length === 0) packed.push([]);
+            packed.forEach(laneShifts => {
+                const lane = document.createElement('div');
+                lane.className = 'timeline-slots-row' + (laneShifts.length ? '' : ' timeline-empty-row');
+                lane.dataset.dayIdx = dayIdx;
+                lane.dataset.roleId = role.id;
+                lane.title = laneShifts.length ? '' : 'Click or drag here to add a shift';
+                const preselect = role.id === '__other' ? null : role.id;
+                lane.addEventListener('click', (e) => {
+                    timelineCreateState.preselectRoleId = preselect;
+                    handleTimelineRowClick(e, dayIdx, lanes);
+                });
+                lane.addEventListener('mousedown', (e) => {
+                    timelineCreateState.preselectRoleId = preselect;
+                    handleTimelineRowMouseDown(e, dayIdx, lanes);
+                });
+                laneShifts.forEach(shift => lane.appendChild(buildTimelineShiftBlock(shift, schedule, weeklyStats, totalHours, role)));
+                lanes.appendChild(lane);
             });
-            
-            slotsDiv.insertBefore(ptoRowContainer, slotsDiv.firstChild);
-        }
-        
+
+            attachTimelineDropHandlers(lanes, dayIdx, role.id);
+            roleRow.append(label, lanes);
+            slotsDiv.appendChild(roleRow);
+        });
+
         rowDiv.appendChild(slotsDiv);
         container.appendChild(rowDiv);
     });
-    
+
     renderScheduleLegend();
+}
+
+// ==================== COVERAGE RECOMPUTE (after manual edits) ====================
+
+/**
+ * Coverage requirements for this business as a map "day,hour,role" -> {min, max, is_peak}.
+ * Uses the shift templates in shifts mode, otherwise the stored requirements.
+ */
+function getWeekCoverageRequirements() {
+    const req = {};
+    const add = (d, h, r, min, max, peak) => {
+        const key = `${d},${h},${r}`;
+        const cur = req[key] || { min: 0, max: 0, is_peak: false };
+        cur.min += min;
+        cur.max += max;
+        cur.is_peak = cur.is_peak || !!peak;
+        req[key] = cur;
+    };
+    const templates = state.shiftTemplates || [];
+    if (state.coverageMode !== 'detailed' && templates.length) {
+        templates.forEach(t => (t.days || []).forEach(d => {
+            if (!state.daysOpen.includes(d)) return;
+            for (let h = t.start_hour; h < t.end_hour; h++) {
+                if (!state.hours.includes(h)) continue;
+                (t.roles || []).forEach(rr => add(d, h, rr.role_id, rr.count || 0, rr.max_count || rr.count || 0, false));
+            }
+        }));
+    } else {
+        (state.business?.coverage_requirements || []).forEach(c => {
+            if (state.daysOpen.includes(c.day) && state.hours.includes(c.hour)) {
+                add(c.day, c.hour, c.role_id, c.min_staff || 0, c.max_staff || 0, c.is_peak);
+            }
+        });
+    }
+    return req;
+}
+
+/** Merge hour-by-hour open slots into shift-sized ranges (same grouping the server uses). */
+function groupUnfilledRanges(unfilled) {
+    const byKey = {};
+    (unfilled || []).forEach(s => {
+        const key = `${s.day}|${s.role_id}|${s.reason || ''}`;
+        (byKey[key] = byKey[key] || []).push(s);
+    });
+    const ranges = [];
+    Object.values(byKey).forEach(slots => {
+        slots.sort((a, b) => a.hour - b.hour);
+        let cur = null;
+        slots.forEach(s => {
+            if (cur && parseInt(s.hour) === cur.end_hour) {
+                cur.end_hour = parseInt(s.hour) + 1;
+                cur.needed = Math.max(cur.needed, s.needed || 1);
+                return;
+            }
+            cur = {
+                day: parseInt(s.day), role_id: s.role_id, role_name: s.role_name || roleMap[s.role_id]?.name || s.role_id,
+                start_hour: parseInt(s.hour), end_hour: parseInt(s.hour) + 1, needed: s.needed || 1,
+                is_peak: !!s.is_peak, reason: s.reason || '',
+            };
+            ranges.push(cur);
+        });
+    });
+    ranges.sort((a, b) => a.day - b.day || a.start_hour - b.start_hour || a.role_name.localeCompare(b.role_name));
+    return ranges;
+}
+
+/**
+ * Recalculate open hours, coverage %, and per-person hours from the current
+ * slot assignments. Called after every manual edit (drag, resize, add, delete)
+ * so the "still needed" markers and the notes always match what is on screen.
+ */
+function recomputeCoverageGaps() {
+    const sched = state.currentSchedule;
+    if (!sched) return;
+    const req = getWeekCoverageRequirements();
+    const slots = sched.slot_assignments || {};
+
+    const staffed = {};
+    Object.entries(slots).forEach(([k, list]) => (list || []).forEach(a => {
+        const key = `${k},${a.role_id}`;
+        staffed[key] = (staffed[key] || 0) + 1;
+    }));
+
+    // Keep the solver's explanation for gaps it already reported
+    const oldReasons = {};
+    (sched.metrics?.unfilled_slots || []).forEach(s => { if (s.reason) oldReasons[`${s.day},${s.hour},${s.role_id}`] = s.reason; });
+
+    const unfilled = [];
+    const byRole = {}, byDay = {};
+    let required = 0, filled = 0, stillNeeded = 0;
+    Object.entries(req).forEach(([key, { min, is_peak }]) => {
+        if (min <= 0) return;
+        const [d, h, r] = key.split(',');
+        const have = staffed[key] || 0;
+        required += min;
+        filled += Math.min(have, min);
+        if (have < min) {
+            const needed = min - have;
+            unfilled.push({
+                day: +d, hour: +h, role_id: r, role_name: roleMap[r]?.name || r, needed, filled: have,
+                required: min, is_peak, reason: oldReasons[key] || 'Left open by a manual edit.',
+            });
+            byRole[r] = (byRole[r] || 0) + needed;
+            byDay[d] = (byDay[d] || 0) + needed;
+            stillNeeded += needed;
+        }
+    });
+    unfilled.sort((a, b) => a.day - b.day || a.hour - b.hour);
+
+    const m = sched.metrics = sched.metrics || {};
+    m.unfilled_slots = unfilled;
+    m.unfilled_ranges = groupUnfilledRanges(unfilled);
+    m.unfilled_by_role = byRole;
+    m.unfilled_by_day = byDay;
+    m.total_hours_still_needed = stillNeeded;
+    m.total_slots_required = required;
+    m.total_slots_filled = filled;
+    m.coverage_percentage = required ? Math.round((filled / required) * 1000) / 10 : 100;
+    sched.coverage_percentage = m.coverage_percentage;
+    sched.total_hours_needed = required;
+    sched.total_hours_filled = filled;
+
+    const hours = {};
+    Object.values(slots).forEach(list => (list || []).forEach(a => { hours[a.employee_id] = (hours[a.employee_id] || 0) + 1; }));
+    sched.employee_hours = hours;
+    sched.employee_overtime = Object.fromEntries(Object.entries(hours).map(([e, h]) => [e, Math.max(0, h - 40)]));
+    let cost = 0;
+    Object.entries(hours).forEach(([e, h]) => {
+        const rate = employeeMap[e]?.hourly_rate || 0;
+        const ot = Math.max(0, h - 40);
+        cost += (h - ot) * rate + ot * rate * 1.5;
+    });
+    m.estimated_labor_cost = Math.round(cost * 100) / 100;
+    m.total_overtime_hours = Object.values(sched.employee_overtime).reduce((a, b) => a + b, 0);
+}
+
+/** Everything that should happen after a manual change to the schedule. */
+function afterManualScheduleEdit(rerender = true) {
+    if (!state.currentSchedule) return;
+    recomputeCoverageGaps();
+    saveScheduleToStorage();
+    incrementWeekEditCount(state.weekOffset);
+    try { updateMetrics(state.currentSchedule); } catch (err) { console.warn('metrics refresh failed', err); }
+    try { updateEmployeeHours(state.currentSchedule); } catch (err) { /* panel may be collapsed */ }
+    if (rerender) renderCurrentScheduleView(state.currentSchedule);
 }
 
 function updateMetrics(schedule) {
@@ -4814,16 +4949,19 @@ function renderScheduleInsights(schedule) {
     let html = '<div class="insights-title">Scheduler notes</div>';
 
     if (unfilled.length) {
-        // Group the open hours by their reason so the list stays short
+        // One line per open shift ("Tue 10am-2pm, Manager"), grouped by reason
+        const ranges = metrics.unfilled_ranges?.length ? metrics.unfilled_ranges : groupUnfilledRanges(unfilled);
         const byReason = {};
-        unfilled.forEach(u => {
-            const key = u.reason || 'Could not be filled.';
+        ranges.forEach(r => {
+            const key = r.reason || 'Could not be filled.';
             if (!byReason[key]) byReason[key] = [];
-            byReason[key].push(`${dayName(u.day)} ${fmtHour(u.hour)} (${u.role_name || u.role_id})`);
+            const who = r.needed > 1 ? `${r.needed} ${r.role_name || r.role_id}s` : (r.role_name || r.role_id);
+            byReason[key].push(`${dayName(r.day)} ${fmtHour(r.start_hour)}-${fmtHour(r.end_hour)} · ${who}`);
         });
-        html += '<div class="insight-group"><div class="insight-heading">Open hours</div><ul>';
-        Object.entries(byReason).slice(0, 6).forEach(([reason, slots]) => {
-            const shown = slots.slice(0, 4).map(esc).join(', ') + (slots.length > 4 ? ` +${slots.length - 4} more` : '');
+        html += '<div class="insight-group"><div class="insight-heading">Open shifts</div><ul>';
+        Object.entries(byReason).slice(0, 5).forEach(([reason, shifts]) => {
+            const shown = shifts.slice(0, 3).map(s => `<span class="insight-shift">${esc(s)}</span>`).join('')
+                + (shifts.length > 3 ? `<span class="insight-more">+${shifts.length - 3} more</span>` : '');
             html += `<li><strong>${esc(reason)}</strong><span class="insight-slots">${shown}</span></li>`;
         });
         html += '</ul></div>';
@@ -5152,6 +5290,13 @@ function openTimelineAddShiftModal(dayIdx, startHour = null, endHour = null) {
     // Populate employee dropdown (will be filtered when role is selected)
     const empSelect = document.getElementById('timelineAddShiftEmployee');
     populateEmployeeDropdownByRole(empSelect, null); // Show all employees initially
+    // Clicking inside a role's row pre-selects that role
+    const preselect = timelineCreateState.preselectRoleId;
+    timelineCreateState.preselectRoleId = null;
+    if (preselect && state.roles.some(r => r.id === preselect)) {
+        roleSelect.value = preselect;
+        populateEmployeeDropdownByRole(empSelect, preselect);
+    }
     
     // Populate hour dropdowns
     const startHourSelect = document.getElementById('timelineAddShiftStartHour');
@@ -5418,16 +5563,11 @@ function saveTimelineAddShift(e) {
         }
     }
     
-    // Close modal and refresh
+    // Close modal and refresh (open hours and metrics update with the new shift)
     const modal = document.getElementById('timelineAddShiftModal');
     modal.classList.remove('active');
-    
-    // Re-render timeline
-    renderTimelineView(state.currentSchedule);
-    
-    // Save to localStorage
-    saveScheduleToStorage();
-    
+    afterManualScheduleEdit();
+
     const emp = employeeMap[empId];
     const dayName = state.days[dayIdx];
     showToast(`Added ${emp?.name}'s shift on ${dayName}`, 'success');
@@ -5770,9 +5910,9 @@ function saveShiftEdit() {
         
         showToast('Shift reassigned successfully', 'success');
     }
-    
-    // Re-render the schedule
-    renderSchedule(state.currentSchedule);
+
+    // Re-render whichever view is active and refresh open hours / metrics
+    afterManualScheduleEdit();
     closeAllModals();
 }
 
@@ -5820,34 +5960,10 @@ function deleteScheduleShift() {
         }
     });
     
-    // Update unfilled slots (add the deleted shift as gaps)
-    if (!state.currentSchedule.metrics) {
-        state.currentSchedule.metrics = { unfilled_slots: [] };
-    }
-    if (!state.currentSchedule.metrics.unfilled_slots) {
-        state.currentSchedule.metrics.unfilled_slots = [];
-    }
-    
-    // Add each hour as an unfilled slot
-    hoursToDelete.forEach(hour => {
-        state.currentSchedule.metrics.unfilled_slots.push({
-            day: shiftData.dayIdx,
-            hour: hour,
-            role_id: shiftData.roleId,
-            needed: 1
-        });
-    });
-    
+    // Recompute open hours from the requirements (the deleted hours only count
+    // as gaps where coverage actually calls for them)
+    afterManualScheduleEdit();
     showToast('Shift deleted', 'success');
-    
-    // Re-render the schedule based on current view mode
-    if (state.scheduleViewMode === 'timeline') {
-        renderTimelineView(state.currentSchedule);
-    } else if (state.scheduleViewMode === 'table') {
-        renderSimpleTableView(state.currentSchedule);
-    } else {
-        renderSchedule(state.currentSchedule);
-    }
     closeAllModals();
 }
 
@@ -5932,26 +6048,22 @@ function saveSlotAssignment() {
 let employeeFilterBy = 'all'; // Default filter
 
 function setupEmployeesTab() {
-    dom.addEmployeeBtn.addEventListener('click', () => openEmployeeForm());
-    dom.employeeSearch.addEventListener('input', renderEmployeesGrid);
-    
-    // Filter dropdown toggle
+    // The team list lives on the Staff Availability page; only the Add button remains.
+    if (dom.addEmployeeBtn) dom.addEmployeeBtn.addEventListener('click', () => openEmployeeForm());
+    if (dom.employeeSearch) dom.employeeSearch.addEventListener('input', renderEmployeesGrid);
+    if (!dom.employeeFilterBtn || !dom.employeeFilterMenu) return;
+
     dom.employeeFilterBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         dom.employeeFilterMenu.classList.toggle('open');
-        // Populate role filter options when menu opens
         populateRoleFilterOptions();
     });
-    
-    // Filter option selection (for static options)
     dom.employeeFilterMenu.querySelectorAll('.filter-option').forEach(option => {
         option.addEventListener('click', (e) => {
             e.stopPropagation();
             selectFilterOption(option);
         });
     });
-    
-    // Close menu when clicking outside
     document.addEventListener('click', () => {
         dom.employeeFilterMenu.classList.remove('open');
     });
@@ -5986,7 +6098,7 @@ function selectFilterOption(option) {
     
     // Close menu and re-render
     dom.employeeFilterMenu.classList.remove('open');
-    renderEmployeesGrid();
+    renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
 }
 
 function renderEmployeesGrid() {
@@ -6036,9 +6148,9 @@ function renderEmployeesGrid() {
         const initials = emp.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         const rolesText = emp.roles.map(rId => roleMap[rId]?.name || rId).join(', ') || 'No roles';
         
-        // Full text badges for desktop, abbreviated for mobile (CSS handles visibility)
-        let badgesFull = getBadgesHTML(emp, true);
-        let badgesShort = getBadgesHTML(emp, false);
+        // Badges carry both full and short labels; CSS picks one per screen size
+        let badgesFull = getBadgesHTML(emp);
+        let badgesShort = '';
         
         card.innerHTML = `
             <div class="employee-card-header">
@@ -6340,7 +6452,7 @@ async function handleEmployeeSubmit(e) {
             }
             
             buildLookups();
-            renderEmployeesGrid();
+            renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
             renderEmployeeHoursList();
             closeAllModals();
             
@@ -6393,7 +6505,7 @@ async function deleteEmployee(empId) {
         if (data.success) {
             state.employees = state.employees.filter(e => e.id !== empId);
             delete employeeMap[empId];
-            renderEmployeesGrid();
+            renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
             renderEmployeeHoursList();
             showToast(data.message || 'Employee removed', 'success');
         } else {
@@ -7205,15 +7317,20 @@ function renderAvailabilityPage() {
         const item = document.createElement('div');
         item.className = `avail-staff-item${isSelected ? ' selected' : ''}`;
         item.dataset.id = emp.id;
+        const flags = [];
+        if (emp.can_supervise) flags.push('Supervisor');
+        if (emp.needs_supervision) flags.push('New hire');
         item.innerHTML = `
-            <div class="avail-staff-avatar" style="background: ${emp.color || '#467df6'}">${initials}</div>
+            <div class="avail-staff-avatar" style="background: ${escHtml(emp.color || '#467df6')}">${escHtml(initials)}</div>
             <div class="avail-staff-info">
-                <div class="avail-staff-name">
-                    ${emp.name}
-                    <span class="badge badge-${emp.classification === 'full_time' ? 'ft' : 'pt'}">${emp.classification === 'full_time' ? 'FT' : 'PT'}</span>
+                <div class="avail-staff-name">${escHtml(emp.name)}</div>
+                <div class="avail-staff-role">${escHtml(roleNames)}</div>
+                <div class="avail-staff-meta">
+                    <span class="avail-meta-pill ${emp.classification === 'full_time' ? 'pill-ft' : 'pill-pt'}">${emp.classification === 'full_time' ? 'Full-time' : 'Part-time'}</span>
+                    <span class="avail-meta-text">${emp.min_hours}–${emp.max_hours} hrs/week</span>
+                    ${flags.map(f => `<span class="avail-meta-text">· ${f}</span>`).join('')}
                 </div>
-                <div class="avail-staff-role">${roleNames}</div>
-                <div class="avail-staff-hours">${availHours} hrs/week available</div>
+                <div class="avail-staff-hours">${availHours} hours available</div>
             </div>
         `;
         
@@ -7268,47 +7385,28 @@ function showAvailabilityPanel(empId) {
     document.getElementById('availPanelName').textContent = emp.name;
     
     const availHours = calculateAvailableHours(emp);
-    document.getElementById('availPanelHours').textContent = `${availHours} hours/week available`;
-    
-    // Setup edit button to navigate to Staff page
+    const roleNames = (emp.roles || []).map(r => roleMap[r]?.name || r).join(', ') || 'No roles yet';
+    document.getElementById('availPanelHours').textContent = `${roleNames} · ${availHours} hours available per week`;
+
+    // Edit / delete this person right here
     const editBtn = document.getElementById('availEditEmpBtn');
-    if (editBtn) {
-        editBtn.onclick = () => navigateToStaffAndEdit(empId);
-    }
-    
+    if (editBtn) editBtn.onclick = () => openEmployeeForm(empId);
+    const editBtnFull = document.getElementById('availEditEmpBtnFull');
+    if (editBtnFull) editBtnFull.onclick = () => openEmployeeForm(empId);
+    const deleteBtn = document.getElementById('availDeleteEmpBtn');
+    if (deleteBtn) deleteBtn.onclick = () => confirmDeleteEmployee(empId);
+
+    // Rules and info card (spelled out, no abbreviations)
+    const details = document.getElementById('availPanelDetails');
+    if (details) details.innerHTML = buildEmployeeDetailHtml(emp, { availability: false, rules: true });
+
     // Render table view
     renderManagerAvailabilityTable(emp);
 }
 
 function navigateToStaffAndEdit(empId) {
-    // Switch to Staff tab
-    switchTab('employees');
-    
-    setTimeout(() => {
-        // Find and expand the employee card
-        const card = document.querySelector(`.employee-card[data-id="${empId}"]`);
-        if (card) {
-            // Collapse any other expanded cards
-            document.querySelectorAll('.employee-card.expanded').forEach(c => {
-                if (c !== card) c.classList.remove('expanded');
-            });
-            
-            // Expand this card
-            card.classList.add('expanded');
-            
-            // Scroll to the card
-            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Highlight the Edit button
-            setTimeout(() => {
-                const editBtn = card.querySelector('.edit-emp-btn');
-                if (editBtn) {
-                    editBtn.classList.add('highlight-pulse');
-                    setTimeout(() => editBtn.classList.remove('highlight-pulse'), 2000);
-}
-            }, 300);
-        }
-    }, 100);
+    // The Staff page lives inside Staff Availability now: open the editor directly.
+    openEmployeeForm(empId);
 }
 
 // Store manager availability edits in progress
@@ -8463,9 +8561,8 @@ function setupKeyboardShortcuts() {
         
         // Tab switching with number keys
         if (e.key === '1') switchTab('schedule');
-        else if (e.key === '2') switchTab('employees');
-        else if (e.key === '3') switchTab('settings');
-        else if (e.key === '4') switchTab('help');
+        else if (e.key === '2') switchTab('settings');
+        else if (e.key === '3') switchTab('help');
         
         // Schedule shortcuts
         else if (e.key === 'g' && !e.ctrlKey && !e.metaKey) {
@@ -8480,7 +8577,7 @@ function setupKeyboardShortcuts() {
         
         // New employee shortcut
         else if (e.key === 'n' && !e.ctrlKey && !e.metaKey) {
-            if (state.currentTab === 'employees') {
+            if (state.currentTab === 'settings') {
                 openEmployeeForm();
             }
         }

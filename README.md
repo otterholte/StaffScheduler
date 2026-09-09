@@ -75,20 +75,38 @@ allowed), max hours per day, max shift length, min shift length, max shifts per
 day, max split-shift days per week, max days per week (when "required"), and
 supervision (someone who needs supervision only works while a supervisor is on).
 
-**Soft rules** (penalised in the objective, roughly in priority order):
-coverage shortfall (per missing person-hour, extra on peak hours), weekly
-minimum hours, clopenings (rest between a close and the next open below
-`min_rest_hours`), consecutive days beyond the limit, max days per week when
-"preferred", overtime hours, hours fairness (the worst shortfall is penalised
-so it is shared), weekend fairness (based on weekend history), preferred hours,
-fragmentation (extra shift starts, mid-shift role switches), and the
-minimise/balanced/maximise hours strategy.
+Everyone also gets at least one day off a week whenever the business is open
+six or seven days, whatever the max-days setting says.
 
-**Stopping:** the solver stops when it proves optimality, hits the time limit
-(25 s), or the objective has not improved by a *meaningful* amount for 3 s.
-Cosmetic improvements (a preference here, a shift start there) do not reset the
-stall timer, so a schedule with full coverage returns in a few seconds instead
-of burning the whole time limit polishing.
+**Soft rules** (penalised in the objective, roughly in priority order; the
+weights are named constants at the top of the solver class):
+coverage shortfall (per missing person-hour, extra on peak hours), weekly
+minimum hours, max days per week when "preferred", clopenings (rest between a
+close and the next open below `min_rest_hours`), consecutive days beyond the
+limit, split-shift days, short days (a worked day should look like a normal
+shift for that person: at least 6 h for full-time, 4 h for part-time), full-
+timers' contracted hours (they get their week before part-timers pick up
+extras; with "avoid overtime" off this actively uses overtime), hours fairness
+(the worst shortfall is penalised so it is shared), overtime hours, days worked
+(same hours in fewer days), start-time consistency (one usual start time per
+person), weekend fairness (based on weekend history), preferred hours,
+mid-shift role switches, and the minimise/balanced/maximise strategy ("minimise"
+weighs hours by wage so cheaper coverage wins).
+
+**Two passes.** Pass 1 keeps only the hard rules and the coverage objective, so
+it finds the best achievable coverage fast (it stops the moment every hour is
+filled). Pass 2 locks coverage at that level, drops it from the objective, and
+optimises the human factors above, warm-started from pass 1's solution. Coverage
+can never get worse in pass 2, and the second model is much easier to prove.
+
+**Stopping:** each pass stops when it proves optimality, hits its share of the
+time limit (15-50 s, scaled by team size), or has not improved by a *meaningful*
+amount for a few seconds. Cosmetic improvements do not reset the stall timer,
+so a small team returns in seconds instead of burning the whole limit polishing.
+
+**Diagnostics:** the result carries `unfilled_slots` (hour by hour, each with a
+plain-English reason), `unfilled_ranges` (the same merged into shift-sized
+ranges for the UI), `employees_under_min`, `clopenings`, and `suggestions`.
 
 **Alternatives:** previous solutions for the week are stored with the saved
 schedule; an alternative must differ from each of them in at least 10% of the

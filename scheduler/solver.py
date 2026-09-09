@@ -86,12 +86,16 @@ class _ProgressCallback(cp_model.CpSolverSolutionCallback):
 
     def __init__(self, shortfall_vars, stall_seconds: float, min_seconds: float,
                  progress: Optional[Callable[[dict], None]], started_at: float,
-                 significant_delta: float = 40.0):
+                 significant_delta: float = 40.0, stop_when_fully_covered: bool = False):
         super().__init__()
         self._shortfall_vars = shortfall_vars
         self._stall_seconds = stall_seconds
         self._min_seconds = min_seconds
         self._significant_delta = significant_delta
+        # Pass 1 only cares about coverage: once every hour is filled there is
+        # nothing left to improve, so stop immediately.
+        self._stop_when_fully_covered = stop_when_fully_covered
+        self.fully_covered = False
         self._progress = progress
         self._started_at = started_at
         self.solution_count = 0
@@ -111,6 +115,9 @@ class _ProgressCallback(cp_model.CpSolverSolutionCallback):
             self.last_improvement_at = now
         self.best_objective = objective
         self.best_shortfall = int(sum(self.Value(v) for v in self._shortfall_vars))
+        if self._stop_when_fully_covered and self.best_shortfall == 0:
+            self.fully_covered = True
+            self.StopSearch()
         if self._progress:
             self._progress({
                 "phase": "improving",
@@ -135,17 +142,25 @@ class AdvancedScheduleSolver:
     """Builds and solves the weekly scheduling model for one business."""
 
     # ---- Objective weights (integers; larger = more important) --------------
+    # Think of these as "how many preference-hours is this worth". A preferred
+    # hour is 10, so a clopening (60) is worth giving up six preferred hours,
+    # and one missing hour of coverage (1000) outranks everything else.
     WEIGHT_COVERAGE = 1000        # per missing person-hour of required coverage
     WEIGHT_PEAK_EXTRA = 250       # additional penalty when the missing hour is a peak hour
     WEIGHT_MIN_HOURS = 40         # per hour an employee lands under their weekly minimum
+    WEIGHT_OVER_DAYS = 80         # per day over the (preferred) max days per week
     WEIGHT_CLOPEN = 60            # per closing shift followed by an opening shift
-    WEIGHT_CONSECUTIVE = 25       # per day worked beyond the consecutive-days limit
-    WEIGHT_OVER_DAYS = 30         # per day over the (preferred) max days per week
-    WEIGHT_OVERTIME = 20          # per overtime hour (when overtime is allowed)
+    WEIGHT_CONSECUTIVE = 40       # per day worked beyond the consecutive-days limit
+    WEIGHT_SHIFT_START = 25       # per shift: fewer, longer shifts beat many short ones
+    WEIGHT_SPLIT_DAY = 60         # per day with a split shift (allowed, but a last resort)
+    WEIGHT_SHORT_DAY = 12         # per hour a worked day falls short of that person's usual shift length
+    WEIGHT_TARGET_HOURS = 12      # per hour a full-timer lands under their contracted hours
     WEIGHT_FAIRNESS_HOURS = 25    # on the worst hours-shortfall across all staff
+    WEIGHT_OVERTIME = 20          # per overtime hour (only while "avoid overtime" is on)
+    WEIGHT_DAY_WORKED = 8         # per day worked: same hours in fewer days is better
+    WEIGHT_START_VARIETY = 8      # per extra distinct start time in a person's week
     WEIGHT_WEEKEND_FAIRNESS = 10  # per weekend day for staff above the weekend average
     WEIGHT_PREFERENCE = 10        # bonus per hour worked inside a preferred window
-    WEIGHT_SHIFT_START = 6        # per shift (fewer, longer shifts are better)
     WEIGHT_ROLE_SWITCH = 4        # per mid-shift role change
     WEIGHT_STRATEGY_HOUR = 5      # per hour, sign depends on strategy
 
@@ -235,15 +250,58 @@ class AdvancedScheduleSolver:
         """Roles this employee could fill at (day, hour) given the requirements."""
         return [r for r in emp.roles if (day, hour, r) in self._req_index]
 
+    def _weekly_cap(self, emp: Employee) -> int:
+        """Hard weekly ceiling: max_hours, or 40 when overtime is not allowed."""
+        return int(emp.max_hours) if emp.overtime_allowed else min(40, int(emp.max_hours))
+
+    def _target_hours(self, emp: Employee) -> int:
+        """Hours we *aim* to give this person (a soft goal, above their minimum).
+
+        Full-timers are contracted for a full week, so their target is their
+        max hours (capped at 40 unless overtime is allowed and not avoided).
+        Part-timers' target is their minimum: extra hours go to them only when
+        coverage needs it, which keeps the full-timers' schedules whole.
+        """
+        cap = self._weekly_cap(emp)
+        if emp.is_full_time:
+            if emp.overtime_allowed and not self.avoid_overtime:
+                return cap
+            return min(cap, 40)
+        return min(cap, max(0, int(emp.min_hours)))
+
+    def _target_shift_length(self, emp: Employee) -> int:
+        """The shift length this person would normally work (used to discourage short days)."""
+        max_days = self.max_days_ft if emp.is_full_time else self.max_days_pt
+        weekly = self._target_hours(emp) if emp.is_full_time else max(int(emp.min_hours), 1)
+        per_day = int(round(weekly / max(1, max_days)))
+        # Nobody wants a 2-3 hour shift: aim for at least 6h (full-time) / 4h (part-time)
+        floor = max(self.min_shift_hours, 6 if emp.is_full_time else 4)
+        return max(self.min_shift_hours, min(self.max_shift_hours, max(floor, per_day)))
+
     # -------------------------------------------------------------- the model
 
-    def _build_model(self, exclude_solutions: Optional[List[Set[Tuple[str, int, int]]]] = None):
-        """Create all variables, constraints, and the objective."""
+    def _build_model(self, exclude_solutions: Optional[List[Set[Tuple[str, int, int]]]] = None,
+                     coverage_only: bool = False, max_shortfall: Optional[int] = None):
+        """Create all variables, constraints, and the objective.
+
+        Args:
+            exclude_solutions: earlier solutions an "alternative" must differ from
+            coverage_only: pass 1 - objective is coverage alone (fast to solve)
+            max_shortfall: pass 2 - total unfilled hours may not exceed this, and
+                coverage leaves the objective so the solver can focus on the
+                human factors (shift length, days, fairness, preferences)
+        """
         m = cp_model.CpModel()
         self._model = m
         self._x, self._w, self._start, self._end, self._day = {}, {}, {}, {}, {}
         self._hours, self._shortfall, self._under_min, self._clopen_vars = {}, {}, {}, []
         objective: List[cp_model.LinearExpr] = []
+        coverage_terms: List[cp_model.LinearExpr] = []
+        # Every HARD rule is built in both passes. Soft terms go to `soft`,
+        # which is the real objective in pass 2 and a discarded list in pass 1;
+        # purely-soft sections loop over `soft_employees` (empty in pass 1).
+        soft: List[cp_model.LinearExpr] = objective if not coverage_only else []
+        soft_employees: List[Employee] = self.employees if not coverage_only else []
 
         hours = self.operating_hours
         H = len(hours)
@@ -340,9 +398,19 @@ class AdvancedScheduleSolver:
 
                 # Shifts per day
                 m.Add(sum(starts) <= self.max_splits_per_day)
-                # Soft: prefer fewer, longer shifts
+                # Soft: prefer fewer, longer shifts and fewer days for the same hours
                 for s in starts:
-                    objective.append(-self.WEIGHT_SHIFT_START * s)
+                    soft.append(-self.WEIGHT_SHIFT_START * s)
+                soft.append(-self.WEIGHT_DAY_WORKED * day_var)
+
+                # Soft: a worked day should look like a normal shift for this
+                # person, not a 2-3 hour fragment. Penalise the hours a worked
+                # day falls short of their usual shift length.
+                target_len = self._target_shift_length(emp)
+                if target_len > self.min_shift_hours and not coverage_only:
+                    short_day = m.NewIntVar(0, target_len, f"shortday_{emp.id}_{d}")
+                    m.Add(short_day >= target_len * day_var - sum(v for _, v in day_w))
+                    soft.append(-self.WEIGHT_SHORT_DAY * short_day)
 
         # ---------------------------------------------------------------
         # 3. Split-shift days per week (hard)
@@ -358,6 +426,7 @@ class AdvancedScheduleSolver:
                     m.Add(sum(starts) >= 2).OnlyEnforceIf(has_split)
                     m.Add(sum(starts) <= 1).OnlyEnforceIf(has_split.Not())
                     split_days.append(has_split)
+                    soft.append(-self.WEIGHT_SPLIT_DAY * has_split)
                 if split_days:
                     m.Add(sum(split_days) <= self.max_split_shifts_per_week)
 
@@ -376,7 +445,14 @@ class AdvancedScheduleSolver:
                 m.Add(short >= need - sum(staffed))
                 self._shortfall[(d, h, r)] = short
                 weight = self.WEIGHT_COVERAGE + (self.WEIGHT_PEAK_EXTRA if req.is_peak else 0)
-                objective.append(-weight * short)
+                coverage_terms.append(-weight * short)
+
+        if max_shortfall is not None and self._shortfall:
+            # Pass 2: coverage is locked at the level pass 1 proved achievable,
+            # so it can leave the objective entirely.
+            m.Add(sum(self._shortfall.values()) <= max_shortfall)
+        else:
+            objective.extend(coverage_terms)
 
         # ---------------------------------------------------------------
         # 5. Weekly hours: hard max, soft min, overtime
@@ -387,7 +463,7 @@ class AdvancedScheduleSolver:
             total = sum(week_vars) if week_vars else 0
             self._hours[emp.id] = total
 
-            cap = int(emp.max_hours) if emp.overtime_allowed else min(40, int(emp.max_hours))
+            cap = self._weekly_cap(emp)
             if week_vars:
                 m.Add(total <= cap)
 
@@ -396,45 +472,77 @@ class AdvancedScheduleSolver:
             under = m.NewIntVar(0, max(min_h, 0), f"under_{emp.id}")
             if min_h > 0:
                 m.Add(under >= min_h - total)
-                objective.append(-self.WEIGHT_MIN_HOURS * under)
+                soft.append(-self.WEIGHT_MIN_HOURS * under)
             else:
                 m.Add(under == 0)
             self._under_min[emp.id] = under
 
-            # Overtime (only possible when allowed; hard cap otherwise)
-            if self.avoid_overtime and emp.overtime_allowed and cap > 40 and week_vars:
+            # Soft target: full-timers should get their contracted week before
+            # extra hours go to part-timers (weaker than the minimum, so
+            # nobody's minimum is sacrificed for someone else's target).
+            target_h = self._target_hours(emp)
+            if week_vars and target_h > min_h and not coverage_only:
+                under_target = m.NewIntVar(0, target_h - min_h, f"undertarget_{emp.id}")
+                m.Add(under_target >= target_h - total - under)
+                soft.append(-self.WEIGHT_TARGET_HOURS * under_target)
+
+            # Overtime: when "avoid overtime" is on, every hour past 40 costs a
+            # little (coverage still wins). When it is off, overtime is free and
+            # the target above actively uses it.
+            if self.avoid_overtime and emp.overtime_allowed and cap > 40 and week_vars and not coverage_only:
                 ot = m.NewIntVar(0, cap - 40, f"ot_{emp.id}")
                 m.Add(ot >= total - 40)
-                objective.append(-self.WEIGHT_OVERTIME * ot)
+                soft.append(-self.WEIGHT_OVERTIME * ot)
 
         # Fairness on hours: penalise the worst shortfall so it is shared
-        if self._under_min:
+        if self._under_min and not coverage_only:
             worst = m.NewIntVar(0, max(max(int(e.min_hours), 0) for e in self.employees) if self.employees else 0, "worst_under")
             m.AddMaxEquality(worst, list(self._under_min.values()))
-            objective.append(-self.WEIGHT_FAIRNESS_HOURS * worst)
+            soft.append(-self.WEIGHT_FAIRNESS_HOURS * worst)
 
         # ---------------------------------------------------------------
         # 6. Days per week (hard or soft by classification)
         # ---------------------------------------------------------------
         for emp in self.employees:
+            days_worked = sum(self._day[(emp.id, d)] for d in self.days_open)
+            # Everyone gets at least one day off a week, whatever the settings say.
+            if self.num_days >= 6:
+                m.Add(days_worked <= self.num_days - 1)
+
             max_days = self.max_days_ft if emp.is_full_time else self.max_days_pt
             mode = self.max_days_ft_mode if emp.is_full_time else self.max_days_pt_mode
             if mode == "off":
                 continue
-            days_worked = sum(self._day[(emp.id, d)] for d in self.days_open)
             if mode == "required":
                 m.Add(days_worked <= max_days)
-            else:
+            elif not coverage_only:
                 over = m.NewIntVar(0, max(0, self.num_days - max_days), f"overdays_{emp.id}")
                 m.Add(over >= days_worked - max_days)
-                objective.append(-self.WEIGHT_OVER_DAYS * over)
+                soft.append(-self.WEIGHT_OVER_DAYS * over)
+
+        # ---------------------------------------------------------------
+        # 6b. Consistent start times (soft) - people like a predictable week
+        # ---------------------------------------------------------------
+        for emp in soft_employees:
+            any_start = []
+            for h in hours:
+                starts_h = [self._start[(emp.id, d, h)] for d in self.days_open if (emp.id, d, h) in self._start]
+                if not starts_h:
+                    continue
+                a = m.NewBoolVar(f"anystart_{emp.id}_{h}")
+                m.AddMaxEquality(a, starts_h)
+                any_start.append(a)
+            if len(any_start) > 1:
+                variety = m.NewIntVar(0, len(any_start), f"variety_{emp.id}")
+                m.Add(variety >= sum(any_start) - 1)
+                soft.append(-self.WEIGHT_START_VARIETY * variety)
 
         # ---------------------------------------------------------------
         # 7. Consecutive days (soft) - any run of K+1 calendar days
         # ---------------------------------------------------------------
         K = self.max_consecutive_days
         if self.num_days > K:
-            for emp in self.employees:
+            for emp in soft_employees:
                 for i in range(0, self.num_days - K):
                     window_days = self.days_open[i:i + K + 1]
                     # Only a run of truly consecutive calendar days counts
@@ -442,13 +550,13 @@ class AdvancedScheduleSolver:
                         continue
                     over = m.NewIntVar(0, 1, f"consec_{emp.id}_{window_days[0]}")
                     m.Add(over >= sum(self._day[(emp.id, d)] for d in window_days) - K)
-                    objective.append(-self.WEIGHT_CONSECUTIVE * over)
+                    soft.append(-self.WEIGHT_CONSECUTIVE * over)
 
         # ---------------------------------------------------------------
         # 8. Rest between shifts / clopenings (soft)
         # ---------------------------------------------------------------
         if self.min_rest_hours > 0 and hours:
-            for emp in self.employees:
+            for emp in soft_employees:
                 for d in self.days_open:
                     if d + 1 not in self.days_open:
                         continue
@@ -466,7 +574,7 @@ class AdvancedScheduleSolver:
                             c = m.NewBoolVar(f"clopen_{emp.id}_{d}_{h1}_{h2}")
                             m.AddBoolOr([e_var.Not(), s_var.Not(), c])
                             self._clopen_vars.append((emp.id, d, h1, h2, c))
-                            objective.append(-self.WEIGHT_CLOPEN * c)
+                            soft.append(-self.WEIGHT_CLOPEN * c)
 
         # ---------------------------------------------------------------
         # 9. Supervision (hard)
@@ -491,19 +599,19 @@ class AdvancedScheduleSolver:
         # ---------------------------------------------------------------
         # 10. Preferences (soft bonus)
         # ---------------------------------------------------------------
-        for emp in self.employees:
+        for emp in soft_employees:
             if not emp.preferences:
                 continue
             for d in self.days_open:
                 for h in hours:
                     w = self._w.get((emp.id, d, h))
                     if w is not None and emp.prefers(d, h):
-                        objective.append(self.WEIGHT_PREFERENCE * w)
+                        soft.append(self.WEIGHT_PREFERENCE * w)
 
         # ---------------------------------------------------------------
         # 11. Role switches mid-shift (soft)
         # ---------------------------------------------------------------
-        for emp in self.employees:
+        for emp in soft_employees:
             if len(emp.roles) < 2:
                 continue
             for d in self.days_open:
@@ -524,7 +632,7 @@ class AdvancedScheduleSolver:
                             m.AddBoolOr([x_now.Not(), w_next.Not(), sw])
                         else:
                             m.AddBoolOr([x_now.Not(), w_next.Not(), x_next, sw])
-                        objective.append(-self.WEIGHT_ROLE_SWITCH * sw)
+                        soft.append(-self.WEIGHT_ROLE_SWITCH * sw)
 
         # ---------------------------------------------------------------
         # 12. Weekend fairness (soft, uses history from previous weeks)
@@ -532,7 +640,7 @@ class AdvancedScheduleSolver:
         weekend_days = [d for d in self.days_open if d >= 5]
         if self.weekend_fairness and weekend_days and self.employees:
             avg = sum(e.weekend_shifts_worked for e in self.employees) / len(self.employees)
-            for emp in self.employees:
+            for emp in soft_employees:
                 excess = emp.weekend_shifts_worked - avg
                 if excess <= 0:
                     continue
@@ -540,33 +648,51 @@ class AdvancedScheduleSolver:
                 if penalty <= 0:
                     continue
                 for d in weekend_days:
-                    objective.append(-penalty * self._day[(emp.id, d)])
+                    soft.append(-penalty * self._day[(emp.id, d)])
 
         # ---------------------------------------------------------------
         # 13. Scheduling strategy (soft)
         # ---------------------------------------------------------------
-        if self.scheduling_strategy != "balanced":
-            sign = -1 if self.scheduling_strategy == "minimize" else 1
+        # minimize: every hour costs, and pricier staff cost more (fewer hours,
+        #           cheaper coverage - minimums and targets still apply)
+        # maximize: every hour is a small bonus (fill optional capacity)
+        if self.scheduling_strategy != "balanced" and not coverage_only:
+            emp_by_id = {e.id: e for e in self.employees}
             for emp_id, total in self._hours.items():
                 if isinstance(total, int):
                     continue
-                objective.append(sign * self.WEIGHT_STRATEGY_HOUR * total)
+                if self.scheduling_strategy == "minimize":
+                    rate = emp_by_id[emp_id].hourly_rate or 0.0
+                    soft.append(-(self.WEIGHT_STRATEGY_HOUR + int(rate // 4)) * total)
+                else:
+                    soft.append(self.WEIGHT_STRATEGY_HOUR * total)
+
+        if coverage_only:
+            # Small tie-breakers (coverage is worth 1000) so pass 1 already hands
+            # pass 2 a tidy hint: few shift starts, few days.
+            for s in self._start.values():
+                objective.append(-3 * s)
+            for dv in self._day.values():
+                objective.append(-2 * dv)
 
         # ---------------------------------------------------------------
         # 14. Alternatives: must differ meaningfully from earlier solutions
         # ---------------------------------------------------------------
         if exclude_solutions:
-            all_keys = list(self._w.keys())
-            for prev in exclude_solutions:
-                worked = [self._w[k] for k in all_keys if k in prev]
-                not_worked = [self._w[k] for k in all_keys if k not in prev]
-                # Hamming distance: at least 10% of the previous assignment (min 3 hours)
-                min_diff = max(3, len(worked) // 10)
-                if not worked and not not_worked:
-                    continue
-                m.Add(sum(v.Not() for v in worked) + sum(not_worked) >= min(min_diff, len(all_keys)))
+            self._add_alternative_constraints(m, exclude_solutions)
 
         m.Maximize(sum(objective) if objective else 0)
+
+    def _add_alternative_constraints(self, m: cp_model.CpModel, exclude_solutions):
+        """Force a Hamming distance from each earlier solution (>= 10%, min 3 hours)."""
+        all_keys = list(self._w.keys())
+        for prev in exclude_solutions:
+            worked = [self._w[k] for k in all_keys if k in prev]
+            not_worked = [self._w[k] for k in all_keys if k not in prev]
+            min_diff = max(3, len(worked) // 10)
+            if not worked and not not_worked:
+                continue
+            m.Add(sum(v.Not() for v in worked) + sum(not_worked) >= min(min_diff, len(all_keys)))
 
     # ------------------------------------------------------------------ solve
 
@@ -589,50 +715,48 @@ class AdvancedScheduleSolver:
         started = time.time()
         self._report("building", "Analyzing staff, roles, and coverage needs...")
         exclude = self._previous_solutions if find_alternative else None
-        self._build_model(exclude_solutions=exclude)
 
+        # ---- Pass 1: how much coverage is achievable at all? ---------------
+        # Only the hard rules and the coverage objective: this solves fast and
+        # gives pass 2 both a coverage guarantee and a good starting point.
+        self._build_model(exclude_solutions=exclude, coverage_only=True)
         num_vars = len(self._w)
-        self._report(
-            "solving",
-            f"Searching for the best schedule across {num_vars:,} possible assignments...",
-            variables=num_vars,
-        )
+        self._report("solving", f"Filling every required hour across {num_vars:,} possible assignments...",
+                     variables=num_vars)
+        hint = self._previous_solutions[-1] if self._previous_solutions else None
+        # Coverage is what the manager sees first, so pass 1 gets up to half the
+        # budget and is not cut short unless it has been stuck for a while.
+        pass1_budget = max(3.0, float(time_limit_seconds) * 0.5)
+        status1, solver1, cb1 = self._run(pass1_budget, stall_seconds=max(2.0, stall_seconds),
+                                          min_seconds=1.0, hint=hint, started=started,
+                                          significant_delta=float(self.WEIGHT_COVERAGE),
+                                          stop_when_fully_covered=True)
+        if status1 not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            schedule = Schedule()
+            schedule.solve_time_ms = (time.time() - started) * 1000.0
+            schedule.is_feasible = False
+            schedule.solution_index = 0
+            schedule.metrics = self._infeasibility_metrics()
+            self._report("done", "No schedule satisfies the hard rules.", feasible=False)
+            return schedule
+        best_shortfall = int(sum(solver1.Value(v) for v in self._shortfall.values()))
+        pass1_solution = {k for k, v in self._w.items() if solver1.Value(v) == 1}
 
-        solver = cp_model.CpSolver()
-        solver.parameters.max_time_in_seconds = float(time_limit_seconds)
-        solver.parameters.num_workers = max(2, min(8, os.cpu_count() or 4))
-        solver.parameters.relative_gap_limit = 0.002   # 0.2% of optimum is "good enough"
-        solver.parameters.log_search_progress = False
-
-        # Warm start from the most recent solution (helps alternatives converge quickly)
-        if self._previous_solutions:
-            last = self._previous_solutions[-1]
-            for key, var in self._w.items():
-                self._model.AddHint(var, 1 if key in last else 0)
-
-        callback = _ProgressCallback(
-            list(self._shortfall.values()), stall_seconds, min_seconds,
-            self.progress_callback, started,
-            significant_delta=float(self.WEIGHT_MIN_HOURS),
-        )
-
-        # A small watchdog thread implements the stall-based early stop.
-        import threading
-        stop_event = threading.Event()
-
-        def watchdog():
-            while not stop_event.wait(0.25):
-                if callback.should_stop():
-                    solver.StopSearch()
-                    return
-
-        watcher = threading.Thread(target=watchdog, daemon=True)
-        watcher.start()
-        try:
-            status = solver.Solve(self._model, callback)
-        finally:
-            stop_event.set()
-            watcher.join(timeout=1.0)
+        # ---- Pass 2: with coverage locked in, make it a good week for people --
+        self._build_model(exclude_solutions=exclude, max_shortfall=best_shortfall)
+        self._report("solving", "Balancing hours, shift lengths, rest, and preferences...",
+                     unfilled_slots=best_shortfall)
+        remaining = max(3.0, float(time_limit_seconds) - (time.time() - started))
+        status, solver, callback = self._run(remaining, stall_seconds=stall_seconds + 1.5,
+                                             min_seconds=max(min_seconds, 3.0),
+                                             hint=pass1_solution, started=started,
+                                             significant_delta=float(self.WEIGHT_MIN_HOURS))
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            # Should not happen (pass 1's solution satisfies pass 2), but fall
+            # back to the coverage-only result rather than fail.
+            self._build_model(exclude_solutions=exclude, coverage_only=True)
+            status, solver, callback = self._run(2.0, 1.0, 0.0, hint=pass1_solution, started=started,
+                                                 significant_delta=float(self.WEIGHT_COVERAGE))
 
         schedule = Schedule()
         schedule.solve_time_ms = (time.time() - started) * 1000.0
@@ -690,6 +814,46 @@ class AdvancedScheduleSolver:
             feasible=True,
         )
         return schedule
+
+    def _run(self, time_limit: float, stall_seconds: float, min_seconds: float,
+             hint: Optional[Set[Tuple[str, int, int]]], started: float, significant_delta: float,
+             stop_when_fully_covered: bool = False):
+        """Solve the currently built model with early stopping. Returns (status, solver, callback)."""
+        solver = cp_model.CpSolver()
+        solver.parameters.max_time_in_seconds = float(time_limit)
+        solver.parameters.num_workers = max(2, min(8, os.cpu_count() or 4))
+        solver.parameters.relative_gap_limit = 0.002   # 0.2% of optimum is "good enough"
+        solver.parameters.log_search_progress = False
+
+        # Warm start: a known-good assignment lets the search improve instead of hunt
+        if hint is not None:
+            for key, var in self._w.items():
+                self._model.AddHint(var, 1 if key in hint else 0)
+
+        callback = _ProgressCallback(
+            list(self._shortfall.values()), stall_seconds, min_seconds,
+            self.progress_callback, started, significant_delta=significant_delta,
+            stop_when_fully_covered=stop_when_fully_covered,
+        )
+
+        # A small watchdog thread implements the stall-based early stop.
+        import threading
+        stop_event = threading.Event()
+
+        def watchdog():
+            while not stop_event.wait(0.25):
+                if callback.should_stop():
+                    solver.StopSearch()
+                    return
+
+        watcher = threading.Thread(target=watchdog, daemon=True)
+        watcher.start()
+        try:
+            status = solver.Solve(self._model, callback)
+        finally:
+            stop_event.set()
+            watcher.join(timeout=1.0)
+        return status, solver, callback
 
     # ------------------------------------------------------------ extraction
 
@@ -816,8 +980,38 @@ class AdvancedScheduleSolver:
                     "rest_hours": (24 - (h1 + 1)) + h2,
                 })
 
+        metrics.unfilled_ranges = self._group_unfilled(metrics.unfilled_slots)
         metrics.suggestions = self._build_suggestions(metrics)
         return metrics
+
+    @staticmethod
+    def _group_unfilled(unfilled_slots: List[Dict]) -> List[Dict]:
+        """Merge hour-by-hour gaps into shift-sized ranges for the UI.
+
+        "Tue 10am, Tue 11am, Tue 12pm, Tue 1pm (Manager)" becomes one entry:
+        Tue 10am-2pm, Manager, needed 1. Grouped by day, role and reason.
+        """
+        by_key: Dict[Tuple[int, str, str], List[Dict]] = {}
+        for s in unfilled_slots:
+            by_key.setdefault((s["day"], s["role_id"], s.get("reason", "")), []).append(s)
+        ranges: List[Dict] = []
+        for (day, role_id, reason), slots in by_key.items():
+            slots.sort(key=lambda s: s["hour"])
+            cur = None
+            for s in slots:
+                if cur and s["hour"] == cur["end_hour"]:
+                    cur["end_hour"] = s["hour"] + 1
+                    cur["needed"] = max(cur["needed"], s["needed"])
+                    cur["is_peak"] = cur["is_peak"] or bool(s.get("is_peak"))
+                    continue
+                cur = {
+                    "day": day, "role_id": role_id, "role_name": s.get("role_name", role_id),
+                    "start_hour": s["hour"], "end_hour": s["hour"] + 1, "needed": s["needed"],
+                    "is_peak": bool(s.get("is_peak")), "reason": reason,
+                }
+                ranges.append(cur)
+        ranges.sort(key=lambda r: (r["day"], r["start_hour"], r["role_name"]))
+        return ranges
 
     def _explain_gap(self, req, emp_by_id, days_worked, hours_by_day, schedule) -> str:
         """Best-effort, human-readable reason a required slot stayed unfilled."""

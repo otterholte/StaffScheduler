@@ -188,9 +188,12 @@ def _run_job(app: Flask, job_id: str, scenario: BusinessScenario, week_start: da
             if kind == 'alternative' and history:
                 solver._previous_solutions = list(history)
 
+            # Bigger teams get a bigger budget (12s for a handful of staff,
+            # ~40s for 50). The solver usually stops well before the limit.
+            time_limit = min(50.0, max(15.0, 12.0 + 0.7 * len(scenario.employees)))
             schedule = solver.solve(
                 find_alternative=(kind == 'alternative' and bool(history)),
-                time_limit_seconds=TIME_LIMIT_SECONDS,
+                time_limit_seconds=time_limit,
                 stall_seconds=STALL_SECONDS,
             )
 

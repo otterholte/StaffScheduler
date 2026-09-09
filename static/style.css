@@ -10254,3 +10254,467 @@ body.manager-menu-open {
     min-height: 32px;
 }
 .week-nav-today:hover { color: var(--text-primary); border-color: var(--accent-primary); }
+
+/* =============================================================================
+   TIMELINE: role rows (one lane group per role inside each day)
+   ============================================================================= */
+.timeline-header-role {
+    width: 96px;
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    padding: 0.4rem 0.5rem;
+}
+
+.timeline-role-row {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.timeline-role-row:first-child {
+    border-top: none;
+}
+
+.timeline-role-label {
+    width: 96px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.12);
+    min-width: 0;
+}
+
+.timeline-role-label .role-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.timeline-role-label .role-label-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.timeline-role-lanes {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px 0;
+    border-radius: 4px;
+    transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.timeline-role-lanes.drop-ready {
+    box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.25);
+}
+
+.timeline-role-lanes.drag-over {
+    background: rgba(99, 102, 241, 0.14);
+    box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.timeline-role-lanes .timeline-slots-row.timeline-empty-row {
+    height: 30px;
+}
+
+.timeline-role-lanes .timeline-slots-row:not(.timeline-gap-row):hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.timeline-pto-role-row .timeline-role-label {
+    color: #c4b5fd;
+}
+
+.timeline-shift-block .shift-name {
+    font-weight: 600;
+}
+
+body[data-theme="light"] .timeline-role-row {
+    border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+body[data-theme="light"] .timeline-role-label {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+body[data-theme="light"] .timeline-role-lanes .timeline-slots-row:not(.timeline-gap-row):hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+/* =============================================================================
+   TABLE VIEW: search + role filter bar, expandable rows, "still needed" badges
+   ============================================================================= */
+.table-filter-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    padding: 0.5rem 0 0.75rem;
+}
+
+.table-search {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--text-muted);
+    min-width: 220px;
+}
+
+.table-search input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    width: 100%;
+}
+
+.table-search:focus-within {
+    border-color: var(--accent-primary);
+}
+
+.table-role-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.role-chip .role-chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--chip-color, var(--accent-primary));
+}
+
+.role-chip:hover {
+    border-color: var(--chip-color, var(--accent-primary));
+    color: var(--text-primary);
+}
+
+.role-chip.active {
+    background: color-mix(in srgb, var(--chip-color, var(--accent-primary)) 22%, transparent);
+    border-color: var(--chip-color, var(--accent-primary));
+    color: var(--text-primary);
+}
+
+.table-filter-clear {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--accent-primary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0.3rem 0.5rem;
+}
+
+.table-filter-clear:hover {
+    text-decoration: underline;
+}
+
+.simple-schedule-table .emp-row {
+    cursor: pointer;
+}
+
+.simple-schedule-table .emp-row .emp-name-role {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 0.25rem;
+}
+
+.simple-schedule-table .emp-row .emp-row-chevron {
+    margin-left: auto;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+    flex-shrink: 0;
+}
+
+.simple-schedule-table .emp-row.expanded .emp-row-chevron {
+    transform: rotate(180deg);
+}
+
+.simple-schedule-table .emp-row.expanded td {
+    background: rgba(99, 102, 241, 0.08);
+}
+
+.simple-schedule-table .emp-detail-row td {
+    padding: 0;
+    background: rgba(99, 102, 241, 0.05);
+    border-bottom: 2px solid rgba(99, 102, 241, 0.25);
+}
+
+.simple-schedule-table .gap-row .shift-times {
+    vertical-align: top;
+}
+
+.gap-badge {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+    margin: 2px 0;
+    padding: 4px 7px;
+    border-radius: 6px;
+    background: rgba(239, 68, 68, 0.14);
+    border: 1px dashed var(--danger);
+    color: var(--danger);
+    line-height: 1.15;
+}
+
+.gap-badge-role {
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.gap-badge-time {
+    font-size: 0.68rem;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+/* =============================================================================
+   TEAM MEMBER DETAILS (table expansion, Employee Hours panel, Staff Availability)
+   ============================================================================= */
+.emp-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: 1rem 1.5rem;
+    padding: 0.85rem 1rem;
+}
+
+.emp-detail-section {
+    min-width: 0;
+}
+
+.emp-detail-heading {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.emp-detail-days {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.35rem;
+}
+
+.emp-detail-day {
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 0.4rem 0.45rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.emp-detail-day.no-avail {
+    opacity: 0.55;
+}
+
+.emp-detail-dayname {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.emp-detail-dayval {
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    font-weight: 500;
+    word-break: break-word;
+}
+
+.emp-detail-pref {
+    font-size: 0.66rem;
+    color: var(--success);
+}
+
+.emp-detail-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem 1rem;
+    margin: 0;
+}
+
+.emp-detail-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.emp-detail-item dt {
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.emp-detail-item dd {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.emp-hours-row {
+    cursor: pointer;
+}
+
+.emp-hours-row.expanded {
+    border-color: var(--accent-primary);
+}
+
+.emp-hours-details {
+    background: rgba(99, 102, 241, 0.06);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: var(--radius-sm);
+    margin: -0.25rem 0 0.35rem;
+}
+
+.emp-hours-details .emp-detail {
+    grid-template-columns: 1fr;
+    padding: 0.65rem 0.75rem;
+}
+
+.emp-hours-details .emp-detail-days {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+}
+
+@media (max-width: 900px) {
+    .emp-detail {
+        grid-template-columns: 1fr;
+    }
+    .emp-detail-days {
+        grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    }
+}
+
+/* Scheduler notes: open shifts as compact pills */
+.insight-shift {
+    display: inline-block;
+    margin: 2px 6px 2px 0;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--text-primary);
+    font-size: 0.75rem;
+}
+
+.insight-more {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+/* =============================================================================
+   STAFF AVAILABILITY page
+   ============================================================================= */
+.avail-staff-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.avail-meta-pill {
+    padding: 1px 7px;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 700;
+}
+
+.avail-meta-pill.pill-ft {
+    background: rgba(99, 102, 241, 0.2);
+    color: #a5b4fc;
+}
+
+.avail-meta-pill.pill-pt {
+    background: rgba(16, 185, 129, 0.18);
+    color: #6ee7b7;
+}
+
+body[data-theme="light"] .avail-meta-pill.pill-ft { color: #4338ca; }
+body[data-theme="light"] .avail-meta-pill.pill-pt { color: #047857; }
+
+.availability-panel-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.availability-panel-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.availability-details-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    margin: 0.75rem 0 1.25rem;
+}
+
+.availability-details-card:empty {
+    display: none;
+}
+
+.availability-details-card .emp-detail {
+    grid-template-columns: 1fr;
+    padding: 0.75rem 1rem;
+}
+
+.availability-details-card .emp-detail-list {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.availability-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0 0 0.5rem;
+}

@@ -17,7 +17,7 @@ DAY_NAMES_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # URL page slugs <-> internal tab ids used by the manager app
 PAGE_SLUGS = {
     'schedule': 'schedule',
-    'staff': 'employees',
+    'staff': 'settings',        # the Staff page merged into Staff Availability
     'availability': 'settings',
     'requirements': 'help',
 }
