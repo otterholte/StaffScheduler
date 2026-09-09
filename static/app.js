@@ -3822,10 +3822,13 @@ function renderSimpleTableView(schedule) {
     // "Still needed" row: one badge per open shift, naming the role, wrapping onto new lines
     renderTableFilterChips();
     setScheduleLegendVisible(false);
+    // Role chips filter the open shifts too, so "Server" shows only Server gaps
+    const roleFilter = state.tableFilter?.roles || new Set();
     const openRanges = (schedule?.metrics?.unfilled_ranges?.length
         ? schedule.metrics.unfilled_ranges
-        : groupUnfilledRanges(schedule?.metrics?.unfilled_slots || []));
-    if (openRanges.length > 0 || gaps.totalHours > 0) {
+        : groupUnfilledRanges(schedule?.metrics?.unfilled_slots || []))
+        .filter(r => !roleFilter.size || roleFilter.has(r.role_id));
+    if (openRanges.length > 0 || (gaps.totalHours > 0 && !roleFilter.size)) {
         const row = document.createElement('tr');
         row.className = 'gap-row';
         const totalOpen = openRanges.length
