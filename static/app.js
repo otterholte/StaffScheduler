@@ -559,6 +559,9 @@ const timelineDragState = {
     originalDayIdx: null,
     originalStartHour: null,
     originalEndHour: null,
+    originalRoleId: null,
+    grabOffsetHours: 0,      // where on the bar the user grabbed it
+    targetLaneIndex: 0,      // lane under the cursor while dragging
     currentTargetDay: null,
     currentTargetHour: null
 };
@@ -4369,19 +4372,310 @@ function buildTimelineGapsForDay(schedule, dayIdx) {
     return gaps;
 }
 
-/** Greedy lane packing: overlapping bars go on separate lanes. */
-function packIntoLanes(items) {
+// Remembers which lane a shift was drawn on, so a dragged shift lands on the
+// lane you dropped it on and everything else stays where it was.
+const timelineLaneMemory = {};
+const laneKey = (dayIdx, roleId, empId) => `${dayIdx}|${roleId}|${empId}`;
+
+/** Lane packing: keep each bar on its remembered lane when possible, otherwise the first free one. */
+function packIntoLanes(items, dayIdx, roleId) {
     const lanes = [];
+    const fits = (lane, item) => !lane.some(s => item.startHour < s.endHour && item.endHour > s.startHour);
     items.sort((a, b) => a.startHour - b.startHour || a.endHour - b.endHour);
     items.forEach(item => {
-        let lane = lanes.find(l => !l.some(s => item.startHour < s.endHour && item.endHour > s.startHour));
-        if (!lane) {
-            lane = [];
-            lanes.push(lane);
+        const key = laneKey(dayIdx, roleId, item.empId);
+        let idx = timelineLaneMemory[key];
+        if (idx !== undefined && idx < 6) {
+            while (lanes.length <= idx) lanes.push([]);
+            if (!fits(lanes[idx], item)) idx = undefined;
+        } else {
+            idx = undefined;
         }
-        lane.push(item);
+        if (idx === undefined) {
+            idx = lanes.findIndex(l => fits(l, item));
+            if (idx === -1) {
+                lanes.push([]);
+                idx = lanes.length - 1;
+            }
+        }
+        lanes[idx].push(item);
+        timelineLaneMemory[key] = idx;
     });
+    // Drop trailing empty lanes (a remembered lane that is no longer used)
+    while (lanes.length > 1 && lanes[lanes.length - 1].length === 0) lanes.pop();
     return lanes;
+}
+
+/** Hours (as a Set) this employee is available on a given day. */
+function employeeAvailableHours(emp, dayIdx) {
+    const set = new Set();
+    (emp?.availability || []).forEach(s => { if (parseInt(s.day) === dayIdx) set.add(parseInt(s.hour)); });
+    return set;
+}
+
+/** True when the employee has approved time off on the given day of the current week. */
+function employeeHasTimeOff(empId, dayIdx) {
+    const dayDate = getWeekDates(state.weekOffset)[dayIdx];
+    return (state.approvedPTO || []).some(pto => {
+        if (pto.employee_id !== empId) return false;
+        const start = new Date(pto.start_date + 'T00:00:00');
+        const end = new Date(pto.end_date + 'T00:00:00');
+        return dayDate >= start && dayDate <= end;
+    });
+}
+
+/**
+ * While a bar is being dragged, shade the hours the person is not available
+ * and dim the rows of roles they do not hold, so the valid drop targets are obvious.
+ */
+function showAvailabilityOverlays(emp) {
+    const totalHours = state.hours.length;
+    document.querySelectorAll('.timeline-role-lanes').forEach(lanes => {
+        const dayIdx = parseInt(lanes.dataset.dayIdx);
+        const roleId = lanes.dataset.roleId;
+        if (roleId !== '__other' && !(emp.roles || []).includes(roleId)) {
+            lanes.classList.add('lane-locked');
+            lanes.title = `${emp.name} is not set up as a ${roleMap[roleId]?.name || 'that role'}`;
+        }
+        const avail = employeeAvailableHours(emp, dayIdx);
+        const dayOff = employeeHasTimeOff(emp.id, dayIdx);
+        const overlay = document.createElement('div');
+        overlay.className = 'timeline-unavail-overlay';
+        let segStart = null;
+        const flush = (endHour) => {
+            if (segStart === null) return;
+            const seg = document.createElement('div');
+            seg.className = 'timeline-unavail-seg';
+            seg.style.left = `${(state.hours.indexOf(segStart) / totalHours) * 100}%`;
+            seg.style.width = `${((endHour - segStart) / totalHours) * 100}%`;
+            seg.title = dayOff ? `${emp.name} has approved time off` : `${emp.name} is not available ${formatHour(segStart)}-${formatHour(endHour)}`;
+            overlay.appendChild(seg);
+            segStart = null;
+        };
+        state.hours.forEach(h => {
+            const blocked = dayOff || !avail.has(h);
+            if (blocked && segStart === null) segStart = h;
+            if (!blocked) flush(h);
+        });
+        flush(state.endHour);
+        if (overlay.children.length) lanes.appendChild(overlay);
+    });
+}
+
+function hideAvailabilityOverlays() {
+    document.querySelectorAll('.timeline-unavail-overlay').forEach(o => o.remove());
+    document.querySelectorAll('.timeline-role-lanes.lane-locked').forEach(l => {
+        l.classList.remove('lane-locked');
+        l.removeAttribute('title');
+    });
+}
+
+/**
+ * Check a proposed shift move against the business rules. Returns a list of
+ * {level: 'warn'|'info', text} items; an empty list means the move is clean.
+ */
+function evaluateShiftChange(p) {
+    const emp = employeeMap[p.empId];
+    const issues = [];
+    if (!emp || !state.currentSchedule) return issues;
+    const warn = (text) => issues.push({ level: 'warn', text });
+    const info = (text) => issues.push({ level: 'info', text });
+    const dayName = state.days[p.toDay];
+    const range = `${formatHour(p.toStart)}-${formatHour(p.toEnd)}`;
+    const policies = getAllPolicies();
+    const slots = state.currentSchedule.slot_assignments || {};
+    const newHours = [];
+    for (let h = p.toStart; h < p.toEnd; h++) newHours.push(h);
+
+    // The person's own hours after the move (old shift removed, new one added)
+    const hoursByDay = {};
+    Object.entries(slots).forEach(([key, list]) => {
+        const [d, h] = key.split(',').map(Number);
+        (list || []).forEach(a => {
+            if (a.employee_id !== p.empId) return;
+            if (d === p.fromDay && h >= p.fromStart && h < p.fromEnd) return; // being moved
+            (hoursByDay[d] = hoursByDay[d] || new Set()).add(h);
+        });
+    });
+
+    // Role
+    if (p.toRole !== '__other' && !(emp.roles || []).includes(p.toRole)) {
+        warn(`${emp.name} is not set up as a ${roleMap[p.toRole]?.name || 'that role'}. You can add the role on the Staff Availability page.`);
+    }
+
+    // Time off / availability
+    if (employeeHasTimeOff(p.empId, p.toDay)) {
+        warn(`${emp.name} has approved time off on ${dayName}.`);
+    } else {
+        const avail = employeeAvailableHours(emp, p.toDay);
+        const missing = newHours.filter(h => !avail.has(h));
+        if (missing.length) {
+            const ranges = slotsToRangesByDay(missing.map(h => ({ day: p.toDay, hour: h })))[p.toDay] || [];
+            warn(`${emp.name} is not marked available on ${dayName} ${formatRangeList(ranges)}.`);
+        }
+    }
+
+    // Overlap with their other shifts that day
+    const sameDay = hoursByDay[p.toDay] || new Set();
+    const overlap = newHours.filter(h => sameDay.has(h));
+    if (overlap.length) {
+        const ranges = slotsToRangesByDay(overlap.map(h => ({ day: p.toDay, hour: h })))[p.toDay] || [];
+        warn(`${emp.name} is already working ${dayName} ${formatRangeList(ranges)}; those hours would overlap.`);
+    }
+
+    // Daily and weekly hours
+    const dayTotal = new Set([...sameDay, ...newHours]).size;
+    if (dayTotal > policies.max_hours_per_day) {
+        warn(`This makes a ${dayTotal}-hour day for ${emp.name}; your limit is ${policies.max_hours_per_day} hours per day.`);
+    }
+    let weekTotal = dayTotal;
+    Object.entries(hoursByDay).forEach(([d, set]) => { if (Number(d) !== p.toDay) weekTotal += set.size; });
+    const cap = emp.overtime_allowed ? emp.max_hours : Math.min(40, emp.max_hours || 40);
+    if (weekTotal > cap) {
+        warn(`${emp.name} would be at ${weekTotal} hours this week; their maximum is ${cap}${emp.overtime_allowed ? '' : ' (overtime not allowed)'}.`);
+    } else if (weekTotal > 40 && emp.overtime_allowed) {
+        info(`${emp.name} would be at ${weekTotal} hours, which includes ${weekTotal - 40}h of overtime (allowed for them).`);
+    }
+
+    // Days per week
+    const daysWorked = new Set(Object.keys(hoursByDay).map(Number));
+    if (!daysWorked.has(p.toDay)) {
+        const isFT = emp.classification === 'full_time';
+        const maxDays = isFT ? policies.max_days_ft : policies.max_days_pt;
+        const mode = isFT ? policies.max_days_ft_mode : policies.max_days_pt_mode;
+        if (mode !== 'off' && daysWorked.size + 1 > maxDays) {
+            const text = `This would be ${emp.name}'s ${daysWorked.size + 1}th day this week; the ${isFT ? 'full-time' : 'part-time'} limit is ${maxDays} days${mode === 'preferred' ? ' (preferred, not required)' : ''}.`;
+            (mode === 'required' ? warn : info)(text.replace('1th', '1st').replace('2th', '2nd').replace('3th', '3rd'));
+        }
+        if (daysWorked.size + 1 >= 7) warn(`${emp.name} would have no day off this week.`);
+    }
+
+    // Rest between shifts (clopening)
+    const minRest = policies.min_rest_hours ?? 10;
+    const prev = hoursByDay[p.toDay - 1];
+    if (prev && prev.size) {
+        const prevEnd = Math.max(...prev) + 1;
+        const rest = (24 - prevEnd) + p.toStart;
+        if (rest < minRest) warn(`Only ${rest} hours of rest after ${emp.name}'s ${state.days[p.toDay - 1]} shift (ends ${formatHour(prevEnd)}); you ask for ${minRest}.`);
+    }
+    const next = hoursByDay[p.toDay + 1];
+    if (next && next.size) {
+        const nextStart = Math.min(...next);
+        const rest = (24 - p.toEnd) + nextStart;
+        if (rest < minRest) warn(`Only ${rest} hours of rest before ${emp.name}'s ${state.days[p.toDay + 1]} shift (starts ${formatHour(nextStart)}); you ask for ${minRest}.`);
+    }
+
+    // Supervision
+    if (emp.needs_supervision && policies.supervision_required !== false) {
+        const uncovered = newHours.filter(h => !(slots[`${p.toDay},${h}`] || []).some(a => a.employee_id !== p.empId && employeeMap[a.employee_id]?.can_supervise));
+        if (uncovered.length) {
+            const ranges = slotsToRangesByDay(uncovered.map(h => ({ day: p.toDay, hour: h })))[p.toDay] || [];
+            warn(`${emp.name} needs a supervisor on shift, and nobody who can supervise is scheduled ${dayName} ${formatRangeList(ranges)}.`);
+        }
+    }
+
+    // Coverage: overstaffing at the target, and the gap left behind
+    const req = getWeekCoverageRequirements();
+    const over = newHours.filter(h => {
+        const r = req[`${p.toDay},${h},${p.toRole}`];
+        const have = (slots[`${p.toDay},${h}`] || []).filter(a => a.role_id === p.toRole && !(a.employee_id === p.empId && p.fromDay === p.toDay && h >= p.fromStart && h < p.fromEnd)).length;
+        return !r ? true : have >= r.max;
+    });
+    if (over.length) {
+        const ranges = slotsToRangesByDay(over.map(h => ({ day: p.toDay, hour: h })))[p.toDay] || [];
+        info(`No extra ${roleMap[p.toRole]?.name || 'staff'} is needed ${dayName} ${formatRangeList(ranges)}, so this adds hours beyond what coverage calls for.`);
+    }
+    const opened = [];
+    for (let h = p.fromStart; h < p.fromEnd; h++) {
+        if (p.fromDay === p.toDay && h >= p.toStart && h < p.toEnd && p.fromRole === p.toRole) continue;
+        const r = req[`${p.fromDay},${h},${p.fromRole}`];
+        if (!r || r.min <= 0) continue;
+        const have = (slots[`${p.fromDay},${h}`] || []).filter(a => a.role_id === p.fromRole && a.employee_id !== p.empId).length;
+        if (have < r.min) opened.push(h);
+    }
+    if (opened.length) {
+        const ranges = slotsToRangesByDay(opened.map(h => ({ day: p.fromDay, hour: h })))[p.fromDay] || [];
+        info(`Leaving ${state.days[p.fromDay]} ${formatRangeList(ranges)} opens a ${roleMap[p.fromRole]?.name || 'staff'} gap you will need to fill.`);
+    }
+    return issues;
+}
+
+/**
+ * Show the confirmation popup for a proposed move. Green when the move
+ * follows every rule, amber (with the reasons) when it does not. Calls
+ * onConfirm() if the manager goes ahead.
+ */
+function confirmShiftChange(p, onConfirm) {
+    const emp = employeeMap[p.empId];
+    const issues = evaluateShiftChange(p);
+    const warnings = issues.filter(i => i.level === 'warn');
+    const notes = issues.filter(i => i.level === 'info');
+    const clean = warnings.length === 0;
+
+    // Managers can opt out of the popup for changes that break no rules
+    let skipClean = false;
+    try { skipClean = localStorage.getItem('skipCleanShiftConfirm') === '1'; } catch (err) { /* ignore */ }
+    if (clean && notes.length === 0 && skipClean) {
+        onConfirm();
+        return;
+    }
+
+    let modal = document.getElementById('shiftChangeModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'shiftChangeModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-backdrop"></div>
+            <div class="modal-content modal-sm shift-change-content">
+                <div class="modal-header shift-change-header">
+                    <h2 id="shiftChangeTitle">Confirm change</h2>
+                    <button class="modal-close" data-close>&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p class="shift-change-summary" id="shiftChangeSummary"></p>
+                    <ul class="shift-change-issues" id="shiftChangeIssues"></ul>
+                    <label class="shift-change-skip" id="shiftChangeSkipWrap">
+                        <input type="checkbox" id="shiftChangeSkip"> Don't ask again for changes that follow all the rules
+                    </label>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+                    <button type="button" class="btn" id="shiftChangeConfirmBtn">Confirm</button>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+        modal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', () => modal.classList.remove('active')));
+    }
+
+    const roleName = roleMap[p.toRole]?.name || 'that role';
+    const roleChanged = p.toRole !== p.fromRole;
+    const summary = `Move ${emp?.name || 'this shift'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)}${roleChanged ? ` as ${roleName}` : ''}?`;
+    modal.classList.toggle('is-clean', clean);
+    modal.classList.toggle('is-warning', !clean);
+    document.getElementById('shiftChangeTitle').textContent = clean ? 'This change follows all your rules' : 'Are you sure? This change breaks a rule';
+    document.getElementById('shiftChangeSummary').textContent = summary;
+    const list = document.getElementById('shiftChangeIssues');
+    list.innerHTML = issues.map(i => `<li class="issue-${i.level}"><span class="issue-icon">${i.level === 'warn' ? '!' : 'i'}</span><span>${escHtml(i.text)}</span></li>`).join('');
+    list.hidden = issues.length === 0;
+    const skipWrap = document.getElementById('shiftChangeSkipWrap');
+    skipWrap.style.display = clean ? 'flex' : 'none';
+    const skipBox = document.getElementById('shiftChangeSkip');
+    skipBox.checked = false;
+
+    const btn = document.getElementById('shiftChangeConfirmBtn');
+    btn.className = clean ? 'btn btn-confirm-clean' : 'btn btn-confirm-warning';
+    btn.textContent = clean ? 'Yes, make the change' : 'Move it anyway';
+    const fresh = btn.cloneNode(true);
+    btn.parentNode.replaceChild(fresh, btn);
+    fresh.addEventListener('click', () => {
+        if (clean && skipBox.checked) {
+            try { localStorage.setItem('skipCleanShiftConfirm', '1'); } catch (err) { /* ignore */ }
+        }
+        modal.classList.remove('active');
+        onConfirm();
+    });
+    modal.classList.add('active');
 }
 
 /** One draggable, resizable shift bar labelled "Name - Role". */
@@ -4439,10 +4733,21 @@ function buildTimelineShiftBlock(shift, schedule, weeklyStats, totalHours, role)
         timelineDragState.originalDayIdx = dayIdx;
         timelineDragState.originalStartHour = shift.startHour;
         timelineDragState.originalEndHour = shift.endHour;
+        timelineDragState.originalRoleId = shift.roleId;
+        // Where on the bar the user grabbed it (in hours), so the preview
+        // follows the cursor instead of jumping to be centred on it
+        const rect = block.getBoundingClientRect();
+        const frac = rect.width ? Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)) : 0;
+        timelineDragState.grabOffsetHours = frac * (shift.endHour - shift.startHour);
         block.classList.add('dragging');
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', JSON.stringify(block._shiftData));
+        // Use a transparent drag image: the ghost preview shows where it will land
+        const img = document.createElement('canvas');
+        img.width = img.height = 1;
+        e.dataTransfer.setDragImage(img, 0, 0);
         document.querySelectorAll('.timeline-role-lanes').forEach(l => l.classList.add('drop-ready'));
+        showAvailabilityOverlays(shift.emp);
     });
 
     block.addEventListener('dragend', () => {
@@ -4450,6 +4755,7 @@ function buildTimelineShiftBlock(shift, schedule, weeklyStats, totalHours, role)
         timelineDragState.isDragging = false;
         timelineDragState.activeShift = null;
         hideTimelineDropZones();
+        hideAvailabilityOverlays();
     });
 
     block.querySelector('.shift-resize-handle.left').addEventListener('mousedown', (e) => {
@@ -4471,11 +4777,41 @@ function buildTimelineShiftBlock(shift, schedule, weeklyStats, totalHours, role)
  * holds. The ghost preview follows the mouse inside the target row.
  */
 function attachTimelineDropHandlers(lanes, dayIdx, roleId) {
+    // Start hour for the dragged bar: the cursor's hour minus where it was grabbed
     const targetStartFor = (e) => {
         const shift = timelineDragState.activeShift;
         const duration = shift.endHour - shift.startHour;
-        const mouseHour = getTimelineHourFromPosition(e.clientX, lanes);
-        return Math.max(state.startHour, Math.min(Math.round(mouseHour - duration / 2), state.endHour - duration));
+        const rect = lanes.getBoundingClientRect();
+        const hourFloat = state.startHour + ((e.clientX - rect.left) / rect.width) * state.hours.length;
+        const start = Math.round(hourFloat - (timelineDragState.grabOffsetHours || 0));
+        return Math.max(state.startHour, Math.min(start, state.endHour - duration));
+    };
+
+    // The lane (row) under the cursor, ignoring the open-shift lane
+    const laneUnderCursor = (e) => {
+        const rows = [...lanes.querySelectorAll('.timeline-slots-row:not(.timeline-gap-row)')];
+        return rows.find(r => {
+            const rr = r.getBoundingClientRect();
+            return e.clientY >= rr.top && e.clientY <= rr.bottom;
+        }) || rows[rows.length - 1] || null;
+    };
+
+    const drawGhost = (e, start) => {
+        const shift = timelineDragState.activeShift;
+        const duration = shift.endHour - shift.startHour;
+        document.querySelectorAll('.timeline-ghost-preview').forEach(g => g.remove());
+        const lane = laneUnderCursor(e);
+        const ghost = document.createElement('div');
+        ghost.className = 'timeline-ghost-preview';
+        ghost.style.left = `${((start - state.startHour) / state.hours.length) * 100}%`;
+        ghost.style.width = `${(duration / state.hours.length) * 100}%`;
+        ghost.style.top = `${lane ? lane.offsetTop + 3 : 3}px`;
+        ghost.style.height = `${lane ? lane.offsetHeight - 6 : 26}px`;
+        const emp = employeeMap[shift.empId];
+        ghost.style.background = roleMap[roleId]?.color || emp?.color || '#6366f1';
+        ghost.innerHTML = `<span class="shift-name">${escHtml(emp?.name || 'Staff')}</span><span class="ghost-time">${formatHour(start)}-${formatHour(start + duration)}</span>`;
+        lanes.appendChild(ghost);
+        timelineDragState.targetLaneIndex = lane ? parseInt(lane.dataset.laneIndex || '0') : 0;
     };
 
     lanes.addEventListener('dragover', (e) => {
@@ -4486,12 +4822,7 @@ function attachTimelineDropHandlers(lanes, dayIdx, roleId) {
         const start = targetStartFor(e);
         timelineDragState.currentTargetDay = dayIdx;
         timelineDragState.currentTargetHour = start;
-        const ghost = createGhostPreview(timelineDragState.activeShift, start, lanes);
-        if (ghost) {
-            ghost.style.top = '2px';
-            ghost.style.height = '30px';
-            lanes.appendChild(ghost);
-        }
+        drawGhost(e, start);
     });
 
     lanes.addEventListener('dragleave', (e) => {
@@ -4508,25 +4839,31 @@ function attachTimelineDropHandlers(lanes, dayIdx, roleId) {
         if (!shift) return;
 
         const start = targetStartFor(e);
+        const duration = shift.endHour - shift.startHour;
         const targetRole = roleId === '__other' ? shift.roleId : roleId;
-        const emp = employeeMap[shift.empId];
-        const finish = () => {
-            timelineDragState.isDragging = false;
-            timelineDragState.activeShift = null;
-            hideTimelineDropZones();
+        const targetLane = timelineDragState.targetLaneIndex || 0;
+        const proposal = {
+            empId: shift.empId,
+            fromDay: timelineDragState.originalDayIdx,
+            fromStart: timelineDragState.originalStartHour,
+            fromEnd: timelineDragState.originalEndHour,
+            fromRole: timelineDragState.originalRoleId || shift.roleId,
+            toDay: dayIdx, toStart: start, toEnd: start + duration, toRole: targetRole,
         };
+        timelineDragState.isDragging = false;
+        timelineDragState.activeShift = null;
+        hideTimelineDropZones();
+        hideAvailabilityOverlays();
 
-        if (targetRole !== shift.roleId && emp && !(emp.roles || []).includes(targetRole)) {
-            showToast(`${emp.name} is not set up for the ${roleMap[targetRole]?.name || 'that'} role. Edit them under Staff Availability to add it.`, 'error');
-            finish();
-            return;
-        }
-        const unchanged = dayIdx === timelineDragState.originalDayIdx && start === timelineDragState.originalStartHour && targetRole === shift.roleId;
-        if (!unchanged) {
-            moveShift(shift.empId, shift.roleId, timelineDragState.originalDayIdx,
-                timelineDragState.originalStartHour, timelineDragState.originalEndHour, dayIdx, start, targetRole);
-        }
-        finish();
+        const unchanged = proposal.toDay === proposal.fromDay && proposal.toStart === proposal.fromStart && proposal.toRole === proposal.fromRole;
+        if (unchanged) return;
+
+        confirmShiftChange(proposal, () => {
+            // Land on the lane it was dropped on
+            timelineLaneMemory[laneKey(dayIdx, targetRole, shift.empId)] = targetLane;
+            moveShift(shift.empId, proposal.fromRole, proposal.fromDay, proposal.fromStart, proposal.fromEnd,
+                dayIdx, start, targetRole);
+        });
     });
 }
 
@@ -4691,13 +5028,14 @@ function renderTimelineView(schedule) {
                 lanes.appendChild(gapLane);
             }
 
-            const packed = packIntoLanes(shiftsHere);
+            const packed = packIntoLanes(shiftsHere, dayIdx, role.id);
             if (packed.length === 0) packed.push([]);
-            packed.forEach(laneShifts => {
+            packed.forEach((laneShifts, laneIndex) => {
                 const lane = document.createElement('div');
                 lane.className = 'timeline-slots-row' + (laneShifts.length ? '' : ' timeline-empty-row');
                 lane.dataset.dayIdx = dayIdx;
                 lane.dataset.roleId = role.id;
+                lane.dataset.laneIndex = laneIndex;
                 lane.title = laneShifts.length ? '' : 'Click or drag here to add a shift';
                 const preselect = role.id === '__other' ? null : role.id;
                 lane.addEventListener('click', (e) => {
