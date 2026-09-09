@@ -11447,3 +11447,74 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
 .timeline-slots .timeline-day-header + .timeline-role-row {
     border-top: none;
 }
+
+/* Timeline day cards: stronger even/odd contrast, more space between days, bigger day label */
+.timeline-grid {
+    gap: 26px;
+}
+
+.timeline-row.day-even .timeline-day-label,
+.timeline-row.day-even .timeline-day-header {
+    background: rgba(28, 31, 56, 0.95);
+}
+
+.timeline-row.day-odd .timeline-day-label,
+.timeline-row.day-odd .timeline-day-header {
+    background: rgba(78, 84, 132, 0.95);
+}
+
+body[data-theme="light"] .timeline-row.day-even .timeline-day-label,
+body[data-theme="light"] .timeline-row.day-even .timeline-day-header {
+    background: rgba(241, 245, 249, 1);
+}
+
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-label,
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
+    background: rgba(199, 210, 226, 1);
+}
+
+.timeline-day-label,
+body[data-theme="light"] .timeline-day-label {
+    padding: 0.7rem 0.75rem;
+    gap: 2px;
+}
+
+.timeline-day-label .day-name {
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    line-height: 1.1;
+}
+
+.timeline-day-label .day-date {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.timeline-row.day-odd .timeline-day-label .day-date {
+    color: rgba(255, 255, 255, 0.75);
+}
+
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-label .day-date {
+    color: #334155;
+}
+
+.timeline-row.day-odd .timeline-day-header .timeline-hour-label,
+.timeline-row.day-odd .timeline-day-header .timeline-header-role {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-header .timeline-hour-label,
+body[data-theme="light"] .timeline-row.day-odd .timeline-day-header .timeline-header-role {
+    color: #334155;
+}
+
+@media (max-width: 640px) {
+    .timeline-grid {
+        gap: 18px;
+    }
+    .timeline-day-label .day-name {
+        font-size: 0.9rem;
+    }
+}
