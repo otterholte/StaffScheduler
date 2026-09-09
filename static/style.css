@@ -11206,3 +11206,77 @@ body[data-theme="light"] .timeline-role-label {
 .btn-confirm-warning:hover {
     filter: brightness(1.08);
 }
+
+/* =============================================================================
+   EMPLOYEE HOURS: no clipping when expanded, filter bar, coloured role badges
+   ============================================================================= */
+.employee-hours-fullwidth:not(.collapsed) .collapsible-content {
+    max-height: none;
+    overflow: visible;
+}
+
+.employee-hours-fullwidth .employee-hours-list {
+    max-height: none;
+    overflow: visible;
+}
+
+.hours-filter-bar {
+    padding: 0 0 0.85rem;
+}
+
+.emp-role-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
+.role-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px 2px 6px;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--role-color, #6366f1) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--role-color, #6366f1) 45%, transparent);
+    white-space: nowrap;
+}
+
+.role-badge::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--role-color, #6366f1);
+    flex-shrink: 0;
+}
+
+.emp-hours-row .emp-hours-info {
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.emp-hours-row .emp-name {
+    font-weight: 600;
+}
+
+.emp-hours-row .emp-role-badges {
+    margin-left: 0.15rem;
+}
+
+.emp-hours-empty {
+    padding: 1rem;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.avail-staff-roles {
+    margin-top: 0.3rem;
+}
+
+body[data-theme="light"] .role-badge {
+    color: #1e293b;
+}

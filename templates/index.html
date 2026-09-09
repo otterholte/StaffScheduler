@@ -560,6 +560,17 @@
                         </svg>
                     </h3>
                     <div id="employeeHoursContent" class="collapsible-content">
+                        <div class="table-filter-bar hours-filter-bar" id="hoursFilterBar">
+                            <div class="table-search">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="hoursSearchInput" placeholder="Find a team member" aria-label="Find a team member" autocomplete="off">
+                            </div>
+                            <div class="table-role-chips" id="hoursRoleChips" aria-label="Filter by role"></div>
+                            <button type="button" class="table-filter-clear" id="hoursFilterClear" hidden>Clear</button>
+                        </div>
                         <div id="employeeHoursList" class="employee-hours-list employee-hours-grid">
                             {% for emp in employees %}
                             <div class="emp-hours-row" data-id="{{ emp.id }}">

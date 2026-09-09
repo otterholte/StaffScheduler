@@ -101,6 +101,7 @@ const state = {
     // Schedule view state ('table' is the default: quickest to read)
     scheduleViewMode: 'timeline', // 'timeline' (default), 'grid', or 'table'
     tableFilter: { search: '', roles: new Set() }, // search/role filter for the table view
+    hoursFilter: { search: '', roles: new Set() }, // search/role filter for Employee Hours
     scheduleColorMode: 'role', // 'role' or 'employee'
     // Week navigation state
     weekOffset: 0, // 0 = current week, -1 = last week, 1 = next week, etc.
@@ -941,7 +942,7 @@ function init() {
     
     // Initial render
     renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
-    wireEmployeeHoursList();
+    renderEmployeeHoursList(); // alphabetical, with role badges and the filter bar
     renderRolesList();
     renderCoverageUI();
     
@@ -2592,12 +2593,71 @@ function buildEmployeeDetailHtml(emp, opts = { availability: true, rules: true }
 }
 
 let employeeHoursListWired = false;
+let hoursFilterWired = false;
 
+/** Coloured pill per role the person holds (uses each role's colour). */
+function roleBadgesHtml(emp) {
+    const roles = (emp.roles || []).map(r => roleMap[r]).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
+    if (!roles.length) return '';
+    return `<span class="emp-role-badges">${roles.map(r => `<span class="role-badge" style="--role-color:${escHtml(r.color)}">${escHtml(r.name)}</span>`).join('')}</span>`;
+}
+
+/** Search box + role chips above the Employee Hours list. */
+function renderHoursFilterChips() {
+    const bar = document.getElementById('hoursFilterBar');
+    if (!bar) return;
+    const filter = state.hoursFilter;
+    const chips = bar.querySelector('#hoursRoleChips');
+    const input = bar.querySelector('#hoursSearchInput');
+    const clearBtn = bar.querySelector('#hoursFilterClear');
+
+    chips.innerHTML = '';
+    [...state.roles].sort((a, b) => a.name.localeCompare(b.name)).forEach(role => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'role-chip' + (filter.roles.has(role.id) ? ' active' : '');
+        chip.style.setProperty('--chip-color', role.color);
+        chip.innerHTML = `<span class="role-chip-dot"></span>${escHtml(role.name)}`;
+        chip.title = filter.roles.has(role.id) ? `Hide ${role.name}` : `Show ${role.name}`;
+        chip.addEventListener('click', () => {
+            if (filter.roles.has(role.id)) filter.roles.delete(role.id); else filter.roles.add(role.id);
+            renderEmployeeHoursList();
+        });
+        chips.appendChild(chip);
+    });
+    const active = !!(filter.search || filter.roles.size);
+    clearBtn.hidden = !active;
+
+    if (!hoursFilterWired) {
+        hoursFilterWired = true;
+        input.addEventListener('input', () => {
+            filter.search = input.value;
+            renderEmployeeHoursList();
+        });
+        clearBtn.addEventListener('click', () => {
+            filter.search = '';
+            filter.roles.clear();
+            input.value = '';
+            renderEmployeeHoursList();
+        });
+    }
+}
+
+/** Employee Hours rows: alphabetical, filtered by the search/role chips, with role badges. */
 function renderEmployeeHoursList() {
     if (!dom.employeeHoursList) return;
+    if (!state.hoursFilter) state.hoursFilter = { search: '', roles: new Set() };
+    renderHoursFilterChips();
     dom.employeeHoursList.innerHTML = '';
 
-    state.employees.forEach(emp => {
+    const filter = state.hoursFilter;
+    const search = (filter.search || '').trim().toLowerCase();
+    const people = [...state.employees]
+        .filter(emp => !search || (emp.name || '').toLowerCase().includes(search))
+        .filter(emp => !filter.roles.size || (emp.roles || []).some(r => filter.roles.has(r)))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    people.forEach(emp => {
         const row = document.createElement('div');
         row.className = 'emp-hours-row';
         row.dataset.id = emp.id;
@@ -2607,6 +2667,7 @@ function renderEmployeeHoursList() {
             <div class="emp-hours-info">
                 <span class="emp-color-dot" style="background: ${escHtml(emp.color)}"></span>
                 <span class="emp-name">${escHtml(emp.name)}</span>
+                ${roleBadgesHtml(emp)}
                 <div class="emp-badges">${getBadgesHTML(emp)}</div>
             </div>
             <div class="emp-hours-stats">
@@ -2618,6 +2679,14 @@ function renderEmployeeHoursList() {
         dom.employeeHoursList.appendChild(row);
     });
 
+    if (!people.length) {
+        dom.employeeHoursList.innerHTML = '<div class="emp-hours-empty">No team members match your search or filter.</div>';
+    }
+
+    // Fill in this week's hours for the rows we just drew
+    if (state.currentSchedule?.employee_hours) {
+        try { updateEmployeeHours(state.currentSchedule); } catch (err) { /* nothing scheduled yet */ }
+    }
     wireEmployeeHoursList();
 }
 
@@ -7667,7 +7736,7 @@ function renderAvailabilityPage() {
             <div class="avail-staff-avatar" style="background: ${escHtml(emp.color || '#467df6')}">${escHtml(initials)}</div>
             <div class="avail-staff-info">
                 <div class="avail-staff-name">${escHtml(emp.name)}</div>
-                <div class="avail-staff-role">${escHtml(roleNames)}</div>
+                <div class="avail-staff-roles">${roleBadgesHtml(emp) || '<span class="avail-staff-role">No roles yet</span>'}</div>
                 <div class="avail-staff-meta">
                     <span class="avail-meta-pill ${emp.classification === 'full_time' ? 'pill-ft' : 'pill-pt'}">${emp.classification === 'full_time' ? 'Full-time' : 'Part-time'}</span>
                     <span class="avail-meta-text">${emp.min_hours}–${emp.max_hours} hrs/week</span>
