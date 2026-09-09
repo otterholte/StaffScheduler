@@ -11638,3 +11638,9 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-label,
 body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
     background: rgba(203, 213, 226, 1);
 }
+
+/* Odd-day header: a touch darker so the light days are not so bright */
+.timeline-row.day-odd .timeline-day-label,
+.timeline-row.day-odd .timeline-day-header {
+    background: rgba(57, 62, 98, 0.93);
+}
