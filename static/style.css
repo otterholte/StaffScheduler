@@ -10718,3 +10718,46 @@ body[data-theme="light"] .avail-meta-pill.pill-pt { color: #047857; }
     color: var(--text-muted);
     margin: 0 0 0.5rem;
 }
+
+/* =============================================================================
+   PHONE LAYOUT for the schedule toolbar and the role-based timeline
+   ============================================================================= */
+@media (max-width: 640px) {
+    /* Stack the toolbar: views, then week navigation, then colour/export */
+    .schedule-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .toolbar-left {
+        order: 1;
+        justify-content: center;
+    }
+    .toolbar-center {
+        position: static;
+        transform: none;
+        order: 2;
+    }
+    .toolbar-right {
+        order: 3;
+        justify-content: center;
+    }
+    .toolbar-badge-row {
+        order: 4;
+    }
+
+    /* The timeline scrolls sideways on a phone; keep the bars readable */
+    .timeline-grid {
+        min-width: 720px;
+    }
+    .timeline-day-label,
+    .timeline-header-day {
+        width: 62px;
+        padding: 0.5rem 0.4rem;
+    }
+    .timeline-role-label,
+    .timeline-header-role {
+        width: 76px;
+        font-size: 0.64rem;
+        padding: 0 0.35rem;
+    }
+}
