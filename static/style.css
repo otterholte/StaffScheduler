@@ -11359,3 +11359,12 @@ body[data-theme="light"] .role-badge {
 .simple-schedule-table .emp-rules-row .emp-detail-list {
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
+
+/* Search pills: the pill outline is the focus indicator, not the inner input */
+.table-search input:focus,
+.table-search input:focus-visible {
+    outline: none;
+    box-shadow: none;
+    border: none;
+    background: transparent;
+}
