@@ -11745,3 +11745,17 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
         grid-template-columns: minmax(0, 1fr) auto;
     }
 }
+
+/* Employee Hours: a little more room between the three left columns */
+.emp-hours-head,
+.employee-hours-grid .emp-hours-row {
+    grid-template-columns: 210px 270px 320px 1fr;
+    gap: 0.5rem 2rem;
+}
+
+@media (max-width: 900px) {
+    .employee-hours-grid .emp-hours-row {
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.35rem 0.75rem;
+    }
+}
