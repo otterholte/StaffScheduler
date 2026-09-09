@@ -1415,7 +1415,8 @@ function updateLoadingProgress(job) {
     const p = job.progress || {};
     const items = [];
     items.push({ done: true, text: 'Loaded staff, roles, and coverage rules' });
-    items.push({ done: (p.solutions || 0) > 0, text: (p.solutions || 0) > 0 ? `Found ${p.solutions} candidate schedule${p.solutions === 1 ? '' : 's'}` : 'Searching for a first schedule' });
+    // p.solutions counts draft schedules the solver has compared, not people
+    items.push({ done: (p.solutions || 0) > 0, text: (p.solutions || 0) > 0 ? `Compared ${p.solutions} draft schedule${p.solutions === 1 ? '' : 's'} so far` : 'Building a first draft schedule' });
     if ((p.solutions || 0) > 0) {
         const unfilled = p.unfilled_slots ?? null;
         items.push({ done: unfilled === 0, text: unfilled === 0 ? 'Every required hour is covered' : `${unfilled} required hour${unfilled === 1 ? '' : 's'} still open, still searching` });
@@ -2838,7 +2839,7 @@ async function runScheduleJob(kind) {
             updateEmployeeHours(data.schedule);
 
             const coverage = data.schedule.coverage_percentage;
-            const label = `Solution #${data.schedule.solution_index}`;
+            const label = `Option ${data.schedule.solution_index}`;
             if (coverage >= 100) {
                 updateScheduleStatus(`100% coverage - ${label}`, 'success');
             } else {

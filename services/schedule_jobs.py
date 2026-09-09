@@ -170,10 +170,13 @@ def _run_job(app: Flask, job_id: str, scenario: BusinessScenario, week_start: da
             if phase == 'improving':
                 unfilled = event.get('unfilled_slots', 0)
                 n = event.get('solutions', 0)
+                # `n` counts the draft schedules the solver has tried so far,
+                # not people; say so plainly so it is not mistaken for a head count.
+                tries = f"{n} draft{'s' if n != 1 else ''} compared so far"
                 if unfilled == 0:
-                    msg = f"Full coverage found. Polishing shifts, fairness, and preferences... ({n} candidate schedules)"
+                    msg = f"Every hour is covered. Now improving shift lengths, fairness, and preferences ({tries})..."
                 else:
-                    msg = f"Found a schedule with {unfilled} uncovered hour(s). Searching for better... ({n} candidates)"
+                    msg = f"Best draft so far leaves {unfilled} hour{'s' if unfilled != 1 else ''} open. Looking for a better one ({tries})..."
                 update(message=msg, progress={
                     'solutions': n, 'unfilled_slots': unfilled,
                     'elapsed': round(event.get('elapsed', 0), 1),
