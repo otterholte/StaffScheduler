@@ -12234,3 +12234,28 @@ body[data-theme="light"] .rule-summary.pref {
 body[data-theme="light"] .rule-summary.ok {
     background: rgba(15, 23, 42, 0.05);
 }
+
+/* Details: badges in place of matching text */
+.emp-detail-item dd {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.emp-detail-item dd .badge {
+    font-size: 0.72rem;
+    padding: 3px 8px;
+    cursor: default;
+}
+
+.emp-detail-note {
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.emp-detail-plain {
+    font-size: 0.8rem;
+    font-weight: 500;
+}

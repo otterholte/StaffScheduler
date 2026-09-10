@@ -2578,18 +2578,29 @@ function buildEmployeeDetailHtml(emp, opts = { availability: true, rules: true }
     }
 
     if (opts.rules) {
-        const roles = (emp.roles || []).map(r => roleMap[r]?.name || r);
+        // Badges stand in for the matching text (status, roles, supervision, overtime)
+        const badge = (cls, text) => `<span class="badge ${cls}">${escHtml(text)}</span>`;
+        const statusHtml = emp.classification === 'full_time' ? badge('badge-ft', 'Full-time') : badge('badge-pt', 'Part-time');
+        const rolesHtml = roleBadgesHtml(emp) || '<span class="emp-no-roles">No roles yet</span>';
+        const supervisionHtml = emp.can_supervise
+            ? `${badge('badge-sup', 'Supervisor')} <span class="emp-detail-note">can supervise others</span>`
+            : (emp.needs_supervision
+                ? `${badge('badge-new', 'New hire')} <span class="emp-detail-note">needs a supervisor on shift</span>`
+                : '<span class="emp-detail-plain">Works unsupervised</span>');
+        const overtimeHtml = emp.overtime_allowed
+            ? `${badge('badge-ot', 'Overtime')} <span class="emp-detail-note">allowed over 40 hours</span>`
+            : '<span class="emp-detail-plain">Not allowed (capped at 40 hours)</span>';
         const items = [
-            ['Status', emp.classification === 'full_time' ? 'Full-time' : 'Part-time'],
-            ['Weekly hours', `${emp.min_hours ?? 0} to ${emp.max_hours ?? 40} hours`],
-            ['Roles', roles.length ? roles.join(', ') : 'No roles yet'],
-            ['Overtime', emp.overtime_allowed ? 'Allowed (over 40 hours is fine)' : 'Not allowed (capped at 40 hours)'],
-            ['Supervision', emp.can_supervise ? 'Can supervise others' : (emp.needs_supervision ? 'Needs a supervisor on shift' : 'Works unsupervised')],
-            ['Hourly rate', `$${Number(emp.hourly_rate || 0).toFixed(2)}`],
+            ['Status', statusHtml],
+            ['Weekly hours', `<span class="emp-detail-plain">${escHtml(`${emp.min_hours ?? 0} to ${emp.max_hours ?? 40} hours`)}</span>`],
+            ['Roles', rolesHtml],
+            ['Overtime', overtimeHtml],
+            ['Supervision', supervisionHtml],
+            ['Hourly rate', `<span class="emp-detail-plain">${escHtml(`$${Number(emp.hourly_rate || 0).toFixed(2)}`)}</span>`],
         ];
-        if (emp.email || emp.phone) items.push(['Contact', [emp.email, emp.phone].filter(Boolean).join(' · ')]);
+        if (emp.email || emp.phone) items.push(['Contact', `<span class="emp-detail-plain">${escHtml([emp.email, emp.phone].filter(Boolean).join(' · '))}</span>`]);
         html += '<div class="emp-detail-section"><div class="emp-detail-heading">Rules and info</div><dl class="emp-detail-list">';
-        items.forEach(([k, v]) => { html += `<div class="emp-detail-item"><dt>${escHtml(k)}</dt><dd>${escHtml(v)}</dd></div>`; });
+        items.forEach(([k, v]) => { html += `<div class="emp-detail-item"><dt>${escHtml(k)}</dt><dd>${v}</dd></div>`; });
         html += '</dl></div>';
     }
     html += '</div>';
@@ -8118,10 +8129,7 @@ function showAvailabilityPanel(empId) {
 
     // Rules and info card (spelled out, no abbreviations) with colour role badges
     const details = document.getElementById('availPanelDetails');
-    if (details) {
-        details.innerHTML = `<div class="avail-detail-badges">${roleBadgesHtml(emp) || '<span class="emp-no-roles">No roles yet</span>'}<span class="avail-detail-sep"></span>${getBadgesHTML(emp)}</div>`
-            + buildEmployeeDetailHtml(emp, { availability: false, rules: true });
-    }
+    if (details) details.innerHTML = buildEmployeeDetailHtml(emp, { availability: false, rules: true });
 
     // Render table view
     renderManagerAvailabilityTable(emp);
