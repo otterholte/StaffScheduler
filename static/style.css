@@ -12388,3 +12388,83 @@ body[data-theme="light"] #scheduleViewTable #tableFilterBar {
     margin: 0 -1.25rem;
     padding: 0.75rem 1.25rem;
 }
+
+/* Table view: the expanded person block reads as one calm inset card */
+.simple-schedule-table .emp-row.expanded td {
+    background: rgba(99, 102, 241, 0.14);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.35);
+}
+
+.simple-schedule-table .emp-avail-row td,
+.simple-schedule-table .emp-rules-row td {
+    background: #1a1c33;
+    border-bottom: none;
+}
+
+body[data-theme="light"] .simple-schedule-table .emp-avail-row td,
+body[data-theme="light"] .simple-schedule-table .emp-rules-row td {
+    background: #eef1f7;
+}
+
+.simple-schedule-table .emp-avail-row td:first-child,
+.simple-schedule-table .emp-rules-row td:first-child {
+    box-shadow: inset 4px 0 0 var(--accent-primary);
+}
+
+.simple-schedule-table .emp-avail-row td {
+    padding-top: 0.7rem;
+    padding-bottom: 0.7rem;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+body[data-theme="light"] .simple-schedule-table .emp-avail-row td {
+    border-bottom-color: rgba(15, 23, 42, 0.1);
+}
+
+.simple-schedule-table .emp-rules-row td {
+    border-bottom: 2px solid rgba(99, 102, 241, 0.45);
+}
+
+/* Quieter availability cells: plain text with a small dot instead of boxed chips */
+.simple-schedule-table .avail-chip {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0 2px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.simple-schedule-table .avail-chip::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    margin-right: 5px;
+    vertical-align: middle;
+}
+
+.simple-schedule-table .avail-pref {
+    font-size: 0.64rem;
+    color: var(--text-muted);
+    opacity: 0.85;
+}
+
+.simple-schedule-table .avail-none {
+    font-size: 0.72rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail {
+    padding: 0.9rem 1.25rem 1.1rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-heading {
+    margin-bottom: 0.7rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-list {
+    gap: 0.5rem 1.5rem;
+}
