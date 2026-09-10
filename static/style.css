@@ -12259,3 +12259,9 @@ body[data-theme="light"] .rule-summary.ok {
     font-size: 0.8rem;
     font-weight: 500;
 }
+
+/* Expanded grid: day columns widen to fit every side-by-side shift */
+.schedule-grid-wrapper.grid-expanded .schedule-grid th.day-col,
+.schedule-grid-wrapper.grid-expanded .schedule-grid td.slot {
+    min-width: var(--grid-day-min, 230px);
+}

@@ -3163,7 +3163,7 @@ function renderSchedule(schedule) {
     
     const hSpacing = 8; // Horizontal border-spacing between columns
     const vSpacing = 3; // Vertical border-spacing between rows
-    const slotWidth = firstSlot.offsetWidth + hSpacing;
+    let slotWidth = firstSlot.offsetWidth + hSpacing;
     const slotHeight = firstSlot.offsetHeight + vSpacing;
     const headerHeight = headerRow?.offsetHeight || 35;
     const timeCellWidth = (timeCell?.offsetWidth || 50) + hSpacing;
@@ -3274,7 +3274,14 @@ function renderSchedule(schedule) {
         const numColumns = columns.length || 1;
         blocks.forEach(b => b.totalColumns = numColumns);
     });
-    
+
+    // Expanded mode: make every day wide enough that each side-by-side shift
+    // is at least ~68px, so first names are readable, then re-measure.
+    const expanded = wrapper.classList.contains('grid-expanded');
+    const maxColumns = Math.max(1, ...Object.values(blocksByDay).map(bs => (bs[0]?.totalColumns) || 1));
+    grid.style.setProperty('--grid-day-min', expanded ? `${Math.max(230, maxColumns * 70 + 12)}px` : '0px');
+    slotWidth = firstSlot.offsetWidth + hSpacing;
+
     // Render shift blocks
     shiftSegments.forEach(segment => {
         const emp = employeeMap[segment.employeeId];
@@ -3314,9 +3321,10 @@ function renderSchedule(schedule) {
         el.style.height = `${duration * slotHeight - 4}px`;
         el.style.zIndex = 10 + segment.column;
         
-        // Short name for display
-        const shortName = emp.name.length > 5 ? emp.name.substring(0, 4) : emp.name;
-        el.innerHTML = `<span class="shift-name">${shortName}</span>`;
+        // Show as much of the name as the block can fit: full name, first name, or 4 letters
+        const firstName = (emp.name || '').split(' ')[0];
+        const shortName = blockWidth >= 120 ? emp.name : (blockWidth >= 62 ? firstName : (emp.name.length > 5 ? emp.name.substring(0, 4) : emp.name));
+        el.innerHTML = `<span class="shift-name">${escHtml(shortName)}</span>`;
         el.title = `${emp.name}\nRoles: ${roleNames}\n${formatHour(segment.startHour)} - ${formatHour(segment.endHour)}`;
         
         // Make clickable to edit
@@ -5446,6 +5454,11 @@ function applyGridWidthMode(mode) {
     const wrapper = document.getElementById('scheduleGridWrapper');
     if (wrapper) wrapper.classList.toggle('grid-expanded', state.gridWidthMode === 'expanded');
     document.querySelectorAll('#gridWidthToggle .subtoggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === state.gridWidthMode));
+    // Blocks are positioned in pixels, so redraw them for the new column widths
+    if (state.scheduleViewMode === 'grid' && state.currentSchedule) {
+        rebuildScheduleGrid();
+        renderSchedule(state.currentSchedule);
+    }
 }
 
 function setupGridWidthToggle() {
