@@ -5501,6 +5501,23 @@ function setupGridWidthToggle() {
     try { saved = localStorage.getItem('gridWidthMode') || 'fit'; } catch (err) { /* ignore */ }
     document.querySelectorAll('#gridWidthToggle .subtoggle-btn').forEach(b => b.addEventListener('click', () => applyGridWidthMode(b.dataset.mode)));
     applyGridWidthMode(saved);
+
+    // In Expanded mode a plain scroll wheel over the grid moves it sideways
+    // (no Shift needed). At either end the wheel falls through to the page.
+    const wrapper = document.getElementById('scheduleGridWrapper');
+    if (wrapper) {
+        wrapper.addEventListener('wheel', (e) => {
+            if (!wrapper.classList.contains('grid-expanded')) return;
+            if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // already a sideways gesture
+            const max = wrapper.scrollWidth - wrapper.clientWidth;
+            if (max <= 0) return;
+            const atStart = wrapper.scrollLeft <= 0 && e.deltaY < 0;
+            const atEnd = wrapper.scrollLeft >= max - 1 && e.deltaY > 0;
+            if (atStart || atEnd) return;
+            e.preventDefault();
+            wrapper.scrollLeft += e.deltaY;
+        }, { passive: false });
+    }
 }
 
 /** Everything that should happen after a manual change to the schedule. */

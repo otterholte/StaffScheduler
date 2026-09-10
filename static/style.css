@@ -12299,3 +12299,60 @@ body[data-theme="light"] .rule-summary.ok {
     background: var(--role-color, #64748b);
     flex-shrink: 0;
 }
+
+/* Table view: the date header stays visible while you scroll down the staff list */
+.simple-schedule-table thead th {
+    position: sticky;
+    top: 64px;
+    z-index: 20;
+    background: var(--bg-secondary);
+    box-shadow: 0 1px 0 var(--border-color);
+}
+
+.simple-schedule-table thead th.day-even {
+    background: rgba(45, 50, 80, 1);
+}
+
+.simple-schedule-table thead th.day-odd {
+    background: rgba(65, 70, 110, 1);
+}
+
+body[data-theme="light"] .simple-schedule-table thead th {
+    background: #f1f5f9;
+}
+
+body[data-theme="light"] .simple-schedule-table thead th.day-even {
+    background: rgba(226, 232, 240, 1);
+}
+
+body[data-theme="light"] .simple-schedule-table thead th.day-odd {
+    background: rgba(203, 213, 225, 1);
+}
+
+@media (max-width: 640px) {
+    .simple-schedule-table thead th {
+        top: 56px;
+    }
+}
+
+/* Let the viewport (html) be the only scroll container so sticky headers work inside body */
+body {
+    overflow: visible !important;
+}
+
+/* Clip sideways overflow without turning body into a scroll container */
+body {
+    overflow-x: clip !important;
+    overflow-y: visible !important;
+}
+
+/* Opaque sticky header cells so rows never show through */
+.simple-schedule-table thead th.name-col,
+.simple-schedule-table thead th.hours-col {
+    background: #23263f;
+}
+
+body[data-theme="light"] .simple-schedule-table thead th.name-col,
+body[data-theme="light"] .simple-schedule-table thead th.hours-col {
+    background: #f1f5f9;
+}
