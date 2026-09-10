@@ -86,7 +86,8 @@ class _ProgressCallback(cp_model.CpSolverSolutionCallback):
 
     def __init__(self, shortfall_vars, stall_seconds: float, min_seconds: float,
                  progress: Optional[Callable[[dict], None]], started_at: float,
-                 significant_delta: float = 40.0, stop_when_fully_covered: bool = False):
+                 significant_delta: float = 40.0, stop_when_fully_covered: bool = False,
+                 count_offset: int = 0):
         super().__init__()
         self._shortfall_vars = shortfall_vars
         self._stall_seconds = stall_seconds
@@ -96,9 +97,12 @@ class _ProgressCallback(cp_model.CpSolverSolutionCallback):
         # nothing left to improve, so stop immediately.
         self._stop_when_fully_covered = stop_when_fully_covered
         self.fully_covered = False
+        # Pass 2 continues counting where pass 1 left off, so the "drafts
+        # compared" number shown to the user only ever goes up.
+        self._count_offset = count_offset
         self._progress = progress
         self._started_at = started_at
-        self.solution_count = 0
+        self.solution_count = count_offset
         # Only *meaningful* improvements (a coverage slot, an hour of minimum
         # hours, a clopening) reset the stall timer. Improvements smaller than
         # `significant_delta` are cosmetic (a preference here, a shift start
@@ -130,7 +134,7 @@ class _ProgressCallback(cp_model.CpSolverSolutionCallback):
 
     def should_stop(self) -> bool:
         """Called from a timer thread; returns True when the search should end."""
-        if self.solution_count == 0:
+        if self.solution_count <= self._count_offset:
             return False
         now = time.time()
         if now - self._started_at < self._min_seconds:
@@ -750,7 +754,8 @@ class AdvancedScheduleSolver:
         status, solver, callback = self._run(remaining, stall_seconds=stall_seconds + 1.5,
                                              min_seconds=max(min_seconds, 3.0),
                                              hint=pass1_solution, started=started,
-                                             significant_delta=float(self.WEIGHT_MIN_HOURS))
+                                             significant_delta=float(self.WEIGHT_MIN_HOURS),
+                                             count_offset=cb1.solution_count)
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             # Should not happen (pass 1's solution satisfies pass 2), but fall
             # back to the coverage-only result rather than fail.
@@ -817,7 +822,7 @@ class AdvancedScheduleSolver:
 
     def _run(self, time_limit: float, stall_seconds: float, min_seconds: float,
              hint: Optional[Set[Tuple[str, int, int]]], started: float, significant_delta: float,
-             stop_when_fully_covered: bool = False):
+             stop_when_fully_covered: bool = False, count_offset: int = 0):
         """Solve the currently built model with early stopping. Returns (status, solver, callback)."""
         solver = cp_model.CpSolver()
         solver.parameters.max_time_in_seconds = float(time_limit)
@@ -833,7 +838,7 @@ class AdvancedScheduleSolver:
         callback = _ProgressCallback(
             list(self._shortfall.values()), stall_seconds, min_seconds,
             self.progress_callback, started, significant_delta=significant_delta,
-            stop_when_fully_covered=stop_when_fully_covered,
+            stop_when_fully_covered=stop_when_fully_covered, count_offset=count_offset,
         )
 
         # A small watchdog thread implements the stall-based early stop.

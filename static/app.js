@@ -286,7 +286,8 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
      * Tries database first (for cross-device sync), falls back to localStorage.
      */
     let scheduleLoaded = false;
-    
+    resetScheduleHistory(); // a freshly loaded week starts with a clean undo history
+
     try {
         // Try loading from database first
         const response = await fetch(`/api/schedule/load?businessId=${encodeURIComponent(state.business.id)}&weekOffset=${state.weekOffset}&weekStart=${getWeekStartIso()}`);
@@ -943,6 +944,8 @@ function init() {
     // Initial render
     renderEmployeesGrid(); if (state.currentTab === 'settings') renderAvailabilityPage();
     renderEmployeeHoursList(); // alphabetical, with role badges and the filter bar
+    setupHistoryControls();
+    setupGridWidthToggle();
     renderRolesList();
     renderCoverageUI();
     
@@ -2829,6 +2832,7 @@ async function runScheduleJob(kind) {
         const data = job.result;
         if (data.success) {
             state.currentSchedule = data.schedule;
+            resetScheduleHistory();
             if (data.employees) {
                 state.employees = data.employees;
                 buildLookups();
@@ -3620,6 +3624,9 @@ function renderTableFilterChips() {
 function setScheduleLegendVisible(visible) {
     const wrap = document.getElementById('scheduleLegendWrapper');
     if (wrap) wrap.hidden = !visible;
+    // The week/expanded width toggle only applies to the grid view
+    const widthToggle = document.getElementById('gridWidthToggle');
+    if (widthToggle) widthToggle.hidden = !visible;
 }
 
 function renderSimpleTableView(schedule) {
@@ -4139,6 +4146,7 @@ function createGhostPreview(shift, targetHour, slotsContainer) {
 
 // Move shift to new position
 function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toStart, toRoleId = null) {
+    pushScheduleSnapshot(); // so this change can be undone
     if (!state.currentSchedule) return false;
 
     const slotAssignments = state.currentSchedule.slot_assignments;
@@ -4195,6 +4203,7 @@ function moveShift(empId, roleId, fromDayIdx, fromStart, fromEnd, toDayIdx, toSt
 
 // Resize shift (change start or end time) - supports 15-minute precision
 function resizeShift(empId, roleId, dayIdx, oldStart, oldEnd, newStart, newEnd) {
+    pushScheduleSnapshot(); // so this change can be undone
     if (!state.currentSchedule) return false;
     
     const slotAssignments = state.currentSchedule.slot_assignments;
@@ -4288,6 +4297,7 @@ function formatHourMinute(time) {
 
 // Delete shift from schedule
 function deleteShiftFromTimeline(empId, dayIdx, startHour, endHour) {
+    pushScheduleSnapshot(); // so this change can be undone
     if (!state.currentSchedule) return false;
     
     const slotAssignments = state.currentSchedule.slot_assignments;
@@ -4323,6 +4333,8 @@ function startResize(e, block, edge, dayIdx, shift) {
     block.classList.add('resizing');
     document.body.style.cursor = 'ew-resize';
     document.body.style.userSelect = 'none';
+    // Same red shading as a drag: hours this person is not available for
+    showAvailabilityOverlays(shift.emp || employeeMap[shift.empId]);
     
     // Get the slots container for this day
     // The lanes container spans exactly the hour columns (the role label sits outside it)
@@ -4413,18 +4425,18 @@ function startResize(e, block, edge, dayIdx, shift) {
         timelineDragState.isResizing = false;
         timelineDragState.resizeEdge = null;
         timelineDragState.activeShift = null;
-        
-        // Apply the resize if changed
+        hideAvailabilityOverlays();
+
+        // Apply the resize if changed, after the same rule check + confirm as a drag
         if (currentStart !== shift.startHour || currentEnd !== shift.endHour) {
-            resizeShift(
-                shift.empId,
-                shift.roleId,
-                dayIdx,
-                shift.startHour,
-                shift.endHour,
-                currentStart,
-                currentEnd
-            );
+            const proposal = {
+                empId: shift.empId,
+                fromDay: dayIdx, fromStart: shift.startHour, fromEnd: shift.endHour, fromRole: shift.roleId,
+                toDay: dayIdx, toStart: Math.floor(currentStart), toEnd: Math.ceil(currentEnd), toRole: shift.roleId,
+            };
+            confirmShiftChange(proposal, () => {
+                resizeShift(shift.empId, shift.roleId, dayIdx, shift.startHour, shift.endHour, currentStart, currentEnd);
+            });
         }
     }
     
@@ -4784,9 +4796,12 @@ function confirmShiftChange(p, onConfirm) {
     const roleName = roleMap[p.toRole]?.name || 'that role';
     const roleChanged = p.toRole !== p.fromRole;
     const isAdd = p.fromDay === null || p.fromDay === undefined;
+    const isResize = !isAdd && p.fromDay === p.toDay && !roleChanged && (p.toStart === p.fromStart || p.toEnd === p.fromEnd) && (p.toEnd - p.toStart) !== (p.fromEnd - p.fromStart);
     const summary = isAdd
         ? `Add ${emp?.name || 'this person'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)} as ${roleName}?`
-        : `Move ${emp?.name || 'this shift'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)}${roleChanged ? ` as ${roleName}` : ''}?`;
+        : isResize
+            ? `Change ${emp?.name || 'this'}'s ${state.days[p.toDay]} shift to ${formatHour(p.toStart)}-${formatHour(p.toEnd)}?`
+            : `Move ${emp?.name || 'this shift'} to ${state.days[p.toDay]} ${formatHour(p.toStart)}-${formatHour(p.toEnd)}${roleChanged ? ` as ${roleName}` : ''}?`;
     modal.classList.toggle('is-clean', clean);
     modal.classList.toggle('is-warning', !clean);
     document.getElementById('shiftChangeTitle').textContent = clean ? 'This change follows all your rules' : 'Are you sure? This change breaks a rule';
@@ -5339,6 +5354,92 @@ function recomputeCoverageGaps() {
     m.total_overtime_hours = Object.values(sched.employee_overtime).reduce((a, b) => a + b, 0);
 }
 
+// ==================== UNDO / REDO for manual schedule edits ====================
+const scheduleHistory = { undo: [], redo: [], limit: 50 };
+
+function snapshotSchedule() {
+    return JSON.stringify({
+        slot_assignments: state.currentSchedule.slot_assignments || {},
+        shift_times: state.currentSchedule.shift_times || {},
+    });
+}
+
+/** Call before any manual change so it can be undone. */
+function pushScheduleSnapshot() {
+    if (!state.currentSchedule) return;
+    scheduleHistory.undo.push(snapshotSchedule());
+    if (scheduleHistory.undo.length > scheduleHistory.limit) scheduleHistory.undo.shift();
+    scheduleHistory.redo = [];
+    updateHistoryButtons();
+}
+
+function resetScheduleHistory() {
+    scheduleHistory.undo = [];
+    scheduleHistory.redo = [];
+    updateHistoryButtons();
+}
+
+function restoreScheduleSnapshot(json) {
+    const snap = JSON.parse(json);
+    state.currentSchedule.slot_assignments = snap.slot_assignments;
+    state.currentSchedule.shift_times = snap.shift_times;
+    afterManualScheduleEdit();
+}
+
+function undoScheduleEdit() {
+    if (!state.currentSchedule || !scheduleHistory.undo.length) return;
+    scheduleHistory.redo.push(snapshotSchedule());
+    restoreScheduleSnapshot(scheduleHistory.undo.pop());
+    updateHistoryButtons();
+    showToast('Change undone', 'info');
+}
+
+function redoScheduleEdit() {
+    if (!state.currentSchedule || !scheduleHistory.redo.length) return;
+    scheduleHistory.undo.push(snapshotSchedule());
+    restoreScheduleSnapshot(scheduleHistory.redo.pop());
+    updateHistoryButtons();
+    showToast('Change redone', 'info');
+}
+
+function updateHistoryButtons() {
+    const u = document.getElementById('undoBtn');
+    const r = document.getElementById('redoBtn');
+    if (u) u.disabled = scheduleHistory.undo.length === 0;
+    if (r) r.disabled = scheduleHistory.redo.length === 0;
+}
+
+function setupHistoryControls() {
+    document.getElementById('undoBtn')?.addEventListener('click', undoScheduleEdit);
+    document.getElementById('redoBtn')?.addEventListener('click', redoScheduleEdit);
+    document.addEventListener('keydown', (e) => {
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+        if (state.currentTab !== 'schedule') return;
+        const mod = e.ctrlKey || e.metaKey;
+        if (!mod) return;
+        if (e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undoScheduleEdit(); }
+        else if (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey)) { e.preventDefault(); redoScheduleEdit(); }
+    });
+    updateHistoryButtons();
+}
+
+// ==================== GRID WIDTH: fit the week vs. expanded (scroll sideways) ====================
+function applyGridWidthMode(mode) {
+    state.gridWidthMode = mode === 'expanded' ? 'expanded' : 'fit';
+    try { localStorage.setItem('gridWidthMode', state.gridWidthMode); } catch (err) { /* ignore */ }
+    const wrapper = document.getElementById('scheduleGridWrapper');
+    if (wrapper) wrapper.classList.toggle('grid-expanded', state.gridWidthMode === 'expanded');
+    document.querySelectorAll('#gridWidthToggle .subtoggle-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === state.gridWidthMode));
+}
+
+function setupGridWidthToggle() {
+    let saved = 'fit';
+    try { saved = localStorage.getItem('gridWidthMode') || 'fit'; } catch (err) { /* ignore */ }
+    document.querySelectorAll('#gridWidthToggle .subtoggle-btn').forEach(b => b.addEventListener('click', () => applyGridWidthMode(b.dataset.mode)));
+    applyGridWidthMode(saved);
+}
+
 /** Everything that should happen after a manual change to the schedule. */
 function afterManualScheduleEdit(rerender = true) {
     if (!state.currentSchedule) return;
@@ -5410,63 +5511,139 @@ function updateMetrics(schedule) {
 }
 
 /**
- * Plain-English notes from the solver: why hours stayed open, who is under
- * their minimum hours, clopenings it could not avoid, and what to change.
+ * Check the schedule on screen against every rule and preference, per person.
+ * Returns [{empId, name, color, items: [{level: 'rule'|'pref', text}]}] for
+ * people with at least one issue. Works on the live slot assignments, so
+ * manual edits are included.
+ */
+function evaluateScheduleRules() {
+    const sched = state.currentSchedule;
+    if (!sched) return [];
+    const slots = sched.slot_assignments || {};
+    const policies = getAllPolicies();
+    const minRest = policies.min_rest_hours ?? 10;
+    const dayName = (d) => state.days[d] || '';
+    const rangesText = (day, hours) => formatRangeList(slotsToRangesByDay(hours.map(h => ({ day, hour: h })))[day] || []);
+
+    // Per person: hours worked per day and the role at each hour
+    const per = {};
+    Object.entries(slots).forEach(([key, list]) => {
+        const [d, h] = key.split(',').map(Number);
+        (list || []).forEach(a => {
+            const e = per[a.employee_id] = per[a.employee_id] || { days: {}, roles: {} };
+            (e.days[d] = e.days[d] || new Set()).add(h);
+            e.roles[`${d},${h}`] = a.role_id;
+        });
+    });
+
+    const results = [];
+    state.employees.forEach(emp => {
+        const e = per[emp.id] || { days: {}, roles: {} };
+        const days = Object.keys(e.days).map(Number).sort((a, b) => a - b);
+        const total = days.reduce((s, d) => s + e.days[d].size, 0);
+        const items = [];
+        const rule = (text) => items.push({ level: 'rule', text });
+        const pref = (text) => items.push({ level: 'pref', text });
+
+        // Weekly hours
+        const cap = emp.overtime_allowed ? emp.max_hours : Math.min(40, emp.max_hours || 40);
+        if (total > cap) rule(`${total}h scheduled, over their ${cap}h maximum${emp.overtime_allowed ? '' : ' (no overtime)'}`);
+        else if (total > 40 && emp.overtime_allowed) pref(`${total}h scheduled, ${total - 40}h of it overtime`);
+        if (emp.min_hours > 0 && total < emp.min_hours) pref(total === 0 ? `Not scheduled; wants at least ${emp.min_hours}h` : `${total}h scheduled, under their ${emp.min_hours}h minimum`);
+
+        // Days per week and a day off
+        const isFT = emp.classification === 'full_time';
+        const maxDays = isFT ? policies.max_days_ft : policies.max_days_pt;
+        const mode = isFT ? policies.max_days_ft_mode : policies.max_days_pt_mode;
+        if (mode !== 'off' && days.length > maxDays) {
+            (mode === 'required' ? rule : pref)(`${days.length} days this week; the ${isFT ? 'full-time' : 'part-time'} limit is ${maxDays}`);
+        }
+        if (days.length >= 7) rule('No day off this week');
+
+        // Availability, time off, roles, shift length, supervision
+        days.forEach(d => {
+            const hours = [...e.days[d]].sort((a, b) => a - b);
+            if (employeeHasTimeOff(emp.id, d)) {
+                rule(`Scheduled ${dayName(d)} during approved time off`);
+            } else {
+                const avail = employeeAvailableHours(emp, d);
+                const bad = hours.filter(h => !avail.has(h));
+                if (bad.length) rule(`Scheduled ${dayName(d)} ${rangesText(d, bad)} outside their availability`);
+            }
+            const wrongRole = [...new Set(hours.map(h => e.roles[`${d},${h}`]).filter(r => r && !(emp.roles || []).includes(r)))];
+            if (wrongRole.length) rule(`Working ${dayName(d)} as ${wrongRole.map(r => roleMap[r]?.name || r).join(', ')}, a role they are not set up for`);
+            // Shift blocks shorter than the minimum shift length
+            const blocks = slotsToRangesByDay(hours.map(h => ({ day: d, hour: h })))[d] || [];
+            const minLen = policies.min_shift_length || 0;
+            blocks.forEach(([s, en]) => { if (en - s < minLen) pref(`${dayName(d)} ${formatHour(s)}-${formatHour(en)} is shorter than the ${minLen}h minimum shift`); });
+            if (blocks.length > 1) pref(`Split shift on ${dayName(d)} (${blocks.map(([s, en]) => `${formatHour(s)}-${formatHour(en)}`).join(' and ')})`);
+            if (emp.needs_supervision && policies.supervision_required !== false) {
+                const alone = hours.filter(h => !(slots[`${d},${h}`] || []).some(a => a.employee_id !== emp.id && employeeMap[a.employee_id]?.can_supervise));
+                if (alone.length) rule(`Working ${dayName(d)} ${rangesText(d, alone)} with no supervisor on shift`);
+            }
+            // Rest before the next day's shift
+            if (e.days[d + 1]) {
+                const end = Math.max(...hours) + 1;
+                const start = Math.min(...e.days[d + 1]);
+                const rest = (24 - end) + start;
+                if (rest < minRest) rule(`Only ${rest}h rest between ${dayName(d)} (ends ${formatHour(end)}) and ${dayName(d + 1)} (starts ${formatHour(start)})`);
+            }
+        });
+
+        // Preferred hours they did not get any of
+        const prefs = slotsToRangesByDay(emp.preferences || []);
+        const prefDays = Object.keys(prefs).map(Number);
+        if (prefDays.length && total > 0) {
+            const hit = prefDays.some(d => e.days[d] && [...e.days[d]].some(h => (prefs[d] || []).some(([s, en]) => h >= s && h < en)));
+            if (!hit) pref('None of their preferred hours this week');
+        }
+
+        if (items.length) results.push({ empId: emp.id, name: emp.name, color: emp.color, items });
+    });
+
+    // People with broken rules first, then the most issues
+    results.sort((a, b) => {
+        const ar = a.items.filter(i => i.level === 'rule').length, br = b.items.filter(i => i.level === 'rule').length;
+        if (ar !== br) return br - ar;
+        return b.items.length - a.items.length || a.name.localeCompare(b.name);
+    });
+    return results;
+}
+
+/**
+ * Scheduler notes: which rules and preferences the schedule on screen breaks,
+ * grouped by person, plus the solver's suggestions.
  */
 function renderScheduleInsights(schedule) {
     const container = document.getElementById('scheduleInsights');
     if (!container) return;
     const metrics = schedule?.metrics || {};
     const suggestions = metrics.suggestions || [];
-    const underMin = metrics.employees_under_min || [];
-    const clopenings = metrics.clopenings || [];
-    const unfilled = metrics.unfilled_slots || [];
-
-    if (!suggestions.length && !underMin.length && !clopenings.length && !unfilled.length) {
-        container.innerHTML = '';
-        container.style.display = 'none';
-        return;
-    }
-
-    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-    const fmtHour = (h) => { h = ((h % 24) + 24) % 24; return h === 0 ? '12am' : h < 12 ? `${h}am` : h === 12 ? '12pm' : `${h - 12}pm`; };
-    const dayName = (d) => (state.days[d] || '').substring(0, 3);
+    const people = evaluateScheduleRules();
+    const ruleCount = people.reduce((s, p) => s + p.items.filter(i => i.level === 'rule').length, 0);
+    const prefCount = people.reduce((s, p) => s + p.items.filter(i => i.level === 'pref').length, 0);
+    const esc = escHtml;
 
     let html = '<div class="insights-title">Scheduler notes</div>';
-
-    if (unfilled.length) {
-        // One line per open shift ("Tue 10am-2pm, Manager"), grouped by reason
-        const ranges = metrics.unfilled_ranges?.length ? metrics.unfilled_ranges : groupUnfilledRanges(unfilled);
-        const byReason = {};
-        ranges.forEach(r => {
-            const key = r.reason || 'Could not be filled.';
-            if (!byReason[key]) byReason[key] = [];
-            const who = r.needed > 1 ? `${r.needed} ${r.role_name || r.role_id}s` : (r.role_name || r.role_id);
-            byReason[key].push(`${dayName(r.day)} ${fmtHour(r.start_hour)}-${fmtHour(r.end_hour)} · ${who}`);
+    if (!people.length) {
+        html += '<div class="insights-allgood"><span class="insights-check">✓</span> Every rule and preference is met for everyone this week.</div>';
+    } else {
+        html += `<div class="insights-summary">
+            <span class="insights-pill rule">${ruleCount} rule${ruleCount === 1 ? '' : 's'} broken</span>
+            <span class="insights-pill pref">${prefCount} preference${prefCount === 1 ? '' : 's'} missed</span>
+        </div>`;
+        html += '<div class="insights-people">';
+        people.forEach(p => {
+            html += `<div class="insight-person">
+                <div class="insight-person-head"><span class="emp-color-dot" style="background:${esc(p.color)}"></span><span class="insight-person-name">${esc(p.name)}</span></div>
+                <ul class="insight-items">${p.items.map(i => `<li class="insight-item ${i.level}"><span class="insight-tag">${i.level === 'rule' ? 'Rule' : 'Preference'}</span><span>${esc(i.text)}</span></li>`).join('')}</ul>
+            </div>`;
         });
-        html += '<div class="insight-group"><div class="insight-heading">Open shifts</div><ul>';
-        Object.entries(byReason).slice(0, 5).forEach(([reason, shifts]) => {
-            const shown = shifts.slice(0, 3).map(s => `<span class="insight-shift">${esc(s)}</span>`).join('')
-                + (shifts.length > 3 ? `<span class="insight-more">+${shifts.length - 3} more</span>` : '');
-            html += `<li><strong>${esc(reason)}</strong><span class="insight-slots">${shown}</span></li>`;
-        });
-        html += '</ul></div>';
+        html += '</div>';
     }
     if (suggestions.length) {
-        html += '<div class="insight-group"><div class="insight-heading">Suggestions</div><ul>';
+        html += '<div class="insight-group"><div class="insight-heading">Suggestions</div><ul class="insight-suggestions">';
         suggestions.forEach(s => { html += `<li>${esc(s)}</li>`; });
-        html += '</ul></div>';
-    }
-    if (underMin.length) {
-        html += '<div class="insight-group"><div class="insight-heading">Under minimum hours</div><ul>';
-        underMin.forEach(e => { html += `<li>${esc(e.employee_name)}: ${e.hours}h of ${e.min_hours}h minimum</li>`; });
-        html += '</ul></div>';
-    }
-    if (clopenings.length) {
-        html += '<div class="insight-group"><div class="insight-heading">Short rest between shifts</div><ul>';
-        clopenings.forEach(c => {
-            html += `<li>${esc(c.employee_name)} closes ${dayName(c.close_day)} ${fmtHour(c.close_hour)} and opens ${dayName(c.open_day)} ${fmtHour(c.open_hour)} (${c.rest_hours}h rest)</li>`;
-        });
         html += '</ul></div>';
     }
     container.innerHTML = html;
@@ -5650,6 +5827,7 @@ function findAvailableEmployeesForGap(gap) {
 
 /** Give someone a shift (hour by hour) in the current schedule, then refresh everything. */
 function addShiftToSchedule(empId, dayIdx, startHour, endHour, roleId) {
+    pushScheduleSnapshot(); // so this change can be undone
     if (!state.currentSchedule) return false;
     const slots = state.currentSchedule.slot_assignments = state.currentSchedule.slot_assignments || {};
     for (let h = startHour; h < endHour; h++) {
@@ -6023,6 +6201,7 @@ function updateTimelineAddShiftEmpPreview() {
 
 // Save the new shift
 function saveTimelineAddShift(e) {
+    pushScheduleSnapshot(); // so this change can be undone
     e.preventDefault();
     
     const dayIdx = parseInt(document.getElementById('timelineAddShiftDay').value);
@@ -6391,6 +6570,7 @@ function openShiftEditor(shift) {
 }
 
 function saveShiftEdit() {
+    pushScheduleSnapshot(); // so this change can be undone
     const modal = dom.shiftEditModal;
     const shiftData = JSON.parse(modal.dataset.shiftData);
     const newEmpId = document.getElementById('shiftEditEmployee').value;
@@ -6425,6 +6605,7 @@ function saveShiftEdit() {
 }
 
 function deleteScheduleShift() {
+    pushScheduleSnapshot(); // so this change can be undone
     const modal = dom.shiftEditModal;
     const shiftData = JSON.parse(modal.dataset.shiftData);
     

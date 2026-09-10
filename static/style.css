@@ -11759,3 +11759,299 @@ body[data-theme="light"] .timeline-row.day-odd .timeline-day-header {
         gap: 0.35rem 0.75rem;
     }
 }
+
+/* =============================================================================
+   Toolbar sub-row: undo/redo + grid width toggle
+   ============================================================================= */
+.toolbar-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.45rem;
+}
+
+.toolbar-subrow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.history-controls {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.history-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-fast);
+}
+
+.history-btn svg {
+    width: 15px;
+    height: 15px;
+}
+
+.history-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+}
+
+.history-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.subtoggle {
+    display: inline-flex;
+    background: rgba(30, 30, 50, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 2px;
+}
+
+.subtoggle-btn {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.subtoggle-btn.active {
+    background: var(--accent-primary);
+    color: #fff;
+}
+
+body[data-theme="light"] .subtoggle {
+    background: rgba(15, 23, 42, 0.05);
+    border-color: rgba(15, 23, 42, 0.1);
+}
+
+/* Grid view: expanded width, scroll sideways */
+.schedule-grid-wrapper.grid-expanded {
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+
+.schedule-grid-wrapper.grid-expanded .schedule-grid {
+    width: max-content;
+    min-width: 100%;
+}
+
+.schedule-grid-wrapper.grid-expanded .schedule-grid th.day-col,
+.schedule-grid-wrapper.grid-expanded .schedule-grid td.slot {
+    min-width: 230px;
+}
+
+/* =============================================================================
+   Coverage gaps: two side-by-side tables
+   ============================================================================= */
+.gaps-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+}
+
+.gaps-table {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.gaps-table .gaps-label {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0.85rem;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--border-color);
+    margin: 0;
+}
+
+.gaps-table .gap-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0.85rem;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    margin: 0;
+    background: transparent;
+}
+
+.gaps-table .gap-item:last-child {
+    border-bottom: none;
+}
+
+.gaps-table .gap-item:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+body[data-theme="light"] .gaps-table {
+    background: rgba(15, 23, 42, 0.02);
+}
+
+body[data-theme="light"] .gaps-table .gaps-label {
+    background: rgba(15, 23, 42, 0.04);
+}
+
+@media (max-width: 720px) {
+    .gaps-columns {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =============================================================================
+   Scheduler notes: broken rules and missed preferences by person
+   ============================================================================= */
+.insights-allgood {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--success);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.insights-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.15);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+}
+
+.insights-summary {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.25rem 0 0.85rem;
+}
+
+.insights-pill {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 999px;
+}
+
+.insights-pill.rule {
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.14);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.insights-pill.pref {
+    color: #93c5fd;
+    background: rgba(99, 102, 241, 0.14);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+body[data-theme="light"] .insights-pill.pref {
+    color: #3730a3;
+}
+
+.insights-people {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0.6rem;
+}
+
+.insight-person {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 0.65rem 0.8rem;
+}
+
+body[data-theme="light"] .insight-person {
+    background: rgba(15, 23, 42, 0.02);
+}
+
+.insight-person-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+}
+
+.insight-person-name {
+    font-weight: 700;
+    font-size: 0.88rem;
+}
+
+.insight-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.insight-item {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    font-size: 0.8rem;
+    line-height: 1.35;
+    color: var(--text-primary);
+}
+
+.insight-tag {
+    flex-shrink: 0;
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 1px;
+}
+
+.insight-item.rule .insight-tag {
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.14);
+}
+
+.insight-item.pref .insight-tag {
+    color: #93c5fd;
+    background: rgba(99, 102, 241, 0.14);
+}
+
+body[data-theme="light"] .insight-item.pref .insight-tag {
+    color: #3730a3;
+}
+
+.insight-suggestions {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+}
+
+/* The hidden attribute always wins, even over display rules on the class */
+[hidden] {
+    display: none !important;
+}

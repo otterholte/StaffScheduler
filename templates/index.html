@@ -333,6 +333,20 @@
                                             Table
                                         </button>
                                     </div>
+                                    <div class="toolbar-subrow">
+                                        <div class="history-controls">
+                                            <button type="button" class="history-btn" id="undoBtn" title="Undo last schedule change (Ctrl+Z)" disabled aria-label="Undo">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
+                                            </button>
+                                            <button type="button" class="history-btn" id="redoBtn" title="Redo (Ctrl+Y)" disabled aria-label="Redo">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>
+                                            </button>
+                                        </div>
+                                        <div class="subtoggle" id="gridWidthToggle" hidden>
+                                            <button type="button" class="subtoggle-btn active" data-mode="fit" title="Fit the whole week on screen">Fit week</button>
+                                            <button type="button" class="subtoggle-btn" data-mode="expanded" title="Wider days you scroll sideways (Shift + scroll wheel)">Expanded</button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="toolbar-center">
                                     <!-- Week Navigation - Centered -->
@@ -532,7 +546,7 @@
                 </div>
 
                 <!-- Coverage Gaps Card (Collapsible) -->
-                <div class="panel-card gaps-card collapsible-card gaps-fullwidth" id="gapsCard" style="display: none;">
+                <div class="panel-card gaps-card collapsible-card collapsed gaps-fullwidth" id="gapsCard" style="display: none;">
                     <h3 class="card-title danger collapsible-header" data-target="gapsContent">
                         <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
@@ -545,13 +559,15 @@
                         </svg>
                     </h3>
                     <div id="gapsContent" class="collapsible-content">
-                        <div id="gapsByRole" class="gaps-section">
-                            <div class="gaps-label">By Role:</div>
-                            <div id="roleGaps"></div>
-                        </div>
-                        <div id="gapsByDay" class="gaps-section">
-                            <div class="gaps-label">By Day:</div>
-                            <div id="dayGaps"></div>
+                        <div class="gaps-columns">
+                            <div id="gapsByRole" class="gaps-section gaps-table">
+                                <div class="gaps-label"><span>By role</span><span>Open hours</span></div>
+                                <div id="roleGaps"></div>
+                            </div>
+                            <div id="gapsByDay" class="gaps-section gaps-table">
+                                <div class="gaps-label"><span>By day</span><span>Open hours</span></div>
+                                <div id="dayGaps"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
