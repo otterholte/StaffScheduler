@@ -12212,3 +12212,25 @@ body[data-theme="light"] .rule-summary.pref {
         grid-template-columns: 1fr;
     }
 }
+
+/* Rules column: centred between Roles and Hours; quiet grey when all is well */
+.emp-hours-head span:nth-child(4),
+.employee-hours-grid .emp-rules {
+    justify-content: center;
+    text-align: center;
+}
+
+.employee-hours-grid .emp-rules {
+    display: flex;
+}
+
+.rule-summary.ok {
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border-color);
+    font-weight: 600;
+}
+
+body[data-theme="light"] .rule-summary.ok {
+    background: rgba(15, 23, 42, 0.05);
+}
