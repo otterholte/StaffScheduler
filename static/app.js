@@ -5497,8 +5497,8 @@ function applyGridWidthMode(mode) {
 }
 
 function setupGridWidthToggle() {
-    let saved = 'fit';
-    try { saved = localStorage.getItem('gridWidthMode') || 'fit'; } catch (err) { /* ignore */ }
+    let saved = 'expanded';
+    try { saved = localStorage.getItem('gridWidthMode') || 'expanded'; } catch (err) { /* ignore */ }
     document.querySelectorAll('#gridWidthToggle .subtoggle-btn').forEach(b => b.addEventListener('click', () => applyGridWidthMode(b.dataset.mode)));
     applyGridWidthMode(saved);
 
