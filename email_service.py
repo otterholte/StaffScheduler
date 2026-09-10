@@ -837,6 +837,118 @@ This email was sent by Staff Scheduler.
         return self.send_email(to_email, subject, html_body, text_body)
 
 
+    def send_schedule_email(
+        self,
+        to_email: str,
+        first_name: str,
+        business_name: str,
+        week_label: str,
+        days: list,
+        shift_count: int,
+        total_hours: float,
+        portal_url: str,
+        footer_note: str = "",
+    ) -> Tuple[bool, str]:
+        """The published-schedule email: one row per day so a team member can
+        read their week at a glance on a phone.
+
+        `days`: [{label:'Mon', date:'Sep 7', closed:bool,
+                  shifts:[{time:'5pm-10pm', role:'Server', color:'#f97316', hours:5}]}]
+        """
+        def esc(v):
+            return (str(v or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'))
+
+        hours_txt = f"{total_hours:g}"
+        if shift_count == 0:
+            summary_txt = "No shifts this week"
+            summary_bg, summary_fg = "#f1f5f9", "#475569"
+        else:
+            summary_txt = f"{shift_count} shift{'s' if shift_count != 1 else ''} · {hours_txt} hours"
+            summary_bg, summary_fg = "#d1fae5", "#047857"
+
+        rows = []
+        for d in days:
+            shifts = d.get('shifts') or []
+            if d.get('closed'):
+                body = '<span style="font-size:15px;color:#b0b5c3;">Closed</span>'
+                bg = "#ffffff"
+            elif not shifts:
+                body = '<span style="font-size:15px;color:#9aa0ae;">Off</span>'
+                bg = "#ffffff"
+            else:
+                parts = []
+                for sh in shifts:
+                    color = esc(sh.get('color') or '#10b981')
+                    parts.append(
+                        f'<div style="margin:0 0 8px;padding:8px 12px;border-left:4px solid {color};'
+                        f'background:#f8fafc;border-radius:0 8px 8px 0;">'
+                        f'<div style="font-size:17px;font-weight:700;color:#0f172a;line-height:1.3;">{esc(sh.get("time"))}</div>'
+                        f'<div style="font-size:13px;color:#475569;margin-top:2px;">'
+                        f'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:{color};margin-right:6px;vertical-align:middle;"></span>'
+                        f'<span style="font-weight:600;color:#1e293b;">{esc(sh.get("role") or "Shift")}</span>'
+                        f'&nbsp;·&nbsp;{esc(sh.get("hours"))}h</div></div>'
+                    )
+                body = "".join(parts)
+                bg = "#ffffff"
+            day_color = "#0f172a" if shifts else "#9aa0ae"
+            rows.append(
+                f'<tr style="background:{bg};">'
+                f'<td style="width:58px;padding:14px 8px 14px 4px;vertical-align:top;border-bottom:1px solid #eef0f6;text-align:center;">'
+                f'<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:{"#475569" if shifts else "#b0b5c3"};">{esc(d.get("label"))}</div>'
+                f'<div style="font-size:24px;font-weight:700;color:{day_color};line-height:1.1;">{esc(d.get("day_num"))}</div>'
+                f'</td>'
+                f'<td style="padding:12px 4px 8px 10px;vertical-align:middle;border-bottom:1px solid #eef0f6;">{body}</td>'
+                f'</tr>'
+            )
+        rows_html = "".join(rows)
+
+        html_body = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Your schedule</title></head>
+<body style="margin:0;padding:0;background:#f4f5fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5fb;">
+<tr><td align="center" style="padding:20px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 2px 12px rgba(15,23,42,0.06);">
+  <tr><td style="padding:22px 22px 6px;">
+    <div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#64748b;">{esc(business_name)}</div>
+    <div style="font-size:26px;font-weight:800;color:#0f172a;margin-top:4px;line-height:1.2;">Your schedule</div>
+    <div style="font-size:15px;color:#475569;margin-top:2px;">{esc(week_label)}</div>
+    <div style="display:inline-block;margin-top:12px;padding:6px 12px;border-radius:999px;background:{summary_bg};color:{summary_fg};font-size:14px;font-weight:700;">{esc(summary_txt)}</div>
+  </td></tr>
+  <tr><td style="padding:6px 12px 0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">{rows_html}</table>
+  </td></tr>
+  <tr><td style="padding:18px 22px 6px;">
+    <a href="{esc(portal_url)}" style="display:block;text-align:center;padding:15px 20px;background:#10b981;color:#ffffff;text-decoration:none;border-radius:12px;font-weight:700;font-size:16px;">Open my schedule</a>
+    <p style="margin:12px 0 0;font-size:13px;color:#64748b;line-height:1.5;text-align:center;">Need a day covered? Open your schedule and tap <strong>Swap</strong> on the shift.</p>
+  </td></tr>
+  <tr><td style="padding:10px 22px 22px;">
+    <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.5;text-align:center;">{esc(footer_note)}</p>
+  </td></tr>
+</table>
+<p style="margin:16px 0 0;font-size:11px;color:#a3a8b8;">Sent by Staff Scheduler for {esc(business_name)}. If the button doesn't work, open: {esc(portal_url)}</p>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+        text_lines = [f"Hi {first_name}, here's your schedule for {week_label} at {business_name}.", ""]
+        for d in days:
+            shifts = d.get('shifts') or []
+            if d.get('closed'):
+                desc = "Closed"
+            elif not shifts:
+                desc = "Off"
+            else:
+                desc = "; ".join(f"{sh.get('time')} {sh.get('role') or ''} ({sh.get('hours')}h)".strip() for sh in shifts)
+            text_lines.append(f"{d.get('label')} {d.get('date')}: {desc}")
+        text_lines += ["", summary_txt, "", f"Open my schedule: {portal_url}"]
+        if footer_note:
+            text_lines += ["", footer_note]
+        subject = f"Your schedule for {week_label}: {summary_txt.replace(' · ', ', ').lower() if shift_count else 'no shifts'}"
+        return self.send_email(to_email, subject, html_body, "\n".join(text_lines))
+
+
 # Singleton instance
 _email_service = None
 

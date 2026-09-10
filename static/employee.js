@@ -20,10 +20,10 @@ function escapeHtml(value) {
 function getInitialViewMode() {
     const params = new URLSearchParams(window.location.search);
     const view = params.get('view');
-    if (view && ['timeline', 'grid', 'table'].includes(view)) {
+    if (view && ['agenda', 'timeline', 'grid', 'table'].includes(view)) {
         return view;
     }
-    return 'table'; // Default to table view for employees
+    return 'agenda'; // "My Week" list is the default: it reads at a glance on a phone
 }
 
 function getInitialWeekOffset() {
@@ -384,14 +384,17 @@ function renderScheduleView() {
     const timelineView = document.getElementById('scheduleViewTimeline');
     const gridView = document.getElementById('scheduleViewGrid');
     const tableView = document.getElementById('scheduleViewTable');
-    
+    const agendaView = document.getElementById('scheduleViewAgenda');
+
     // Hide all views
-    if (timelineView) timelineView.classList.remove('active');
-    if (gridView) gridView.classList.remove('active');
-    if (tableView) tableView.classList.remove('active');
-    
+    [timelineView, gridView, tableView, agendaView].forEach(v => v && v.classList.remove('active'));
+    document.body.classList.toggle('agenda-active', employeeState.viewMode === 'agenda');
+
     // Show selected view
-    if (employeeState.viewMode === 'timeline') {
+    if (employeeState.viewMode === 'agenda' && agendaView) {
+        renderAgendaView();
+        agendaView.classList.add('active');
+    } else if (employeeState.viewMode === 'timeline') {
         renderTimelineView();
         if (timelineView) timelineView.classList.add('active');
     } else if (employeeState.viewMode === 'grid') {
@@ -1619,6 +1622,219 @@ function renderUpcomingShifts() {
         listContainer.innerHTML = html;
     }
 }
+
+
+// ==================== AGENDA ("MY WEEK") VIEW ====================
+// A day-by-day list. This is what a team member needs at a glance on a phone:
+// which days they work, what time, and as what. "Team" mode lists everyone.
+
+function ptoCoversDate(pto, date) {
+    const start = new Date(pto.start_date + 'T00:00:00');
+    const end = new Date((pto.end_date || pto.start_date) + 'T00:00:00');
+    return date >= start && date <= end;
+}
+
+/** Continuous shifts for EVERY employee on a day: [{employeeId, start, end, role, viaSwap}] */
+function getAllContinuousShiftsForDay(schedule, dayIdx) {
+    const slotAssignments = schedule?.slot_assignments || {};
+    const byEmp = {};
+    employeeState.hours.forEach(hour => {
+        (slotAssignments[`${dayIdx},${hour}`] || []).forEach(a => {
+            const id = a.employee_id;
+            if (!byEmp[id]) byEmp[id] = {};
+            if (!byEmp[id][hour]) byEmp[id][hour] = a;
+        });
+    });
+    const out = [];
+    Object.entries(byEmp).forEach(([empId, hoursMap]) => {
+        const hrs = Object.keys(hoursMap).map(Number).sort((a, b) => a - b);
+        let segStart = hrs[0], prev = hrs[0];
+        let role = hoursMap[hrs[0]].role_id, via = !!hoursMap[hrs[0]].via_swap;
+        for (let i = 1; i <= hrs.length; i++) {
+            const h = hrs[i];
+            if (h !== prev + 1 || i === hrs.length) {
+                out.push({ employeeId: empId, start: segStart, end: prev + 1, role, viaSwap: via });
+                if (i < hrs.length) { segStart = h; role = hoursMap[h].role_id; via = !!hoursMap[h].via_swap; }
+            }
+            if (h !== undefined && hoursMap[h]?.via_swap) via = true;
+            prev = h;
+        }
+    });
+    return out;
+}
+
+function agendaSwapButton(shift, dayIdx) {
+    const payload = JSON.stringify({ dayIdx, start: shift.start, end: shift.end, role: shift.role }).replace(/"/g, '&quot;');
+    return `<button class="agenda-swap-btn shift-swap-btn" type="button" title="Ask a coworker to take this shift" aria-label="Request a swap for this shift" onclick='showSwapModal(${payload})'>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"></path>
+        </svg>
+        <span>Swap</span>
+    </button>`;
+}
+
+function renderAgendaView() {
+    const list = document.getElementById('agendaList');
+    const summary = document.getElementById('agendaSummary');
+    if (!list) return;
+
+    const schedule = employeeState.schedule;
+    const dates = getWeekDates(employeeState.weekOffset);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const myId = employeeState.employee.id;
+    const showEveryone = employeeState.filterMode === 'everyone';
+    const daysOpen = employeeState.daysOpen || [];
+    const pto = employeeState.approvedPTO || [];
+
+    if (!schedule) {
+        if (summary) summary.innerHTML = '';
+        list.innerHTML = `<div class="agenda-none">
+            <strong>No schedule yet for this week.</strong>
+            <span>Your manager hasn't published it. You'll get an email or text as soon as it's out.</span>
+        </div>`;
+        return;
+    }
+
+    let totalHours = 0, shiftCount = 0, nextShift = null;
+    const peopleThisWeek = new Set();
+    const rows = [];
+
+    for (let dayIdx = 0; dayIdx < 7; dayIdx++) {
+        const date = dates[dayIdx];
+        if (!date) continue;
+        const isToday = date.getTime() === today.getTime();
+        const isPast = date < today;
+        const isOpen = daysOpen.includes(dayIdx);
+        const myShifts = (isOpen ? getMyContinuousShiftsForDay(schedule, dayIdx) : []).sort((a, b) => a.start - b.start);
+        myShifts.forEach(s => {
+            totalHours += s.end - s.start;
+            shiftCount++;
+            if (!nextShift && !isPast) nextShift = { ...s, date, dayIdx };
+        });
+        const myPto = pto.filter(p => p.employee_id === myId && ptoCoversDate(p, date));
+
+        let body = '';
+        let dayClass = 'agenda-day';
+        if (isToday) dayClass += ' is-today';
+        if (isPast) dayClass += ' is-past';
+
+        if (!isOpen) {
+            dayClass += ' is-off';
+            body = `<div class="agenda-empty">Closed</div>`;
+        } else if (showEveryone) {
+            const all = getAllContinuousShiftsForDay(schedule, dayIdx);
+            all.forEach(s => peopleThisWeek.add(String(s.employeeId)));
+            const byRole = {};
+            all.forEach(s => { (byRole[s.role] = byRole[s.role] || []).push(s); });
+            const roleOrder = employeeState.roles.map(r => r.id).filter(id => byRole[id]);
+            Object.keys(byRole).forEach(id => { if (!roleOrder.includes(id)) roleOrder.push(id); });
+            if (roleOrder.length === 0 && myPto.length === 0) {
+                dayClass += ' is-off';
+                body = `<div class="agenda-empty">Nobody scheduled</div>`;
+            }
+            roleOrder.forEach(roleId => {
+                const role = roleMap[roleId] || { name: 'Shift', color: '#64748b' };
+                const people = byRole[roleId].sort((a, b) => a.start - b.start || String(employeeMap[a.employeeId]?.name || '').localeCompare(String(employeeMap[b.employeeId]?.name || '')));
+                body += `<div class="agenda-role-group">
+                    <div class="agenda-role-head"><i style="background:${role.color || '#64748b'}"></i>${escapeHtml(role.name)}</div>
+                    ${people.map(s => {
+                        const emp = employeeMap[s.employeeId] || {};
+                        const mine = s.employeeId == myId;
+                        return `<div class="agenda-person${mine ? ' is-me' : ''}">
+                            <span class="agenda-person-name">${escapeHtml(mine ? 'You' : (emp.name || 'Staff'))}</span>
+                            <span class="agenda-person-time">${formatTimeRange(s.start, s.end)}</span>
+                        </div>`;
+                    }).join('')}
+                </div>`;
+            });
+            const offToday = pto.filter(p => ptoCoversDate(p, date));
+            if (offToday.length) {
+                body += `<div class="agenda-role-group agenda-pto-group">
+                    <div class="agenda-role-head"><i style="background:#8b5cf6"></i>Time off</div>
+                    ${offToday.map(p => `<div class="agenda-person${p.employee_id === myId ? ' is-me' : ''}">
+                        <span class="agenda-person-name">${escapeHtml(p.employee_id === myId ? 'You' : (p.employee_name || 'Staff'))}</span>
+                        <span class="agenda-person-time">${escapeHtml(capitalizeFirst(p.pto_type || 'off'))}</span>
+                    </div>`).join('')}
+                </div>`;
+            }
+        } else {
+            if (myShifts.length === 0 && myPto.length === 0) {
+                dayClass += ' is-off';
+                body = `<div class="agenda-empty">Off</div>`;
+            }
+            myShifts.forEach(s => {
+                const role = roleMap[s.role] || {};
+                const swapBadge = s.viaSwap ? `<span class="agenda-tag">Picked up</span>` : '';
+                const dataAttrs = `data-day="${dayIdx}" data-start="${s.start}" data-end="${s.end}" data-role="${s.role}" data-via-swap="${s.viaSwap || ''}" data-swapped-from="${s.swappedFrom || ''}"`;
+                body += `<div class="agenda-shift" ${dataAttrs} style="--role-color:${role.color || '#3b82f6'}">
+                    <div class="agenda-shift-main shift-clickable">
+                        <div class="agenda-shift-time">${formatTimeRange(s.start, s.end)}</div>
+                        <div class="agenda-shift-meta">
+                            <span class="agenda-role"><i></i>${escapeHtml(role.name || 'Shift')}</span>
+                            <span class="agenda-dur">${s.end - s.start}h</span>
+                            ${swapBadge}
+                        </div>
+                    </div>
+                    ${isPast ? '' : agendaSwapButton(s, dayIdx)}
+                </div>`;
+            });
+            myPto.forEach(p => {
+                body += `<div class="agenda-shift agenda-pto">
+                    <div class="agenda-shift-main">
+                        <div class="agenda-shift-time">Time off</div>
+                        <div class="agenda-shift-meta"><span class="agenda-role"><i style="background:#8b5cf6"></i>${escapeHtml(capitalizeFirst(p.pto_type || 'Approved'))}</span></div>
+                    </div>
+                </div>`;
+            });
+        }
+
+        rows.push(`<div class="${dayClass}" data-day="${dayIdx}">
+            <div class="agenda-date">
+                <span class="agenda-dow">${SCHED_DAYS_SHORT[dayIdx]}</span>
+                <span class="agenda-num">${date.getDate()}</span>
+                ${isToday ? '<span class="agenda-today-pill">Today</span>' : ''}
+            </div>
+            <div class="agenda-body">${body}</div>
+        </div>`);
+    }
+
+    list.innerHTML = rows.join('');
+
+    if (summary) {
+        if (showEveryone) {
+            summary.innerHTML = `<div class="agenda-summary-main"><strong>${peopleThisWeek.size}</strong> ${peopleThisWeek.size === 1 ? 'person' : 'people'} on the schedule this week</div>
+                <div class="agenda-summary-sub">You're highlighted in each day.</div>`;
+        } else if (shiftCount === 0) {
+            summary.innerHTML = `<div class="agenda-summary-main">You're <strong>off all week</strong>.</div>`;
+        } else {
+            const next = nextShift
+                ? `Next up: <strong>${SCHED_DAYS_FULL[nextShift.dayIdx]} ${formatShortDate(nextShift.date)}</strong>, ${formatTimeRange(nextShift.start, nextShift.end)}`
+                : 'All of this week\'s shifts are behind you.';
+            summary.innerHTML = `<div class="agenda-summary-main"><strong>${shiftCount}</strong> ${shiftCount === 1 ? 'shift' : 'shifts'} · <strong>${totalHours}</strong> hours this week</div>
+                <div class="agenda-summary-sub">${next}</div>`;
+        }
+    }
+}
+
+// Tapping a shift in the agenda opens the same details popover as everywhere else
+document.addEventListener('DOMContentLoaded', () => {
+    const list = document.getElementById('agendaList');
+    if (!list) return;
+    list.addEventListener('click', (e) => {
+        if (e.target.closest('.shift-swap-btn')) return;
+        const item = e.target.closest('.agenda-shift[data-day]');
+        if (!item || typeof showShiftPopover !== 'function') return;
+        showShiftPopover(e, {
+            dayIdx: parseInt(item.dataset.day), empId: employeeState.employee.id, roleId: item.dataset.role,
+            startHour: parseInt(item.dataset.start), endHour: parseInt(item.dataset.end),
+            viaSwap: item.dataset.viaSwap === 'true', swappedFrom: item.dataset.swappedFrom || null
+        });
+    });
+});
 
 // ==================== AVAILABILITY EDITOR ====================
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -3667,7 +3883,7 @@ function initShiftPopover() {
         
         const popover = document.getElementById('shiftPopover');
         if (!popover.contains(e.target) && !e.target.closest('.timeline-shift-block') && 
-            !e.target.closest('.schedule-shift-block') && !e.target.closest('.shift-block')) {
+            !e.target.closest('.schedule-shift-block') && !e.target.closest('.shift-block') && !e.target.closest('.agenda-shift')) {
             hideShiftPopover();
         }
     });

@@ -149,11 +149,15 @@ def _notify_employees_of_publish(scenario, rec, week_start) -> int:
         return 0
     db_emps = {e.employee_id: e for e in DBEmployee.query.filter_by(business_db_id=row.id).all()}
     data = rec.get_schedule_data()
+    roles = {r.id: r for r in (scenario.roles or [])}
     shifts_by_emp = {}
     for a in data.get('assignments', []):
-        d = week_start + timedelta(days=int(a['day']))
-        line = f"{DAY_NAMES[int(a['day'])]} {d.strftime('%b')} {d.day}: {format_shift_time(a['start_hour'], a['end_hour'])}"
-        shifts_by_emp.setdefault(a['employee_id'], []).append(line)
+        role = roles.get(a.get('role_id'))
+        shifts_by_emp.setdefault(a['employee_id'], []).append({
+            'day': int(a['day']), 'start_hour': int(a['start_hour']), 'end_hour': int(a['end_hour']),
+            'role_name': getattr(role, 'name', '') if role else '',
+            'role_color': getattr(role, 'color', '') if role else '',
+        })
 
     recipients = []
     for emp in scenario.employees:
@@ -166,5 +170,6 @@ def _notify_employees_of_publish(scenario, rec, week_start) -> int:
             'shifts': shifts_by_emp.get(emp.id, []),
         })
     if recipients:
-        notify_schedule_published(scenario.name, business_slug(scenario.name), week_start, recipients)
+        notify_schedule_published(scenario.name, business_slug(scenario.name), week_start, recipients,
+                                  days_open=list(scenario.days_open or []))
     return len(recipients)

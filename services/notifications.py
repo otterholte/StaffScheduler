@@ -21,7 +21,7 @@ from flask import current_app
 
 from email_service import get_email_service
 from sms_service import get_sms_service
-from services.common import DAY_NAMES, format_shift_time, site_url
+from services.common import DAY_NAMES, format_hour, format_shift_time, site_url
 
 
 # ---------------------------------------------------------------- plumbing
@@ -253,30 +253,85 @@ def notify_pto_decision(employee_contact: dict, employee_db_id: int, business_na
 # ---------------------------------------------------------------- schedule
 
 def notify_schedule_published(business_name: str, business_slug: str, week_start: date,
-                              employees: Iterable[dict]):
-    """Let everyone know a new week is live. `employees`: {contact, employee_db_id, shifts:[str]}"""
+                              employees: Iterable[dict], days_open: Optional[List[int]] = None):
+    """Let everyone know a new week is live.
+
+    `employees`: {contact, employee_db_id, shifts:[{day, start_hour, end_hour, role_name, role_color}]}
+    (plain strings in `shifts` still work as a fallback).
+    """
     base = site_url()
     from datetime import timedelta
-    week_txt = f"{week_start.strftime('%b %d')} - {(week_start + timedelta(days=6)).strftime('%b %d')}"
+    week_end = week_start + timedelta(days=6)
+    if week_start.month == week_end.month:
+        week_txt = f"{week_start.strftime('%b')} {week_start.day} - {week_end.day}"
+    else:
+        week_txt = f"{week_start.strftime('%b')} {week_start.day} - {week_end.strftime('%b')} {week_end.day}"
+    open_days = set(days_open) if days_open is not None else set(range(7))
     tasks = [dict(e) for e in employees]
+
+    def build_days(shifts):
+        days = []
+        for i in range(7):
+            d = week_start + timedelta(days=i)
+            mine = sorted((sh for sh in shifts if isinstance(sh, dict) and int(sh.get('day', -1)) == i),
+                          key=lambda sh: sh.get('start_hour', 0))
+            days.append({
+                'label': DAY_NAMES[i][:3], 'date': f"{d.strftime('%b')} {d.day}", 'day_num': d.day,
+                'closed': i not in open_days,
+                'shifts': [{
+                    'time': f"{format_hour(sh['start_hour'])} – {format_hour(sh['end_hour'])}",
+                    'role': sh.get('role_name') or '', 'color': sh.get('role_color') or '#10b981',
+                    'hours': int(sh['end_hour']) - int(sh['start_hour']),
+                } for sh in mine],
+            })
+        return days
 
     def send():
         for e in tasks:
             portal = f"{base}/employee/{business_slug}/{e['employee_db_id']}/schedule"
             shifts = e.get('shifts') or []
-            first = (e['contact'].get('name') or 'there').split()[0]
-            lines = shifts if shifts else ["You have no shifts this week."]
-            summary = f"{len(shifts)} shift(s)" if shifts else "no shifts"
-            _deliver(
-                e['contact'],
-                subject=f"Your schedule for {week_txt} at {business_name}",
-                title="📅 New Schedule Published", greeting=f"Hi {first}!",
-                intro=f"The schedule for <strong>{week_txt}</strong> at <strong>{business_name}</strong> is now published. You have {summary}.",
-                detail_lines=lines, cta_text="View my schedule", cta_url=portal,
-                sms_text=f"{business_name}: schedule for {week_txt} is published. You have {summary}. {portal}",
-                accent=("#467df6", "#a855f7"),
-                footer_note="You can turn these notifications off in your portal settings.",
-            )
+            contact = e['contact']
+            first = (contact.get('name') or 'there').split()[0]
+            structured = [sh for sh in shifts if isinstance(sh, dict)]
+            days = build_days(structured)
+            shift_count = sum(len(d['shifts']) for d in days)
+            total_hours = sum(sh['hours'] for d in days for sh in d['shifts'])
+            summary = f"{shift_count} shift{'s' if shift_count != 1 else ''}, {total_hours:g}h" if shift_count else "no shifts"
+            footer = "You can turn these notifications off in your portal menu."
+            sent = []
+            email = contact.get('email')
+            if email and contact.get('notify_email', True):
+                svc = get_email_service()
+                if svc.is_configured():
+                    if structured or not shifts:
+                        ok, msg = svc.send_schedule_email(
+                            to_email=email, first_name=first, business_name=business_name,
+                            week_label=week_txt, days=days, shift_count=shift_count,
+                            total_hours=total_hours, portal_url=portal, footer_note=footer)
+                    else:  # legacy plain strings
+                        ok, msg = svc.send_notification(
+                            to_email=email, subject=f"Your schedule for {week_txt} at {business_name}",
+                            title="New Schedule Published", greeting=f"Hi {first}!",
+                            intro=f"The schedule for <strong>{week_txt}</strong> at <strong>{business_name}</strong> is out.",
+                            detail_lines=shifts, cta_text="View my schedule", cta_url=portal, footer_note=footer)
+                    sent.append(('email', ok, msg))
+            phone = contact.get('phone')
+            if phone and contact.get('notify_sms', True):
+                sms = get_sms_service()
+                if sms.is_configured():
+                    if structured:
+                        by_day = []
+                        for d in days:
+                            if d['shifts']:
+                                by_day.append(f"{d['label']} " + " & ".join(sh['time'] for sh in d['shifts']))
+                        body = "; ".join(by_day)
+                        text = f"{business_name} schedule {week_txt}: {body} ({total_hours:g}h). {portal}"
+                    else:
+                        text = f"{business_name}: schedule for {week_txt} is published. You have {summary}. {portal}"
+                    ok, msg = sms.send_sms(phone, text)
+                    sent.append(('sms', ok, msg))
+            for channel, ok, msg in sent:
+                print(f"[NOTIFY] {channel} to {email if channel == 'email' else phone}: {'ok' if ok else 'FAILED'} - {msg}", flush=True)
 
     _run_in_background(_app(), send)
 
