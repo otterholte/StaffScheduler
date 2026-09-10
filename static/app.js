@@ -2656,6 +2656,7 @@ function renderEmployeeHoursList() {
 
     const filter = state.hoursFilter;
     const search = (filter.search || '').trim().toLowerCase();
+    const rulesCtx = buildRulesContext();
     const people = [...state.employees]
         .filter(emp => !search || (emp.name || '').toLowerCase().includes(search))
         .filter(emp => !filter.roles.size || (emp.roles || []).some(r => filter.roles.has(r)))
@@ -2675,6 +2676,7 @@ function renderEmployeeHoursList() {
             </div>
             <div class="emp-hours-col emp-badges">${getBadgesHTML(emp)}</div>
             <div class="emp-hours-col emp-roles">${roleBadgesHtml(emp) || '<span class="emp-no-roles">No roles yet</span>'}</div>
+            <div class="emp-hours-col emp-rules">${state.currentSchedule ? ruleSummaryHtml(evaluateRulesForEmployee(emp, rulesCtx)) : ''}</div>
             <div class="emp-hours-col emp-hours-stats">
                 <span class="emp-hours" data-tooltip="Hours scheduled this week">—h</span>
                 <span class="emp-range" data-tooltip="Weekly hours range (min-max)">(${emp.min_hours}-${emp.max_hours})</span>
@@ -2716,7 +2718,9 @@ function wireEmployeeHoursList() {
             dom.employeeHoursList.querySelectorAll('.emp-hours-row.expanded').forEach(r => r.classList.remove('expanded'));
             const details = document.createElement('div');
             details.className = 'emp-hours-details';
-            details.innerHTML = buildEmployeeDetailHtml(emp, { availability: true, rules: true });
+            const issues = state.currentSchedule ? evaluateRulesForEmployee(emp) : [];
+            details.innerHTML = `<div class="emp-detail-section emp-detail-rules-box"><div class="emp-detail-heading">This week's schedule vs. their rules</div>${ruleListHtml(issues)}</div>`
+                + buildEmployeeDetailHtml(emp, { availability: true, rules: true });
             row.classList.add('expanded');
             row.after(details);
         });
@@ -5516,16 +5520,11 @@ function updateMetrics(schedule) {
  * people with at least one issue. Works on the live slot assignments, so
  * manual edits are included.
  */
-function evaluateScheduleRules() {
+/** Shared lookups for rule checks: who works which hours in which role. */
+function buildRulesContext() {
     const sched = state.currentSchedule;
-    if (!sched) return [];
+    if (!sched) return null;
     const slots = sched.slot_assignments || {};
-    const policies = getAllPolicies();
-    const minRest = policies.min_rest_hours ?? 10;
-    const dayName = (d) => state.days[d] || '';
-    const rangesText = (day, hours) => formatRangeList(slotsToRangesByDay(hours.map(h => ({ day, hour: h })))[day] || []);
-
-    // Per person: hours worked per day and the role at each hour
     const per = {};
     Object.entries(slots).forEach(([key, list]) => {
         const [d, h] = key.split(',').map(Number);
@@ -5535,72 +5534,101 @@ function evaluateScheduleRules() {
             e.roles[`${d},${h}`] = a.role_id;
         });
     });
+    return { slots, per, policies: getAllPolicies() };
+}
 
-    const results = [];
-    state.employees.forEach(emp => {
-        const e = per[emp.id] || { days: {}, roles: {} };
-        const days = Object.keys(e.days).map(Number).sort((a, b) => a - b);
-        const total = days.reduce((s, d) => s + e.days[d].size, 0);
-        const items = [];
-        const rule = (text) => items.push({ level: 'rule', text });
-        const pref = (text) => items.push({ level: 'pref', text });
+/** Rules broken / preferences missed for one person: [{level: 'rule'|'pref', text}]. */
+function evaluateRulesForEmployee(emp, ctx = buildRulesContext()) {
+    if (!ctx) return [];
+    const { slots, per, policies } = ctx;
+    const minRest = policies.min_rest_hours ?? 10;
+    const dayName = (d) => state.days[d] || '';
+    const rangesText = (day, hours) => formatRangeList(slotsToRangesByDay(hours.map(h => ({ day, hour: h })))[day] || []);
+    const e = per[emp.id] || { days: {}, roles: {} };
+    const days = Object.keys(e.days).map(Number).sort((a, b) => a - b);
+    const total = days.reduce((s, d) => s + e.days[d].size, 0);
+    const items = [];
+    const rule = (text) => items.push({ level: 'rule', text });
+    const pref = (text) => items.push({ level: 'pref', text });
 
-        // Weekly hours
-        const cap = emp.overtime_allowed ? emp.max_hours : Math.min(40, emp.max_hours || 40);
-        if (total > cap) rule(`${total}h scheduled, over their ${cap}h maximum${emp.overtime_allowed ? '' : ' (no overtime)'}`);
-        else if (total > 40 && emp.overtime_allowed) pref(`${total}h scheduled, ${total - 40}h of it overtime`);
-        if (emp.min_hours > 0 && total < emp.min_hours) pref(total === 0 ? `Not scheduled; wants at least ${emp.min_hours}h` : `${total}h scheduled, under their ${emp.min_hours}h minimum`);
+    // Weekly hours
+    const cap = emp.overtime_allowed ? emp.max_hours : Math.min(40, emp.max_hours || 40);
+    if (total > cap) rule(`${total}h scheduled, over their ${cap}h maximum${emp.overtime_allowed ? '' : ' (no overtime)'}`);
+    else if (total > 40 && emp.overtime_allowed) pref(`${total}h scheduled, ${total - 40}h of it overtime`);
+    if (emp.min_hours > 0 && total < emp.min_hours) pref(total === 0 ? `Not scheduled; wants at least ${emp.min_hours}h` : `${total}h scheduled, under their ${emp.min_hours}h minimum`);
 
-        // Days per week and a day off
-        const isFT = emp.classification === 'full_time';
-        const maxDays = isFT ? policies.max_days_ft : policies.max_days_pt;
-        const mode = isFT ? policies.max_days_ft_mode : policies.max_days_pt_mode;
-        if (mode !== 'off' && days.length > maxDays) {
-            (mode === 'required' ? rule : pref)(`${days.length} days this week; the ${isFT ? 'full-time' : 'part-time'} limit is ${maxDays}`);
+    // Days per week and a day off
+    const isFT = emp.classification === 'full_time';
+    const maxDays = isFT ? policies.max_days_ft : policies.max_days_pt;
+    const mode = isFT ? policies.max_days_ft_mode : policies.max_days_pt_mode;
+    if (mode !== 'off' && days.length > maxDays) {
+        (mode === 'required' ? rule : pref)(`${days.length} days this week; the ${isFT ? 'full-time' : 'part-time'} limit is ${maxDays}`);
+    }
+    if (days.length >= 7) rule('No day off this week');
+
+    // Availability, time off, roles, shift length, supervision, rest
+    days.forEach(d => {
+        const hours = [...e.days[d]].sort((a, b) => a - b);
+        if (employeeHasTimeOff(emp.id, d)) {
+            rule(`Scheduled ${dayName(d)} during approved time off`);
+        } else {
+            const avail = employeeAvailableHours(emp, d);
+            const bad = hours.filter(h => !avail.has(h));
+            if (bad.length) rule(`Scheduled ${dayName(d)} ${rangesText(d, bad)} outside their availability`);
         }
-        if (days.length >= 7) rule('No day off this week');
-
-        // Availability, time off, roles, shift length, supervision
-        days.forEach(d => {
-            const hours = [...e.days[d]].sort((a, b) => a - b);
-            if (employeeHasTimeOff(emp.id, d)) {
-                rule(`Scheduled ${dayName(d)} during approved time off`);
-            } else {
-                const avail = employeeAvailableHours(emp, d);
-                const bad = hours.filter(h => !avail.has(h));
-                if (bad.length) rule(`Scheduled ${dayName(d)} ${rangesText(d, bad)} outside their availability`);
-            }
-            const wrongRole = [...new Set(hours.map(h => e.roles[`${d},${h}`]).filter(r => r && !(emp.roles || []).includes(r)))];
-            if (wrongRole.length) rule(`Working ${dayName(d)} as ${wrongRole.map(r => roleMap[r]?.name || r).join(', ')}, a role they are not set up for`);
-            // Shift blocks shorter than the minimum shift length
-            const blocks = slotsToRangesByDay(hours.map(h => ({ day: d, hour: h })))[d] || [];
-            const minLen = policies.min_shift_length || 0;
-            blocks.forEach(([s, en]) => { if (en - s < minLen) pref(`${dayName(d)} ${formatHour(s)}-${formatHour(en)} is shorter than the ${minLen}h minimum shift`); });
-            if (blocks.length > 1) pref(`Split shift on ${dayName(d)} (${blocks.map(([s, en]) => `${formatHour(s)}-${formatHour(en)}`).join(' and ')})`);
-            if (emp.needs_supervision && policies.supervision_required !== false) {
-                const alone = hours.filter(h => !(slots[`${d},${h}`] || []).some(a => a.employee_id !== emp.id && employeeMap[a.employee_id]?.can_supervise));
-                if (alone.length) rule(`Working ${dayName(d)} ${rangesText(d, alone)} with no supervisor on shift`);
-            }
-            // Rest before the next day's shift
-            if (e.days[d + 1]) {
-                const end = Math.max(...hours) + 1;
-                const start = Math.min(...e.days[d + 1]);
-                const rest = (24 - end) + start;
-                if (rest < minRest) rule(`Only ${rest}h rest between ${dayName(d)} (ends ${formatHour(end)}) and ${dayName(d + 1)} (starts ${formatHour(start)})`);
-            }
-        });
-
-        // Preferred hours they did not get any of
-        const prefs = slotsToRangesByDay(emp.preferences || []);
-        const prefDays = Object.keys(prefs).map(Number);
-        if (prefDays.length && total > 0) {
-            const hit = prefDays.some(d => e.days[d] && [...e.days[d]].some(h => (prefs[d] || []).some(([s, en]) => h >= s && h < en)));
-            if (!hit) pref('None of their preferred hours this week');
+        const wrongRole = [...new Set(hours.map(h => e.roles[`${d},${h}`]).filter(r => r && !(emp.roles || []).includes(r)))];
+        if (wrongRole.length) rule(`Working ${dayName(d)} as ${wrongRole.map(r => roleMap[r]?.name || r).join(', ')}, a role they are not set up for`);
+        const blocks = slotsToRangesByDay(hours.map(h => ({ day: d, hour: h })))[d] || [];
+        const minLen = policies.min_shift_length || 0;
+        blocks.forEach(([s, en]) => { if (en - s < minLen) pref(`${dayName(d)} ${formatHour(s)}-${formatHour(en)} is shorter than the ${minLen}h minimum shift`); });
+        if (blocks.length > 1) pref(`Split shift on ${dayName(d)} (${blocks.map(([s, en]) => `${formatHour(s)}-${formatHour(en)}`).join(' and ')})`);
+        if (emp.needs_supervision && policies.supervision_required !== false) {
+            const alone = hours.filter(h => !(slots[`${d},${h}`] || []).some(a => a.employee_id !== emp.id && employeeMap[a.employee_id]?.can_supervise));
+            if (alone.length) rule(`Working ${dayName(d)} ${rangesText(d, alone)} with no supervisor on shift`);
         }
-
-        if (items.length) results.push({ empId: emp.id, name: emp.name, color: emp.color, items });
+        if (e.days[d + 1]) {
+            const end = Math.max(...hours) + 1;
+            const start = Math.min(...e.days[d + 1]);
+            const rest = (24 - end) + start;
+            if (rest < minRest) rule(`Only ${rest}h rest between ${dayName(d)} (ends ${formatHour(end)}) and ${dayName(d + 1)} (starts ${formatHour(start)})`);
+        }
     });
 
+    // Preferred hours they did not get any of
+    const prefs = slotsToRangesByDay(emp.preferences || []);
+    const prefDays = Object.keys(prefs).map(Number);
+    if (prefDays.length && total > 0) {
+        const hit = prefDays.some(d => e.days[d] && [...e.days[d]].some(h => (prefs[d] || []).some(([s, en]) => h >= s && h < en)));
+        if (!hit) pref('None of their preferred hours this week');
+    }
+    return items;
+}
+
+/** Small "2 rules · 1 preference" summary (or "All rules met") for a person. */
+function ruleSummaryHtml(items) {
+    const rules = items.filter(i => i.level === 'rule').length;
+    const prefs = items.filter(i => i.level === 'pref').length;
+    if (!rules && !prefs) return '<span class="rule-summary ok">✓ All rules met</span>';
+    const parts = [];
+    if (rules) parts.push(`<span class="rule-summary rule">${rules} rule${rules === 1 ? '' : 's'} broken</span>`);
+    if (prefs) parts.push(`<span class="rule-summary pref">${prefs} preference${prefs === 1 ? '' : 's'} missed</span>`);
+    return parts.join('');
+}
+
+/** Boxed list of a person's broken rules / missed preferences (for expanded rows). */
+function ruleListHtml(items) {
+    if (!items.length) return '<div class="rule-box ok"><span class="insights-check">✓</span> Every rule and preference is met for this person.</div>';
+    return `<div class="rule-box"><ul class="insight-items">${items.map(i => `<li class="insight-item ${i.level}"><span class="insight-tag">${i.level === 'rule' ? 'Rule' : 'Preference'}</span><span>${escHtml(i.text)}</span></li>`).join('')}</ul></div>`;
+}
+
+function evaluateScheduleRules() {
+    const ctx = buildRulesContext();
+    if (!ctx) return [];
+    const results = [];
+    state.employees.forEach(emp => {
+        const items = evaluateRulesForEmployee(emp, ctx);
+        if (items.length) results.push({ empId: emp.id, name: emp.name, color: emp.color, items });
+    });
     // People with broken rules first, then the most issues
     results.sort((a, b) => {
         const ar = a.items.filter(i => i.level === 'rule').length, br = b.items.filter(i => i.level === 'rule').length;
@@ -5669,10 +5697,13 @@ function updateEmployeeHours(schedule) {
     const employeeHours = schedule.employee_hours;
     const consecutiveDays = schedule.consecutive_days;
     const employeeOvertime = schedule.employee_overtime || {};
-    
+    const rulesCtx = buildRulesContext();
+
     state.employees.forEach(emp => {
         const row = dom.employeeHoursList.querySelector(`[data-id="${emp.id}"]`);
         if (row) {
+            const rulesEl = row.querySelector('.emp-rules');
+            if (rulesEl && rulesCtx) rulesEl.innerHTML = ruleSummaryHtml(evaluateRulesForEmployee(emp, rulesCtx));
             const hours = employeeHours[emp.id] || 0;
             const ot = employeeOvertime[emp.id] || 0;
             
@@ -8013,7 +8044,7 @@ function renderAvailabilityPage() {
             <div class="avail-staff-avatar" style="background: ${escHtml(emp.color || '#467df6')}">${escHtml(initials)}</div>
             <div class="avail-staff-info">
                 <div class="avail-staff-name">${escHtml(emp.name)}</div>
-                <div class="avail-staff-roles">${roleBadgesHtml(emp) || '<span class="avail-staff-role">No roles yet</span>'}</div>
+                <div class="avail-staff-role">${escHtml(roleNames)}</div>
                 <div class="avail-staff-meta">
                     <span class="avail-meta-pill ${emp.classification === 'full_time' ? 'pill-ft' : 'pill-pt'}">${emp.classification === 'full_time' ? 'Full-time' : 'Part-time'}</span>
                     <span class="avail-meta-text">${emp.min_hours}–${emp.max_hours} hrs/week</span>
@@ -8085,9 +8116,12 @@ function showAvailabilityPanel(empId) {
     const deleteBtn = document.getElementById('availDeleteEmpBtn');
     if (deleteBtn) deleteBtn.onclick = () => confirmDeleteEmployee(empId);
 
-    // Rules and info card (spelled out, no abbreviations)
+    // Rules and info card (spelled out, no abbreviations) with colour role badges
     const details = document.getElementById('availPanelDetails');
-    if (details) details.innerHTML = buildEmployeeDetailHtml(emp, { availability: false, rules: true });
+    if (details) {
+        details.innerHTML = `<div class="avail-detail-badges">${roleBadgesHtml(emp) || '<span class="emp-no-roles">No roles yet</span>'}<span class="avail-detail-sep"></span>${getBadgesHTML(emp)}</div>`
+            + buildEmployeeDetailHtml(emp, { availability: false, rules: true });
+    }
 
     // Render table view
     renderManagerAvailabilityTable(emp);
