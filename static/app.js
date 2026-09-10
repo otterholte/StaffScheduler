@@ -2610,7 +2610,8 @@ function buildEmployeeDetailHtml(emp, opts = { availability: true, rules: true }
                 ...(emp.phone ? [['Phone', plain(emp.phone)]] : []),
             ] });
         }
-        html += '<div class="emp-detail-section"><div class="emp-detail-heading">Rules and info</div><div class="emp-detail-groups">';
+        const heading = opts.heading !== undefined ? opts.heading : 'Rules and info';
+        html += `<div class="emp-detail-section"><div class="emp-detail-heading">${escHtml(heading)}</div><div class="emp-detail-groups">`;
         groups.forEach(g => {
             html += `<div class="emp-detail-group"><div class="emp-detail-group-title">${escHtml(g.title)}</div><dl class="emp-detail-list">`;
             g.items.forEach(([k, v]) => { html += `<div class="emp-detail-item"><dt>${escHtml(k)}</dt><dd>${v}</dd></div>`; });
@@ -4115,7 +4116,7 @@ function renderSimpleTableView(schedule) {
                 const rulesRow = document.createElement('tr');
                 rulesRow.className = 'emp-detail-row emp-rules-row';
                 rulesRow.hidden = true;
-                rulesRow.innerHTML = `<td colspan="9">${buildEmployeeDetailHtml(fullEmp, { availability: false, rules: true })}</td>`;
+                rulesRow.innerHTML = `<td colspan="9"><div class="emp-expanded-title"><span class="emp-color-dot" style="background:${escHtml(fullEmp.color || '#666')}"></span>${escHtml(fullEmp.name)}<span class="emp-expanded-sub">Rules and info</span></div>${buildEmployeeDetailHtml(fullEmp, { availability: false, rules: true, heading: '' })}</td>`;
 
                 tbody.appendChild(availRow);
                 tbody.appendChild(rulesRow);

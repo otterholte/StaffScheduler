@@ -12561,3 +12561,56 @@ body[data-theme="light"] .emp-detail-group {
 .availability-details-card .emp-detail-groups {
     gap: 0.85rem;
 }
+
+/* Table expansion: who is expanded is obvious; slightly tighter tiles */
+.simple-schedule-table .emp-row.expanded .emp-name-text {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+body[data-theme="light"] .simple-schedule-table .emp-row.expanded .emp-name-text {
+    color: #0f172a;
+}
+
+.emp-expanded-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 1.1rem 1.5rem 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.emp-expanded-title .emp-color-dot {
+    width: 12px;
+    height: 12px;
+}
+
+.emp-expanded-sub {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-left: 0.35rem;
+    padding-left: 0.85rem;
+    border-left: 1px solid var(--border-color);
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail {
+    padding: 0.9rem 1.5rem 1.4rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-heading:empty {
+    display: none;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-group {
+    padding: 1rem 1.2rem 1.1rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-group .emp-detail-list {
+    gap: 0.85rem;
+}
