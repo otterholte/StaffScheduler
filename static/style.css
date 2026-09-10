@@ -12356,3 +12356,35 @@ body[data-theme="light"] .simple-schedule-table thead th.name-col,
 body[data-theme="light"] .simple-schedule-table thead th.hours-col {
     background: #f1f5f9;
 }
+
+/* Table view: search/filter bar sticks under the app header, the date row sticks under it */
+#scheduleViewTable #tableFilterBar {
+    position: sticky;
+    top: 64px;
+    z-index: 22;
+    background: #1b1d36;
+    margin: 0 -1.5rem;
+    padding: 0.75rem 1.5rem;
+    box-shadow: 0 1px 0 var(--border-color);
+}
+
+body[data-theme="light"] #scheduleViewTable #tableFilterBar {
+    background: #ffffff;
+}
+
+.simple-schedule-table thead th {
+    top: var(--table-sticky-top, 126px);
+}
+
+@media (max-width: 640px) {
+    #scheduleViewTable #tableFilterBar {
+        top: 56px;
+        margin: 0 -1rem;
+        padding: 0.6rem 1rem;
+    }
+}
+
+#scheduleViewTable #tableFilterBar {
+    margin: 0 -1.25rem;
+    padding: 0.75rem 1.25rem;
+}

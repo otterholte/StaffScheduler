@@ -3887,6 +3887,11 @@ function renderSimpleTableView(schedule) {
     // "Still needed" row: one badge per open shift, naming the role, wrapping onto new lines
     renderTableFilterChips();
     setScheduleLegendVisible(false);
+    // The filter bar and the date header both stick under the app header; the
+    // header's offset depends on how tall the (wrappable) filter bar is.
+    const filterBar = document.getElementById('tableFilterBar');
+    const appHeaderH = document.querySelector('.app-header')?.offsetHeight || 64;
+    if (filterBar) table.style.setProperty('--table-sticky-top', `${appHeaderH + filterBar.offsetHeight}px`);
     // Role chips filter the open shifts too, so "Server" shows only Server gaps
     const roleFilter = state.tableFilter?.roles || new Set();
     const openRanges = (schedule?.metrics?.unfilled_ranges?.length
