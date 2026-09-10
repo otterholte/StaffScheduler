@@ -2590,18 +2590,33 @@ function buildEmployeeDetailHtml(emp, opts = { availability: true, rules: true }
         const overtimeHtml = emp.overtime_allowed
             ? `${badge('badge-ot', 'Overtime')} <span class="emp-detail-note">allowed over 40 hours</span>`
             : '<span class="emp-detail-plain">Not allowed (capped at 40 hours)</span>';
-        const items = [
-            ['Status', statusHtml],
-            ['Weekly hours', `<span class="emp-detail-plain">${escHtml(`${emp.min_hours ?? 0} to ${emp.max_hours ?? 40} hours`)}</span>`],
-            ['Roles', rolesHtml],
-            ['Overtime', overtimeHtml],
-            ['Supervision', supervisionHtml],
-            ['Hourly rate', `<span class="emp-detail-plain">${escHtml(`$${Number(emp.hourly_rate || 0).toFixed(2)}`)}</span>`],
+        const plain = (text) => `<span class="emp-detail-plain">${escHtml(text)}</span>`;
+        // Grouped into small tiles so related facts sit together
+        const groups = [
+            { title: 'Employment', items: [
+                ['Status', statusHtml],
+                ['Weekly hours', plain(`${emp.min_hours ?? 0} to ${emp.max_hours ?? 40} hours`)],
+                ['Hourly rate', plain(`$${Number(emp.hourly_rate || 0).toFixed(2)}`)],
+            ] },
+            { title: 'Roles', items: [['Can work as', rolesHtml]] },
+            { title: 'Scheduling rules', items: [
+                ['Overtime', overtimeHtml],
+                ['Supervision', supervisionHtml],
+            ] },
         ];
-        if (emp.email || emp.phone) items.push(['Contact', `<span class="emp-detail-plain">${escHtml([emp.email, emp.phone].filter(Boolean).join(' · '))}</span>`]);
-        html += '<div class="emp-detail-section"><div class="emp-detail-heading">Rules and info</div><dl class="emp-detail-list">';
-        items.forEach(([k, v]) => { html += `<div class="emp-detail-item"><dt>${escHtml(k)}</dt><dd>${v}</dd></div>`; });
-        html += '</dl></div>';
+        if (emp.email || emp.phone) {
+            groups.push({ title: 'Contact', items: [
+                ...(emp.email ? [['Email', plain(emp.email)]] : []),
+                ...(emp.phone ? [['Phone', plain(emp.phone)]] : []),
+            ] });
+        }
+        html += '<div class="emp-detail-section"><div class="emp-detail-heading">Rules and info</div><div class="emp-detail-groups">';
+        groups.forEach(g => {
+            html += `<div class="emp-detail-group"><div class="emp-detail-group-title">${escHtml(g.title)}</div><dl class="emp-detail-list">`;
+            g.items.forEach(([k, v]) => { html += `<div class="emp-detail-item"><dt>${escHtml(k)}</dt><dd>${v}</dd></div>`; });
+            html += '</dl></div>';
+        });
+        html += '</div></div>';
     }
     html += '</div>';
     return html;

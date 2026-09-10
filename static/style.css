@@ -12495,3 +12495,69 @@ body[data-theme="light"] .simple-schedule-table .emp-avail-row td {
     font-size: 0.85rem;
     line-height: 1.5;
 }
+
+/* Rules and info: grouped tiles (Employment / Roles / Scheduling rules / Contact) */
+.emp-detail-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.emp-detail-group {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.1rem 1.15rem;
+}
+
+body[data-theme="light"] .emp-detail-group {
+    background: rgba(15, 23, 42, 0.03);
+}
+
+.emp-detail-group-title {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    padding-bottom: 0.6rem;
+    margin-bottom: 0.85rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.emp-detail-group .emp-detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.emp-detail-group .emp-detail-item {
+    gap: 0.35rem;
+}
+
+/* Table expansion: tall, airy rules panel */
+.simple-schedule-table .emp-rules-row .emp-detail {
+    padding: 1.75rem 1.5rem 2rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-heading {
+    margin-bottom: 1.25rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-groups {
+    gap: 1.25rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-group {
+    padding: 1.25rem 1.35rem 1.4rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-group .emp-detail-list {
+    gap: 1.1rem;
+}
+
+/* The Employee Hours expansion and Staff Availability card use the same tiles, a bit tighter */
+.emp-hours-details .emp-detail-groups,
+.availability-details-card .emp-detail-groups {
+    gap: 0.85rem;
+}
