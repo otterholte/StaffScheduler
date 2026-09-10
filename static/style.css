@@ -12468,3 +12468,30 @@ body[data-theme="light"] .simple-schedule-table .emp-avail-row td {
 .simple-schedule-table .emp-rules-row .emp-detail-list {
     gap: 0.5rem 1.5rem;
 }
+
+/* Table view: roomier Rules and info panel in the expanded person block */
+.simple-schedule-table .emp-rules-row .emp-detail {
+    padding: 1.5rem 1.5rem 1.75rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-heading {
+    margin-bottom: 1.1rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-list {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1.25rem 2.5rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-item {
+    gap: 0.4rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-item dt {
+    font-size: 0.68rem;
+}
+
+.simple-schedule-table .emp-rules-row .emp-detail-item dd {
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
