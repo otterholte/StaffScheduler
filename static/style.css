@@ -12265,3 +12265,37 @@ body[data-theme="light"] .rule-summary.ok {
 .schedule-grid-wrapper.grid-expanded .schedule-grid td.slot {
     min-width: var(--grid-day-min, 230px);
 }
+
+/* Expanded grid: role label row under each day header */
+.schedule-grid-wrapper.grid-expanded .schedule-grid th.day-col {
+    padding-bottom: 30px;
+}
+
+.grid-role-label {
+    position: absolute;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--role-color, #64748b) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--role-color, #64748b) 45%, transparent);
+    border-radius: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    z-index: 5;
+    pointer-events: none;
+}
+
+.grid-role-label .role-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--role-color, #64748b);
+    flex-shrink: 0;
+}

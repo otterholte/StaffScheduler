@@ -3241,38 +3241,49 @@ function renderSchedule(schedule) {
         blocksByDay[idx] = allBlocks.filter(s => s.dayIdx === idx);
     });
     
-    // Assign columns to all blocks using greedy algorithm
+    // Assign columns: blocks are grouped by role (alphabetical, like the
+    // timeline), and each role gets its own contiguous set of columns.
+    const roleSpansByDay = {}; // dayIdx -> [{roleId, name, color, startCol, count}]
+    const blockRole = (b) => b.isGap ? (b.roleId || '') : (Array.from(b.roles || [])[0] || '');
+    const roleOrder = (rid) => (roleMap[rid]?.name || 'zzz').toLowerCase();
     Object.entries(blocksByDay).forEach(([dayIdx, blocks]) => {
         dayIdx = parseInt(dayIdx);
-        
-        // Sort: shifts first (to give them priority), then by start time
-        blocks.sort((a, b) => {
-            if (a.isGap !== b.isGap) return a.isGap ? 1 : -1; // Shifts first
-            return a.startHour - b.startHour;
-        });
-        
-        const columns = [];
-        blocks.forEach(block => {
-            let placed = false;
-            for (let colIdx = 0; colIdx < columns.length; colIdx++) {
-                const hasOverlap = columns[colIdx].some(s => 
-                    block.startHour < s.endHour && block.endHour > s.startHour
-                );
-                if (!hasOverlap) {
-                    block.column = colIdx;
-                    columns[colIdx].push(block);
-                    placed = true;
-                    break;
+        const byRole = {};
+        blocks.forEach(b => { const r = blockRole(b); (byRole[r] = byRole[r] || []).push(b); });
+        const roleIds = Object.keys(byRole).sort((a, b) => roleOrder(a).localeCompare(roleOrder(b)));
+
+        let offset = 0;
+        const spans = [];
+        roleIds.forEach(rid => {
+            const group = byRole[rid];
+            // Shifts first, then by start time
+            group.sort((a, b) => {
+                if (a.isGap !== b.isGap) return a.isGap ? 1 : -1;
+                return a.startHour - b.startHour;
+            });
+            const columns = [];
+            group.forEach(block => {
+                let placed = false;
+                for (let colIdx = 0; colIdx < columns.length; colIdx++) {
+                    const hasOverlap = columns[colIdx].some(s => block.startHour < s.endHour && block.endHour > s.startHour);
+                    if (!hasOverlap) {
+                        block.column = offset + colIdx;
+                        columns[colIdx].push(block);
+                        placed = true;
+                        break;
+                    }
                 }
-            }
-            if (!placed) {
-                block.column = columns.length;
-                columns.push([block]);
-            }
+                if (!placed) {
+                    block.column = offset + columns.length;
+                    columns.push([block]);
+                }
+            });
+            spans.push({ roleId: rid, name: roleMap[rid]?.name || 'Other', color: roleMap[rid]?.color || '#64748b', startCol: offset, count: columns.length });
+            offset += columns.length;
         });
-        
-        const numColumns = columns.length || 1;
+        const numColumns = offset || 1;
         blocks.forEach(b => b.totalColumns = numColumns);
+        roleSpansByDay[dayIdx] = spans;
     });
 
     // Expanded mode: make every day wide enough that each side-by-side shift
@@ -3281,6 +3292,27 @@ function renderSchedule(schedule) {
     const maxColumns = Math.max(1, ...Object.values(blocksByDay).map(bs => (bs[0]?.totalColumns) || 1));
     grid.style.setProperty('--grid-day-min', expanded ? `${Math.max(230, maxColumns * 70 + 12)}px` : '0px');
     slotWidth = firstSlot.offsetWidth + hSpacing;
+
+    // Expanded mode: a role label row under each day's date, spanning that role's columns
+    if (expanded) {
+        Object.entries(roleSpansByDay).forEach(([dayIdx, spans]) => {
+            dayIdx = parseInt(dayIdx);
+            const total = Math.max(1, ...spans.map(s => s.startCol + s.count));
+            const availableWidth = slotWidth - 6;
+            const colWidth = (availableWidth / total);
+            spans.forEach(span => {
+                const label = document.createElement('div');
+                label.className = 'grid-role-label';
+                label.style.setProperty('--role-color', span.color);
+                label.style.left = `${timeCellWidth + (dayIdx * slotWidth) + 3 + span.startCol * colWidth}px`;
+                label.style.width = `${span.count * colWidth - 2}px`;
+                label.style.top = `${headerHeight - 24}px`;
+                label.innerHTML = `<span class="role-dot"></span><span>${escHtml(span.name)}</span>`;
+                label.title = `${span.name}: ${span.count} column${span.count === 1 ? '' : 's'}`;
+                eventsContainer.appendChild(label);
+            });
+        });
+    }
 
     // Render shift blocks
     shiftSegments.forEach(segment => {
@@ -3647,9 +3679,12 @@ function renderTableFilterChips() {
 function setScheduleLegendVisible(visible) {
     const wrap = document.getElementById('scheduleLegendWrapper');
     if (wrap) wrap.hidden = !visible;
-    // The week/expanded width toggle only applies to the grid view
+    // The week/expanded width toggle only applies to the grid view; undo/redo
+    // belong to the views where you edit shifts (timeline and table)
     const widthToggle = document.getElementById('gridWidthToggle');
     if (widthToggle) widthToggle.hidden = !visible;
+    const history = document.querySelector('.history-controls');
+    if (history) history.hidden = visible;
 }
 
 function renderSimpleTableView(schedule) {
