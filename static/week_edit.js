@@ -258,12 +258,14 @@ function renderCoverageEditor() {
                 <option value="__manage">Manage templates…</option>
             </select>
             <button type="button" class="cov-action" data-act="save">Save day as template</button>
+            ${templatesAppliedToDay(dayIdx).map(id => { const t = templates.find(x => x.id === id); return `<span class="cov-applied" title="Applied to this day. Click × to take it off."><i></i>${escHtml(t ? t.name : 'Template')}<button type="button" data-remove-tpl="${escHtml(id)}" aria-label="Remove template from this day">&times;</button></span>`; }).join('')}
             ${dayHasChanges(dayIdx) ? '<button type="button" class="cov-action cov-action-reset" data-act="reset">Reset day to normal</button>' : ''}
             ${excs.length ? `<span class="cov-day-excs" title="Date exceptions this day">${excs.map(e => `<span class="cov-exc ${e.kind}">${escHtml(exceptionText(e))}</span>`).join('')}</span>` : ''}
         `;
         actions.querySelector('[data-act="add"]').addEventListener('click', () => openCoverageAddModal(dayIdx));
         actions.querySelector('[data-act="save"]').addEventListener('click', () => openSaveTemplateModal(dayIdx));
         actions.querySelector('[data-act="reset"]')?.addEventListener('click', () => resetDayOverrides(dayIdx));
+        actions.querySelectorAll('[data-remove-tpl]').forEach(b => b.addEventListener('click', () => removeTemplateFromDay(dayIdx, b.dataset.removeTpl)));
         actions.querySelector('[data-act="apply"]').addEventListener('change', (e) => {
             const v = e.target.value;
             e.target.value = '';
@@ -357,18 +359,45 @@ function resetWeekOverrides() {
     showToast('This week is back to normal staffing', 'success');
 }
 
+/** Templates applied to a day (by id, in order), from the entries' tags. */
+function templatesAppliedToDay(dayIdx) {
+    const d = dayOverrides(dayIdx);
+    const ids = [];
+    (d?.entries || []).forEach(e => { if (e.template_id && !ids.includes(e.template_id)) ids.push(e.template_id); });
+    return ids;
+}
+
+function removeTemplateFromDay(dayIdx, templateId, save = true) {
+    const d = dayOverrides(dayIdx);
+    if (!d) return;
+    const wasReplace = (d.entries || []).some(e => e.template_id === templateId && e.template_mode === 'replace');
+    d.entries = (d.entries || []).filter(e => e.template_id !== templateId);
+    // A "replace the day" template also owns the day's clear flag
+    if (wasReplace && !(d.entries || []).some(e => e.template_mode === 'replace')) d.clear = false;
+    pruneDay(dayIdx);
+    if (save) queueSaveWeekOverrides();
+}
+
+/**
+ * Applying a template is idempotent: the day ends up with exactly what the
+ * template says, however many times it is clicked. Earlier entries from the
+ * same template are removed first.
+ */
 function applyTemplateToDay(dayIdx, templateId) {
     const tpl = (state.eventTemplates || []).find(t => t.id === templateId);
     if (!tpl) return;
+    const already = templatesAppliedToDay(dayIdx).includes(templateId);
+    removeTemplateFromDay(dayIdx, templateId, false);
     const d = dayOverrides(dayIdx, true);
+    const tag = { label: tpl.name, template_id: tpl.id, template_mode: tpl.mode };
     if (tpl.mode === 'replace') {
         d.clear = true;
-        d.entries = tpl.items.map(it => ({ mode: 'set', role_id: it.role_id, start_hour: it.start_hour, end_hour: it.end_hour, count: Math.max(0, it.count), label: tpl.name }));
+        d.entries = tpl.items.map(it => ({ mode: 'set', role_id: it.role_id, start_hour: it.start_hour, end_hour: it.end_hour, count: Math.max(0, it.count), ...tag }));
     } else {
-        tpl.items.forEach(it => d.entries.push({ mode: 'add', role_id: it.role_id, start_hour: it.start_hour, end_hour: it.end_hour, count: it.count, label: tpl.name }));
+        tpl.items.forEach(it => d.entries.push({ mode: 'add', role_id: it.role_id, start_hour: it.start_hour, end_hour: it.end_hour, count: it.count, ...tag }));
     }
     queueSaveWeekOverrides();
-    showToast(`${tpl.name} applied to ${state.days[dayIdx]}`, 'success');
+    showToast(already ? `${tpl.name} is already applied to ${state.days[dayIdx]}` : `${tpl.name} applied to ${state.days[dayIdx]}`, 'success');
 }
 
 /** Items describing a day: the whole day (replace) or just what differs from normal (add). */

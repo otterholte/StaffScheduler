@@ -51,6 +51,11 @@ def _clean_entry(raw: dict) -> Optional[dict]:
     label = str(raw.get('label') or '').strip()
     if label:
         entry['label'] = label[:80]
+    template_id = str(raw.get('template_id') or '').strip()
+    if template_id:
+        entry['template_id'] = template_id[:40]
+        if raw.get('template_mode') in ('add', 'replace'):
+            entry['template_mode'] = raw['template_mode']
     return entry
 
 

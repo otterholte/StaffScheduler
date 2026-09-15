@@ -12862,3 +12862,10 @@ body[data-theme="light"] .simple-schedule-table .emp-row.expanded .emp-name-text
     .exc-item { grid-template-columns: 1fr auto; }
     .exc-item-by { display: none; }
 }
+.cov-applied {
+    display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.3rem 0.25rem 0.6rem; border-radius: 999px;
+    background: var(--warning-bg); border: 1px solid rgba(245, 158, 11, 0.5); color: var(--warning); font-size: 0.75rem; font-weight: 700;
+}
+.cov-applied i { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
+.cov-applied button { border: 0; background: transparent; color: var(--warning); font-size: 1rem; line-height: 1; padding: 0 0.3rem; cursor: pointer; border-radius: 999px; }
+.cov-applied button:hover { background: rgba(245, 158, 11, 0.25); }
