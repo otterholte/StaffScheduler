@@ -300,7 +300,7 @@ function renderCoverageEditor() {
                 bar.style.width = `${((seg.endHour - seg.startHour) / totalHours) * 100}%`;
                 const diff = changed ? (base === null ? 'edited' : base === 0 ? 'new' : `was ${base}`) : '';
                 bar.innerHTML = `<span class="cov-bar-count">${escHtml(role.name)} × ${seg.count}</span><span class="cov-bar-time">${formatHour(seg.startHour)} – ${formatHour(seg.endHour)}</span>${diff ? `<span class="cov-bar-diff">${diff}</span>` : ''}`;
-                bar.title = `${role.name}: ${seg.count} needed ${formatHour(seg.startHour)} – ${formatHour(seg.endHour)}${changed ? ` (normally ${base === null ? 'varies' : base})` : ''}\nClick to change for this week`;
+                bar.title = `${role.name}: ${seg.count} needed ${formatHour(seg.startHour)} – ${formatHour(seg.endHour)}${changed ? ` (normally ${base === null ? 'varies' : base})` : ''}\nClick to change for this day`;
                 bar.addEventListener('click', (e) => { e.stopPropagation(); openCoverageBarModal(dayIdx, role.id, seg, base); });
                 lane.appendChild(bar);
             });
@@ -435,9 +435,9 @@ function openCoverageBarModal(dayIdx, roleId, seg, base) {
                     <div class="cov-modal-when" id="covBarWhen"></div>
                     <div class="cov-count-row">
                         <div class="cov-count-normal"><span class="cov-count-label">Normal</span><span class="cov-count-num" id="covBarNormal"></span></div>
-                        <div class="cov-count-week"><span class="cov-count-label">This week</span><div id="covBarStepperWrap"></div></div>
+                        <div class="cov-count-week"><span class="cov-count-label">This day</span><div id="covBarStepperWrap"></div></div>
                     </div>
-                    <p class="cov-modal-hint">This changes <strong>this week only</strong>. Your normal staffing on the Requirements page stays the same.</p>
+                    <p class="cov-modal-hint">This changes <strong>this day only</strong>. Every other week, and your normal staffing on the Requirements page, stay the same.</p>
                 </div>
                 <div class="modal-footer cov-modal-footer">
                     <button type="button" class="btn btn-ghost cov-remove-btn" id="covBarRemove">Remove for this day</button>
@@ -480,7 +480,7 @@ function openCoverageAddModal(dayIdx, roleId = null) {
                         <label>From<select id="covAddStart" class="form-select"></select></label>
                         <label>Until<select id="covAddEnd" class="form-select"></select></label>
                     </div>
-                    <p class="cov-modal-hint">Added on top of whatever is normally needed at those hours, <strong>this week only</strong>.</p>
+                    <p class="cov-modal-hint">Added on top of whatever is normally needed at those hours, <strong>this day only</strong>.</p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-close>Cancel</button>
