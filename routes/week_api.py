@@ -260,6 +260,8 @@ def employee_add_exception(employee_id):
     fields, err = _parse_exception(request_json())
     if err:
         return json_error(err)
+    if fields['kind'] != 'available':
+        return json_error("Days you can't work go in as a request so your manager can approve them.")
     _create_exceptions(row, db_employee.employee_id, fields, 'employee')
     return jsonify({'success': True, 'message': 'Saved',
                     'exceptions': _exception_payload(row, _employee_exceptions(row, db_employee.employee_id))})

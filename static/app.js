@@ -519,14 +519,7 @@ function getInitials(name) {
     return parts[0].substring(0, 2).toUpperCase();
 }
 
-function getTimeOffTypeEmoji(type) {
-    switch (type) {
-        case 'vacation': return '🌴';
-        case 'sick': return '🤒';
-        case 'personal': return '👤';
-        default: return '📋';
-    }
-}
+function getTimeOffTypeEmoji(type) { return getPTOTypeEmoji(type); }
 
 function formatTimeOffDateRange(startDate, endDate, daysInWeek) {
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -4066,7 +4059,7 @@ function renderSimpleTableView(schedule) {
                 // Show PTO badge for this day
                 const emoji = getPTOTypeEmoji(pto.days[day]);
                 html += `<td class="shift-times ${dayClass}">
-                    <span class="pto-shift">${emoji} ${capitalizeFirst(pto.days[day])}</span>
+                    <span class="pto-shift">${emoji} ${ptoTypeLabel(pto.days[day])}</span>
                 </td>`;
             } else if (shifts.length === 0) {
                     html += `<td class="shift-times ${dayClass}"><span class="no-shift">—</span></td>`;
@@ -4628,6 +4621,16 @@ function employeeAvailableHours(emp, dayIdx) {
     const set = new Set();
     (emp?.availability || []).forEach(s => { if (parseInt(s.day) === dayIdx) set.add(parseInt(s.hour)); });
     if (emp && typeof applyExceptionsToHours === 'function') applyExceptionsToHours(emp.id, dayIdx, set);
+    // Approved part-day requests block just their hours
+    if (emp) {
+        const dayDate = getWeekDates(state.weekOffset)[dayIdx];
+        (state.approvedPTO || []).forEach(pto => {
+            if (pto.employee_id !== emp.id || pto.all_day || pto.start_hour == null) return;
+            const start = new Date(pto.start_date + 'T00:00:00'), end = new Date(pto.end_date + 'T00:00:00');
+            if (dayDate < start || dayDate > end) return;
+            for (let h = Math.floor(pto.start_hour); h < Math.ceil(pto.end_hour); h++) set.delete(h);
+        });
+    }
     return set;
 }
 
@@ -4637,6 +4640,7 @@ function employeeHasTimeOff(empId, dayIdx) {
     if (typeof employeeUnavailableAllDayByException === 'function' && employeeUnavailableAllDayByException(empId, dayIdx)) return true;
     return (state.approvedPTO || []).some(pto => {
         if (pto.employee_id !== empId) return false;
+        if (!pto.all_day && pto.start_hour != null) return false; // only part of the day: handled hour by hour
         const start = new Date(pto.start_date + 'T00:00:00');
         const end = new Date(pto.end_date + 'T00:00:00');
         return dayDate >= start && dayDate <= end;
@@ -5117,9 +5121,17 @@ function buildTimelinePtoRow(dayPTO, dayExceptions = []) {
         ptoBlock.className = 'timeline-pto-block';
         ptoBlock.style.left = '0';
         ptoBlock.style.width = '100%';
+        const win = ptoWindowText(pto);
+        if (win) {
+            const total = state.hours.length;
+            const lo = Math.max(state.startHour, Math.floor(pto.start_hour));
+            const hi = Math.min(state.endHour, Math.ceil(pto.end_hour));
+            ptoBlock.style.left = `${(state.hours.indexOf(lo) / total) * 100}%`;
+            ptoBlock.style.width = `${((hi - lo) / total) * 100}%`;
+        }
         const empName = pto.employee_name || 'Employee';
-        ptoBlock.innerHTML = `<span class="pto-icon">${getPTOTypeEmoji(pto.pto_type)}</span><span class="pto-label">${escHtml(empName)} - ${escHtml(capitalizeFirst(pto.pto_type))}</span>`;
-        ptoBlock.title = `${empName}: ${capitalizeFirst(pto.pto_type)} (${pto.start_date} - ${pto.end_date})`;
+        ptoBlock.innerHTML = `<span class="pto-icon">${getPTOTypeEmoji(pto.pto_type)}</span><span class="pto-label">${escHtml(empName)} - ${escHtml(ptoTypeLabel(pto.pto_type))}${win ? ` ${escHtml(win)}` : ''}</span>`;
+        ptoBlock.title = `${empName}: ${ptoTypeLabel(pto.pto_type)} (${pto.start_date} - ${pto.end_date}${win ? `, ${win}` : ''})`;
         lane.appendChild(ptoBlock);
     });
     (dayExceptions || []).forEach(exc => {
@@ -7713,24 +7725,14 @@ function renderPTONotifications() {
     }
     
     list.innerHTML = requests.map(req => {
-        const startDate = new Date(req.start_date).toLocaleDateString('en-US', { 
-            month: 'short', day: 'numeric' 
-        });
-        const endDate = new Date(req.end_date).toLocaleDateString('en-US', { 
-            month: 'short', day: 'numeric', year: 'numeric' 
-        });
-        const dateRange = req.start_date === req.end_date 
-            ? startDate 
-            : `${startDate} - ${endDate}`;
-        
-        const typeEmoji = {
-            'vacation': '🌴',
-            'sick': '🤒',
-            'personal': '👤',
-            'other': '📋'
-        }[req.pto_type] || '📅';
-        
-        const typeName = (req.pto_type || 'other').charAt(0).toUpperCase() + (req.pto_type || 'other').slice(1);
+        // Dates are calendar days: parse as local midnight so the day never shifts
+        const startDate = new Date(req.start_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const endDate = new Date(req.end_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const window = ptoWindowText(req);
+        const dateRange = (req.start_date === req.end_date ? startDate : `${startDate} - ${endDate}`) + (window ? ` · ${window}` : '');
+
+        const typeEmoji = getPTOTypeEmoji(req.pto_type);
+        const typeName = ptoTypeLabel(req.pto_type);
         
         return `
             <div class="pto-notification-item" data-request-id="${req.id}">
@@ -7765,9 +7767,9 @@ async function approvePTOFromNotification(requestId) {
         if (data.success) {
             // Show appropriate message based on whether shifts were removed
             if (data.shifts_removed && data.shifts_removed > 0) {
-                showToast(`Time off approved. ${data.shifts_removed} shift(s) removed from schedule.`, 'warning');
+                showToast(`Request approved. ${data.shifts_removed} shift(s) removed from the schedule and now open.`, 'warning');
             } else {
-            showToast('Time off request approved', 'success');
+            showToast('Request approved', 'success');
             }
             
             loadPTONotifications();
@@ -7901,9 +7903,9 @@ function renderManagerPTOList(requests) {
             <div class="manager-pto-item ${req.status}">
                 <div class="manager-pto-icon">${statusIcon}</div>
                 <div class="manager-pto-info">
-                    <div class="manager-pto-dates">${dateRange}</div>
+                    <div class="manager-pto-dates">${dateRange}${ptoWindowText(req) ? ` <span class="manager-pto-window">${ptoWindowText(req)}</span>` : ''}</div>
                     <div class="manager-pto-meta">
-                        <span class="manager-pto-type">${typeEmoji} ${capitalizeFirst(req.pto_type)}</span>
+                        <span class="manager-pto-type">${typeEmoji} ${ptoTypeLabel(req.pto_type)}</span>
                         <span class="manager-pto-status ${req.status}">${capitalizeFirst(req.status)}</span>
                     </div>
                     ${req.employee_note ? `<div class="manager-pto-note">"${req.employee_note}"</div>` : ''}
@@ -7936,8 +7938,25 @@ function getPTOTypeEmoji(type) {
         case 'vacation': return '🌴';
         case 'sick': return '🤒';
         case 'personal': return '👤';
+        case 'other_job': return '💼';
+        case 'school': return '🎓';
+        case 'appointment': return '🗓️';
         default: return '📋';
     }
+}
+
+// Reasons someone asks not to be scheduled. Every approved request blocks the same way.
+const REQUEST_TYPE_LABELS = {
+    vacation: 'Vacation', sick: 'Sick', personal: 'Personal', other_job: 'Other job',
+    school: 'School or class', appointment: 'Appointment', other: 'Other',
+};
+function ptoTypeLabel(type) {
+    return REQUEST_TYPE_LABELS[type] || String(type || 'Other').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+}
+function ptoWindowText(pto) {
+    if (!pto || pto.all_day || pto.start_hour == null || pto.end_hour == null) return '';
+    const f = (t) => { const h = Math.floor(t), m = Math.round((t - h) * 60); const p = h >= 12 ? 'pm' : 'am'; const d = h % 12 || 12; return m ? `${d}:${String(m).padStart(2, '0')}${p}` : `${d}${p}`; };
+    return `${f(pto.start_hour)} – ${f(pto.end_hour)}`;
 }
 
 function formatPTODateRange(startDate, endDate) {
@@ -7970,9 +7989,9 @@ async function approvePTORequest(requestId) {
         if (data.success) {
             // Show appropriate message based on whether shifts were removed
             if (data.shifts_removed && data.shifts_removed > 0) {
-                showToast(`Time off approved. ${data.shifts_removed} shift(s) removed from schedule.`, 'warning');
+                showToast(`Request approved. ${data.shifts_removed} shift(s) removed from the schedule and now open.`, 'warning');
             } else {
-            showToast('Time off request approved', 'success');
+            showToast('Request approved', 'success');
             }
             
             // Reload the PTO list

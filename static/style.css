@@ -12869,3 +12869,5 @@ body[data-theme="light"] .simple-schedule-table .emp-row.expanded .emp-name-text
 .cov-applied i { width: 7px; height: 7px; border-radius: 50%; background: var(--warning); }
 .cov-applied button { border: 0; background: transparent; color: var(--warning); font-size: 1rem; line-height: 1; padding: 0 0.3rem; cursor: pointer; border-radius: 999px; }
 .cov-applied button:hover { background: rgba(245, 158, 11, 0.25); }
+
+.manager-pto-window { font-weight: 500; color: var(--text-secondary); font-size: 0.85em; margin-left: 0.35rem; }

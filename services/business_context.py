@@ -363,14 +363,18 @@ def scenario_with_time_off(scenario: BusinessScenario, week_start: date) -> Busi
     ).all()
     if not approved:
         return working
-    blocked: Dict[str, set] = {}
+    blocked: Dict[str, list] = {}
     for req in approved:
         day = max(req.start_date, week_start)
         last = min(req.end_date, week_end)
+        window = (req.start_hour, req.end_hour) if (req.start_hour is not None and req.end_hour is not None) else None
         while day <= last:
-            blocked.setdefault(req.employee_id, set()).add(day.weekday())
+            blocked.setdefault(req.employee_id, []).append((day.weekday(), window))
             day += timedelta(days=1)
     for emp in working.employees:
-        for d in blocked.get(emp.id, ()):
-            emp.add_time_off(d)
+        for d, window in blocked.get(emp.id, ()):
+            if window:
+                emp.add_time_off(d, window[0], window[1])
+            else:
+                emp.add_time_off(d)
     return working

@@ -21,7 +21,7 @@ from flask import current_app
 
 from email_service import get_email_service
 from sms_service import get_sms_service
-from services.common import DAY_NAMES, format_hour, format_shift_time, site_url
+from services.common import DAY_NAMES, format_hour, format_hour_minute, format_shift_time, request_type_label, site_url
 
 
 # ---------------------------------------------------------------- plumbing
@@ -204,26 +204,54 @@ def notify_manager_swap_completed(manager_contact: dict, business_name: str, bus
 
 # ---------------------------------------------------------------- time off
 
+def _window_text(start_hour, end_hour) -> str:
+    if start_hour is None and end_hour is None:
+        return 'all day'
+    return f"{format_hour_minute(start_hour)} - {format_hour_minute(end_hour)}"
+
+
 def notify_pto_submitted(manager_contact: dict, business_name: str, business_slug: str,
-                         employee_name: str, start: date, end: date, pto_type: str, note: str = ''):
+                         employee_name: str, start: date, end: date, pto_type: str, note: str = '',
+                         start_hour=None, end_hour=None):
     base = site_url()
     when = _date_range_text(start, end)
+    window = _window_text(start_hour, end_hour)
+    label = request_type_label(pto_type)
     _run_in_background(
         _app(), _deliver, manager_contact,
-        subject=f"Time-off request from {employee_name} ({when})",
-        title="🗓️ Time-Off Request", greeting=f"Hi {(manager_contact.get('name') or 'there').split()[0]},",
-        intro=f"<strong>{employee_name}</strong> requested time off at <strong>{business_name}</strong>.",
-        detail_lines=[f"📅 {when}", f"Type: {pto_type.title()}"] + ([f"Note: {note}"] if note else []),
+        subject=f"{employee_name} asked not to be scheduled {when} ({label})",
+        title="🗓️ Request to review", greeting=f"Hi {(manager_contact.get('name') or 'there').split()[0]},",
+        intro=f"<strong>{employee_name}</strong> asked not to be scheduled at <strong>{business_name}</strong>. Nothing changes until you approve it.",
+        detail_lines=[f"📅 {when}, {window}", f"Reason: {label}"] + ([f"Note: {note}"] if note else []),
         cta_text="Review request", cta_url=f"{base}/{business_slug}/staff",
-        sms_text=f"{business_name}: {employee_name} requested time off {when}. Review: {base}/{business_slug}/staff",
+        sms_text=f"{business_name}: {employee_name} asked not to be scheduled {when} ({window}, {label}). Review: {base}/{business_slug}/staff",
         accent=("#f59e0b", "#f97316"),
     )
 
 
+def notify_availability_reduced(manager_contact: dict, business_name: str, business_slug: str,
+                                employee_name: str, hours_before: float, hours_after: float):
+    """A team member shrank their weekly availability. No approval needed; the manager should know."""
+    base = site_url()
+    _run_in_background(
+        _app(), _deliver, manager_contact,
+        subject=f"{employee_name} reduced their availability ({hours_before:g}h → {hours_after:g}h per week)",
+        title="Availability changed", greeting=f"Hi {(manager_contact.get('name') or 'there').split()[0]},",
+        intro=f"<strong>{employee_name}</strong> changed their weekly availability at <strong>{business_name}</strong> and can now work fewer hours.",
+        detail_lines=[f"Before: {hours_before:g} hours per week", f"Now: {hours_after:g} hours per week"],
+        cta_text="See their availability", cta_url=f"{base}/{business_slug}/availability",
+        sms_text=None, accent=("#f59e0b", "#f97316"),
+        footer_note="This is just a heads-up. Future schedules will use the new availability.",
+    )
+
+
 def notify_pto_decision(employee_contact: dict, employee_db_id: int, business_name: str, business_slug: str,
-                        approved: bool, start: date, end: date, manager_note: str = '', shifts_removed: int = 0):
+                        approved: bool, start: date, end: date, manager_note: str = '', shifts_removed: int = 0,
+                        start_hour=None, end_hour=None):
     base = site_url()
     when = _date_range_text(start, end)
+    if start_hour is not None or end_hour is not None:
+        when = f"{when} ({_window_text(start_hour, end_hour)})"
     portal = f"{base}/employee/{business_slug}/{employee_db_id}/availability"
     first = (employee_contact.get('name') or 'there').split()[0]
     if approved:

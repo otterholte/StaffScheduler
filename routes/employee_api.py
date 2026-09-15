@@ -22,8 +22,9 @@ from scheduler.models import TimeSlot
 from services.business_context import (
     BusinessAccessError, business_slug, require_coworker_access, require_employee_access,
 )
-from services.common import DAY_NAMES, as_int, format_shift_time, json_error, parse_week_start, request_json
+from services.common import DAY_NAMES, REQUEST_TYPES, as_int, format_shift_time, json_error, parse_week_start, request_json
 from services.notifications import (
+    notify_availability_reduced,
     contact_for, notify_counter_offer, notify_manager_swap_completed, notify_pto_submitted,
     notify_swap_created, notify_swap_response,
 )
@@ -138,6 +139,7 @@ def employee_update_availability(employee_id):
     if not isinstance(new_availability, dict):
         return json_error('availability must be an object keyed by day')
 
+    hours_before = employee.get_total_available_hours()
     employee.clear_availability()
     for day_str, ranges in new_availability.items():
         day = as_int(day_str, -1)
@@ -152,6 +154,14 @@ def employee_update_availability(employee_id):
                 employee.add_availability(day, max(0.0, start), min(24.0, end))
 
     db_service.save_business_to_db(business, row.owner_id)
+    hours_after = employee.get_total_available_hours()
+    if hours_after < hours_before - 0.01:
+        owner = row.owner
+        if owner and owner.email:
+            manager_contact = {'name': owner.first_name or owner.username, 'email': owner.email, 'phone': None,
+                               'notify_email': True, 'notify_sms': False}
+            notify_availability_reduced(manager_contact, business.name, business_slug(business.name),
+                                        db_employee.name, hours_before, hours_after)
     out = {}
     for r in employee.availability_ranges:
         out.setdefault(r.day, []).append([r.start_time, r.end_time])
@@ -202,21 +212,34 @@ def create_employee_pto_request(business_ref, employee_id):
     if end < start:
         return json_error('End date cannot be before start date.')
     if start < date.today():
-        return json_error('Time off cannot start in the past.')
+        return json_error("A request can't start in the past.")
     if (end - start).days > 90:
         return json_error('Requests are limited to 90 days at a time.')
 
-    overlap = PTORequest.query.filter(
+    # Optional time window ("class 9am to 1pm"); whole day when all_day or missing
+    start_hour = end_hour = None
+    if data.get('all_day') is False:
+        try:
+            start_hour, end_hour = float(data.get('start_hour')), float(data.get('end_hour'))
+        except (TypeError, ValueError):
+            return json_error('Pick a start and end time, or choose all day.')
+        if end_hour <= start_hour:
+            return json_error('The end time must be after the start time.')
+
+    existing = PTORequest.query.filter(
         PTORequest.business_db_id == row.id, PTORequest.employee_id == db_employee.employee_id,
         PTORequest.status.in_(['pending', 'approved']),
         PTORequest.start_date <= end, PTORequest.end_date >= start,
-    ).first()
-    if overlap:
-        return json_error('You already have a request covering those dates.')
+    ).all()
+    for other in existing:
+        other_all_day = other.start_hour is None and other.end_hour is None
+        if start_hour is None or other_all_day or (start_hour < other.end_hour and end_hour > other.start_hour):
+            return json_error('You already have a request covering that time.')
 
-    pto_type = data.get('pto_type') if data.get('pto_type') in ('vacation', 'sick', 'personal', 'other') else 'vacation'
+    pto_type = data.get('pto_type') if data.get('pto_type') in REQUEST_TYPES else 'other'
     pto = PTORequest(business_db_id=row.id, employee_id=db_employee.employee_id, start_date=start, end_date=end,
-                     pto_type=pto_type, employee_note=(data.get('note') or '').strip()[:500] or None, status='pending')
+                     pto_type=pto_type, start_hour=start_hour, end_hour=end_hour,
+                     employee_note=(data.get('note') or '').strip()[:500] or None, status='pending')
     db.session.add(pto)
     db.session.commit()
 
@@ -225,9 +248,9 @@ def create_employee_pto_request(business_ref, employee_id):
         manager_contact = {'name': owner.first_name or owner.username, 'email': owner.email, 'phone': None,
                            'notify_email': True, 'notify_sms': False}
         notify_pto_submitted(manager_contact, business.name, business_slug(business.name), db_employee.name,
-                             start, end, pto_type, pto.employee_note or '')
+                             start, end, pto_type, pto.employee_note or '', start_hour, end_hour)
 
-    return jsonify({'success': True, 'message': 'Time-off request sent to your manager.', 'pto_request': pto.to_dict()})
+    return jsonify({'success': True, 'message': 'Request sent to your manager.', 'pto_request': pto.to_dict()})
 
 
 @employee_api_bp.route('/api/employee/<business_ref>/<int:employee_id>/pto/<request_id>', methods=['DELETE'])

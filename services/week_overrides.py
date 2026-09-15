@@ -208,6 +208,9 @@ def apply_exceptions(working: BusinessScenario, exceptions: Iterable[Availabilit
                 slot = TimeSlot(day, hour)
                 emp.availability.add(slot)
                 emp.time_off.discard(slot)
+                # Someone who volunteered a day is a good pick for it
+                if exc.created_by == 'employee':
+                    emp.preferences.add(slot)
         else:
             for hour in hours:
                 emp.time_off.add(TimeSlot(day, hour))

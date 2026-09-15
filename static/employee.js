@@ -665,10 +665,17 @@ function renderTimelineView() {
                 
                 ptoBlock.style.left = '0';
                 ptoBlock.style.width = '100%';
+                if (!pto.all_day && pto.start_hour != null && pto.end_hour != null) {
+                    const total = employeeState.hours.length;
+                    const lo = Math.max(employeeState.startHour, Math.floor(pto.start_hour));
+                    const hi = Math.min(employeeState.endHour, Math.ceil(pto.end_hour));
+                    ptoBlock.style.left = `${((lo - employeeState.startHour) / total) * 100}%`;
+                    ptoBlock.style.width = `${((hi - lo) / total) * 100}%`;
+                }
                 ptoBlock.style.cursor = 'pointer';
-                
+
                 const emoji = getPTOTypeEmoji(pto.pto_type);
-                const typeLabel = capitalizeFirst(pto.pto_type);
+                const typeLabel = ptoTypeLabel(pto.pto_type) + (ptoWindowText(pto) ? ` ${ptoWindowText(pto)}` : '');
                 const name = pto.employee_name || employeeState.employee.name;
                 
                 ptoBlock.innerHTML = `<span class="pto-content">${name} - ${emoji} ${typeLabel}</span>`;
@@ -1001,7 +1008,7 @@ function renderGridShiftsAndPTO(schedule, container, dates, showEveryone) {
             // Render PTO block
             const isMine = block.employeeId === myId;
             const emoji = getPTOTypeEmoji(block.ptoType);
-            const typeLabel = capitalizeFirst(block.ptoType);
+            const typeLabel = ptoTypeLabel(block.ptoType);
             const name = block.employeeName || 'Unknown';
             
             const ptoBlock = document.createElement('div');
@@ -1598,7 +1605,7 @@ function renderUpcomingShifts() {
         } else {
             // PTO item
             const emoji = getPTOTypeEmoji(item.pto_type);
-            const typeLabel = capitalizeFirst(item.pto_type);
+            const typeLabel = ptoTypeLabel(item.pto_type);
             const isOtherPerson = !item.isMyItem;
             const personLabel = isOtherPerson ? item.employee_name : '';
             
@@ -1757,7 +1764,7 @@ function renderAgendaView() {
                     <div class="agenda-role-head"><i style="background:#8b5cf6"></i>Time off</div>
                     ${offToday.map(p => `<div class="agenda-person${p.employee_id === myId ? ' is-me' : ''}">
                         <span class="agenda-person-name">${escapeHtml(p.employee_id === myId ? 'You' : (p.employee_name || 'Staff'))}</span>
-                        <span class="agenda-person-time">${escapeHtml(capitalizeFirst(p.pto_type || 'off'))}</span>
+                        <span class="agenda-person-time">${escapeHtml(ptoTypeLabel(p.pto_type || 'other'))}</span>
                     </div>`).join('')}
                 </div>`;
             }
@@ -1785,8 +1792,8 @@ function renderAgendaView() {
             myPto.forEach(p => {
                 body += `<div class="agenda-shift agenda-pto">
                     <div class="agenda-shift-main">
-                        <div class="agenda-shift-time">Time off</div>
-                        <div class="agenda-shift-meta"><span class="agenda-role"><i style="background:#8b5cf6"></i>${escapeHtml(capitalizeFirst(p.pto_type || 'Approved'))}</span></div>
+                        <div class="agenda-shift-time">${ptoWindowText(p) ? `Off ${ptoWindowText(p)}` : 'Time off'}</div>
+                        <div class="agenda-shift-meta"><span class="agenda-role"><i style="background:#8b5cf6"></i>${escapeHtml(ptoTypeLabel(p.pto_type || 'other'))}</span></div>
                     </div>
                 </div>`;
             });
@@ -1873,11 +1880,11 @@ function ensureExceptionModal() {
                         <div class="pto-form-group"><label for="excEnd">Until</label><input type="time" id="excEnd" step="900"></div>
                     </div>
                     <div class="pto-form-group"><label for="excNote">Note (optional)</label><input type="text" id="excNote" placeholder="Dentist, family visit, happy to cover…" maxlength="120"></div>
-                    <p class="exceptions-hint">Only these dates change. Your manager sees it right away.</p>
+                    <p class="exceptions-hint" id="excKindHint">Only these dates change.</p>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" data-close type="button">Cancel</button>
-                    <button class="btn btn-primary" id="excSave" type="button">Save</button>
+                    <button class="btn btn-primary" id="excSave" type="button">Continue</button>
                 </div>
             </div>
         </div>`;
@@ -1903,12 +1910,22 @@ function openExceptionModal(onSave) {
     endTimeEl.value = `${String(Math.min(23, employeeState.endHour)).padStart(2, '0')}:00`;
     allDay.onchange = () => { times.hidden = allDay.checked; };
     dateEl.onchange = () => { endEl.min = dateEl.value || iso; };
+    const kindHint = el.querySelector('#excKindHint');
+    const syncHint = () => { if (kindHint) kindHint.textContent = kind === 'available' ? 'Saved right away. Your manager can schedule you then.' : "Goes to your manager as a request. You stay schedulable until they approve it."; };
+    el.querySelectorAll('.exc-kind-btn').forEach(b => b.addEventListener('click', syncHint));
+    syncHint();
     el.querySelector('#excSave').onclick = async () => {
         if (!dateEl.value) { showToast('Pick a date', 'error'); dateEl.focus(); return; }
         const payload = { date: dateEl.value, end_date: endEl.value || null, kind, all_day: allDay.checked, note: note.value.trim() };
         if (!allDay.checked) {
             payload.start_hour = excTimeToHours(startEl.value); payload.end_hour = excTimeToHours(endTimeEl.value);
             if (payload.start_hour === null || payload.end_hour === null || payload.end_hour <= payload.start_hour) { showToast('The end time must be after the start time', 'error'); return; }
+        }
+        if (kind === 'unavailable') {
+            // Taking hours away needs the manager's OK: continue as a request
+            el.classList.remove('active');
+            openPTORequestModal(payload);
+            return;
         }
         const ok = await onSave(payload);
         if (ok !== false) el.classList.remove('active');
@@ -2602,8 +2619,8 @@ function renderUnifiedNotificationList() {
         notifications.push({
             type: 'pto',
             id: pto.id,
-            title: `Time Off ${pto.status === 'approved' ? 'Approved' : 'Denied'}`,
-            subtitle: `${capitalizeFirst(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
+            title: `Request ${pto.status === 'approved' ? 'approved' : 'denied'}`,
+            subtitle: `${ptoTypeLabel(pto.pto_type)} • ${formatPTODateRange(pto.start_date, pto.end_date)}`,
             status: pto.status,
             date: new Date(pto.updated_at || pto.created_at),
             pto: pto // Store full PTO data for navigation
@@ -3278,7 +3295,7 @@ function showPTOPopover(e, pto, isMine) {
     popover.className = 'pto-popover';
     
     const emoji = getPTOTypeEmoji(pto.pto_type);
-    const typeLabel = capitalizeFirst(pto.pto_type);
+    const typeLabel = ptoTypeLabel(pto.pto_type);
     const name = isMine ? 'You' : (pto.employee_name || 'Unknown');
     const dateRange = formatPTODateRange(pto.start_date, pto.end_date);
     
@@ -3431,7 +3448,7 @@ function highlightPTOElement(pto) {
             }
         }
         
-        showToast(`Viewing time off: ${capitalizeFirst(pto.pto_type)}`, 'info');
+        showToast(`Viewing time off: ${ptoTypeLabel(pto.pto_type)}`, 'info');
     }, 300);
 }
 
@@ -4461,16 +4478,28 @@ function initPTORequests() {
     loadPTORequests();
 }
 
-function openPTORequestModal() {
+function openPTORequestModal(prefill = null) {
     const modal = document.getElementById('ptoRequestModal');
     if (!modal) return;
-    
-    // Reset form
-    document.getElementById('ptoStartDate').value = '';
-    document.getElementById('ptoEndDate').value = '';
-    document.getElementById('ptoType').value = 'vacation';
-    document.getElementById('ptoNote').value = '';
-    
+
+    // Reset form (or prefill when handed off from "Can't work")
+    const allDay = document.getElementById('ptoAllDay'), times = document.getElementById('ptoTimes');
+    const startT = document.getElementById('ptoStartTime'), endT = document.getElementById('ptoEndTime');
+    document.getElementById('ptoStartDate').value = prefill?.date || '';
+    document.getElementById('ptoEndDate').value = prefill?.end_date || '';
+    document.getElementById('ptoType').value = prefill?.pto_type || (prefill ? 'other' : 'vacation');
+    document.getElementById('ptoNote').value = prefill?.note || '';
+    if (allDay) {
+        allDay.checked = prefill ? prefill.all_day !== false : true;
+        if (times) times.hidden = allDay.checked;
+        allDay.onchange = () => { times.hidden = allDay.checked; };
+    }
+    const toTime = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+    if (startT) startT.value = prefill?.start_hour != null ? toTime(prefill.start_hour) : `${String(employeeState.startHour).padStart(2, '0')}:00`;
+    if (endT) endT.value = prefill?.end_hour != null ? toTime(prefill.end_hour) : `${String(Math.min(23, employeeState.endHour)).padStart(2, '0')}:00`;
+    const hint = document.getElementById('ptoApprovalHint');
+    if (hint) hint.textContent = prefill ? "Days you can't work go to your manager as a request. You stay schedulable until they approve it." : 'This goes to your manager. You stay schedulable until they approve it.';
+
     modal.classList.add('active');
 }
 
@@ -4500,9 +4529,16 @@ async function submitPTORequest() {
     const endDate = document.getElementById('ptoEndDate').value || startDate;
     const ptoType = document.getElementById('ptoType').value;
     const note = document.getElementById('ptoNote').value;
-    
+    const allDay = document.getElementById('ptoAllDay')?.checked !== false;
+    let startHour = null, endHour = null;
+    if (!allDay) {
+        startHour = excTimeToHours(document.getElementById('ptoStartTime').value);
+        endHour = excTimeToHours(document.getElementById('ptoEndTime').value);
+        if (startHour === null || endHour === null || endHour <= startHour) { showToast('The end time must be after the start time', 'error'); return; }
+    }
+
     if (!startDate) {
-        showToast('Please select a start date', 'error');
+        showToast('Please select a date', 'error');
         return;
     }
     
@@ -4514,14 +4550,17 @@ async function submitPTORequest() {
                 start_date: startDate,
                 end_date: endDate,
                 pto_type: ptoType,
-                note: note
+                note: note,
+                all_day: allDay,
+                start_hour: startHour,
+                end_hour: endHour
             })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            showToast('Time off request submitted', 'success');
+            showToast('Request sent to your manager', 'success');
             closePTOModal();
             loadPTORequests();
         } else {
@@ -4638,9 +4677,9 @@ function renderPTORequestsList() {
             <div class="pto-request-item ${statusClass}" id="pto-request-${req.id}">
                 <div class="pto-request-icon">${statusIcon}</div>
                 <div class="pto-request-info">
-                    <div class="pto-request-dates">${dateRange}</div>
+                    <div class="pto-request-dates">${dateRange}${ptoWindowText(req) ? ` <span class="pto-request-window">${ptoWindowText(req)}</span>` : ''}</div>
                     <div class="pto-request-meta">
-                        <span class="pto-type">${typeEmoji} ${capitalizeFirst(req.pto_type)}</span>
+                        <span class="pto-type">${typeEmoji} ${ptoTypeLabel(req.pto_type)}</span>
                         <span class="pto-status-badge ${statusClass}">${capitalizeFirst(req.status)}</span>
                     </div>
                     ${req.employee_note ? `<div class="pto-request-note">"${escapeHtml(req.employee_note)}"</div>` : ''}
@@ -4702,8 +4741,25 @@ function getPTOTypeEmoji(type) {
         case 'vacation': return '🌴';
         case 'sick': return '🤒';
         case 'personal': return '👤';
+        case 'other_job': return '💼';
+        case 'school': return '🎓';
+        case 'appointment': return '🗓️';
         default: return '📋';
     }
+}
+
+// Reasons someone asks not to be scheduled. Every approved request blocks the same way.
+const REQUEST_TYPE_LABELS = {
+    vacation: 'Vacation', sick: 'Sick', personal: 'Personal', other_job: 'Other job',
+    school: 'School or class', appointment: 'Appointment', other: 'Other',
+};
+function ptoTypeLabel(type) {
+    return REQUEST_TYPE_LABELS[type] || String(type || 'Other').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+}
+function ptoWindowText(pto) {
+    if (!pto || pto.all_day || pto.start_hour == null || pto.end_hour == null) return '';
+    const f = (t) => { const h = Math.floor(t), m = Math.round((t - h) * 60); const p = h >= 12 ? 'pm' : 'am'; const d = h % 12 || 12; return m ? `${d}:${String(m).padStart(2, '0')}${p}` : `${d}${p}`; };
+    return `${f(pto.start_hour)} – ${f(pto.end_hour)}`;
 }
 
 function formatPTODateRange(startDate, endDate) {

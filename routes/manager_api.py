@@ -928,24 +928,35 @@ def _remove_conflicting_shifts(row, pto: PTORequest):
         week_end = week_start + timedelta(days=6)
         if not (week_start <= pto.end_date and week_end >= pto.start_date):
             continue
-        affected_days = set()
+        timed = pto.start_hour is not None and pto.end_hour is not None
+
+        def overlaps(day, start_hour, end_hour):
+            shift_date = week_start + timedelta(days=int(day))
+            if not (pto.start_date <= shift_date <= pto.end_date):
+                return False
+            return (not timed) or (float(start_hour) < pto.end_hour and float(end_hour) > pto.start_hour)
+
+        affected = set()  # (day, start_hour, end_hour) of removed shifts
         for shift in DBShiftAssignment.query.filter_by(schedule_id=schedule.id, employee_id=pto.employee_id).all():
-            shift_date = week_start + timedelta(days=shift.day)
-            if pto.start_date <= shift_date <= pto.end_date:
-                affected_days.add(shift.day)
+            if overlaps(shift.day, shift.start_hour, shift.end_hour):
+                affected.add((shift.day, shift.start_hour, shift.end_hour))
                 db.session.delete(shift)
                 removed += 1
-        if affected_days:
-            data = schedule.get_schedule_data()
+        data = schedule.get_schedule_data()
+        for a in data.get('assignments', []):
+            if a.get('employee_id') == pto.employee_id and overlaps(a.get('day'), a.get('start_hour'), a.get('end_hour')):
+                affected.add((int(a['day']), int(a['start_hour']), int(a['end_hour'])))
+        if affected:
             data['assignments'] = [a for a in data.get('assignments', [])
-                                   if not (a.get('employee_id') == pto.employee_id and a.get('day') in affected_days)]
+                                   if not (a.get('employee_id') == pto.employee_id
+                                           and (int(a.get('day')), int(a.get('start_hour')), int(a.get('end_hour'))) in affected)]
             slots = data.get('slot_assignments', {})
             for key, entries in list(slots.items()):
                 try:
-                    day = int(key.split(',')[0])
-                except ValueError:
+                    day, hour = int(key.split(',')[0]), int(key.split(',')[1])
+                except (ValueError, IndexError):
                     continue
-                if day in affected_days:
+                if any(day == d and s <= hour < e for d, s, e in affected):
                     slots[key] = [e for e in entries
                                   if (e.get('employee_id') if isinstance(e, dict) else e[0]) != pto.employee_id]
             data['slot_assignments'] = slots
@@ -974,15 +985,15 @@ def _decide_pto(business_ref, request_id, approve: bool):
     db_emp = DBEmployee.query.filter_by(business_db_id=row.id, employee_id=pto.employee_id).first()
     if db_emp:
         notify_pto_decision(contact_for(db_emp), db_emp.id, business.name, business_slug(business.name),
-                            approve, pto.start_date, pto.end_date, note, removed)
+                            approve, pto.start_date, pto.end_date, note, removed, pto.start_hour, pto.end_hour)
 
     name = db_emp.name if db_emp else pto.employee_id
     if approve:
-        message = 'Time off approved.'
+        message = 'Request approved.'
         if removed:
-            message = f'Time off approved. {removed} scheduled shift(s) for {name} were removed and are now open.'
+            message = f'Request approved. {removed} scheduled shift(s) for {name} were removed and are now open.'
     else:
-        message = 'Time off denied.'
+        message = 'Request denied.'
     return jsonify({'success': True, 'message': message, 'pto_request': pto.to_dict(), 'shifts_removed': removed})
 
 

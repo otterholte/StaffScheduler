@@ -709,6 +709,9 @@ class PTORequest(db.Model):
     
     # Type: 'vacation', 'sick', 'personal', 'other'
     pto_type = db.Column(db.String(20), default='vacation')
+    # Optional time window (decimal hours). Both None = the whole day.
+    start_hour = db.Column(db.Float, nullable=True)
+    end_hour = db.Column(db.Float, nullable=True)
     
     # Status: 'pending', 'approved', 'denied', 'cancelled'
     status = db.Column(db.String(20), default='pending')
@@ -738,6 +741,9 @@ class PTORequest(db.Model):
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'end_date': self.end_date.isoformat() if self.end_date else None,
             'pto_type': self.pto_type,
+            'start_hour': self.start_hour,
+            'end_hour': self.end_hour,
+            'all_day': self.start_hour is None and self.end_hour is None,
             'status': self.status,
             'employee_note': self.employee_note,
             'manager_note': self.manager_note,
@@ -923,6 +929,8 @@ _COLUMN_MIGRATIONS = [
     ('shift_swap_requests', 'open_for_swaps', 'BOOLEAN DEFAULT FALSE'),
     ('shift_swap_requests', 'counter_offer_for_id', 'INTEGER REFERENCES shift_swap_requests(id)'),
     ('shift_swap_requests', 'is_counter_offer', 'BOOLEAN DEFAULT FALSE'),
+    ('pto_requests', 'start_hour', 'FLOAT'),
+    ('pto_requests', 'end_hour', 'FLOAT'),
 ]
 
 

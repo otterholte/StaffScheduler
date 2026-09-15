@@ -256,7 +256,7 @@
                                 Specific dates
                             </h3>
                         </div>
-                        <p class="exceptions-hint">Going to be away one day, or free to pick up a day you normally can't? Add it here. Your weekly availability above stays the same.</p>
+                        <p class="exceptions-hint">Free to pick up a day you normally can't, or need a day off? Add the date here. Extra availability is saved right away; days off go to your manager to approve. Your weekly availability above stays the same.</p>
                         <button class="btn btn-primary exceptions-add-btn" id="addExceptionBtn" type="button">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -278,14 +278,14 @@
                                     <line x1="3" y1="10" x2="21" y2="10"></line>
                                     <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
                                 </svg>
-                                Time Off Requests
+                                Time off &amp; conflicts
                             </h3>
                             <button class="btn btn-sm btn-primary" id="newPtoRequestBtn">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                                     <line x1="12" y1="5" x2="12" y2="19"></line>
                                     <line x1="5" y1="12" x2="19" y2="12"></line>
                                 </svg>
-                                Request Time Off
+                                Request a day off or a conflict
                             </button>
                         </div>
                         <div class="pto-requests-list" id="ptoRequestsList">
@@ -296,8 +296,8 @@
                                     <path d="M16 2v4M8 2v4M3 10h18"></path>
                                     <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path>
                                 </svg>
-                                <p>No time off requests yet</p>
-                                <span>Click the button above to request time off</span>
+                                <p>No requests yet</p>
+                                <span>Vacation, sick days, another job, class, an appointment: anything you need to be off for goes here and your manager approves it.</span>
                             </div>
                         </div>
                     </div>
@@ -310,27 +310,35 @@
     <div class="modal-overlay" id="ptoRequestModal">
         <div class="modal-content pto-modal">
             <div class="modal-header">
-                <h2>Request Time Off</h2>
+                <h2>Request a day off or a conflict</h2>
                 <button class="modal-close" id="closePtoModal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="pto-form-group">
-                    <label for="ptoStartDate">Start Date *</label>
+                    <label for="ptoStartDate">Date *</label>
                     <input type="date" id="ptoStartDate" required>
                 </div>
                 
                 <div class="pto-form-group">
-                    <label for="ptoEndDate">End Date</label>
+                    <label for="ptoEndDate">Through (optional)</label>
                     <input type="date" id="ptoEndDate">
                     <span class="form-hint">Leave blank for single day</span>
                 </div>
                 
+                <label class="exc-allday"><input type="checkbox" id="ptoAllDay" checked> All day</label>
+                <div class="exc-times" id="ptoTimes" hidden>
+                    <div class="pto-form-group"><label for="ptoStartTime">From</label><input type="time" id="ptoStartTime" step="900"></div>
+                    <div class="pto-form-group"><label for="ptoEndTime">Until</label><input type="time" id="ptoEndTime" step="900"></div>
+                </div>
                 <div class="pto-form-group">
-                    <label for="ptoType">Type</label>
+                    <label for="ptoType">Reason</label>
                     <select id="ptoType">
                         <option value="vacation">🌴 Vacation</option>
                         <option value="sick">🤒 Sick</option>
                         <option value="personal">👤 Personal</option>
+                        <option value="other_job">💼 Other job</option>
+                        <option value="school">🎓 School or class</option>
+                        <option value="appointment">🗓️ Appointment</option>
                         <option value="other">📋 Other</option>
                     </select>
                 </div>
@@ -339,6 +347,7 @@
                     <label for="ptoNote">Note (optional)</label>
                     <textarea id="ptoNote" placeholder="Add any details about your request..." rows="2"></textarea>
                 </div>
+                <p class="exceptions-hint" id="ptoApprovalHint">This goes to your manager. You stay schedulable until they approve it.</p>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-secondary" id="cancelPtoBtn">Cancel</button>

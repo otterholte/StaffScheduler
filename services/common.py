@@ -14,6 +14,33 @@ from flask import current_app, jsonify, request
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 DAY_NAMES_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
+# Reasons an employee can ask not to be scheduled. Only the label differs to
+# the scheduler; every approved request blocks the same way.
+REQUEST_TYPES = {
+    'vacation': 'Vacation',
+    'sick': 'Sick',
+    'personal': 'Personal',
+    'other_job': 'Other job',
+    'school': 'School or class',
+    'appointment': 'Appointment',
+    'other': 'Other',
+}
+
+
+def request_type_label(pto_type) -> str:
+    return REQUEST_TYPES.get(pto_type or 'other', str(pto_type or 'Other').replace('_', ' ').title())
+
+
+def format_hour_minute(value) -> str:
+    """17.5 -> '5:30pm', 9.0 -> '9am'."""
+    if value is None:
+        return ''
+    hour = int(value) % 24
+    minutes = int(round((float(value) - int(value)) * 60))
+    suffix = 'am' if hour < 12 else 'pm'
+    h12 = hour % 12 or 12
+    return f"{h12}:{minutes:02d}{suffix}" if minutes else f"{h12}{suffix}"
+
 # URL page slugs <-> internal tab ids used by the manager app
 PAGE_SLUGS = {
     'schedule': 'schedule',

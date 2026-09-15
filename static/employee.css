@@ -5767,3 +5767,12 @@ body.agenda-active .upcoming-shifts-card { display: none; }
     width: 100%; padding: 0.6rem 0.875rem; background: var(--bg-secondary); border: 1px solid var(--border-color);
     border-radius: 8px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; min-height: 44px; box-sizing: border-box;
 }
+
+.pto-request-window, .manager-pto-window { font-weight: 500; color: var(--text-secondary); font-size: 0.85em; margin-left: 0.35rem; }
+.exc-modal .pto-form-group, .pto-modal .exc-times .pto-form-group { margin-bottom: 0; }
+.pto-modal .exc-allday { margin: 0.25rem 0 0.75rem; }
+.pto-modal .exc-times { margin-bottom: 1rem; }
+.pto-modal input[type="time"] {
+    width: 100%; padding: 0.6rem 0.875rem; background: var(--bg-secondary); border: 1px solid var(--border-color);
+    border-radius: 8px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; min-height: 44px; box-sizing: border-box;
+}
