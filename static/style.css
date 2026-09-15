@@ -12871,3 +12871,46 @@ body[data-theme="light"] .simple-schedule-table .emp-row.expanded .emp-name-text
 .cov-applied button:hover { background: rgba(245, 158, 11, 0.25); }
 
 .manager-pto-window { font-weight: 500; color: var(--text-secondary); font-size: 0.85em; margin-left: 0.35rem; }
+
+/* ==================== Edit Employee: use the desktop width (Sep 2026) ==================== */
+#employeeModal .modal-content { max-width: 1040px; }
+@media (min-width: 1000px) {
+    #employeeModal .modal-body { padding: 1.75rem 2.25rem; }
+    #employeeModal #employeeForm { display: grid; grid-template-columns: 1fr 1fr; column-gap: 2.5rem; row-gap: 0.25rem; align-items: start; }
+    #employeeModal .form-section { margin-bottom: 1.25rem; }
+    /* Basic info + portal access on the left; hours, roles and rules on the right */
+    #employeeModal .form-section:nth-of-type(1) { grid-column: 1; grid-row: 1; }
+    #employeeModal .form-section.invite-section { grid-column: 1; grid-row: 2; }
+    #employeeModal .form-section:nth-of-type(3) { grid-column: 2; grid-row: 1; }
+    #employeeModal .form-section:nth-of-type(4) { grid-column: 2; grid-row: 2; }
+    #employeeModal .form-section:nth-of-type(5) { grid-column: 2; grid-row: 3; }
+}
+
+/* Specific dates: stands apart from the weekly grid */
+.availability-exceptions {
+    border: 1px solid rgba(70, 125, 246, 0.45);
+    background: linear-gradient(135deg, rgba(70, 125, 246, 0.12), rgba(168, 85, 247, 0.08));
+    box-shadow: inset 4px 0 0 var(--accent-primary);
+    padding: 1rem 1.25rem 1.1rem;
+}
+.availability-exceptions .availability-section-title { color: var(--accent-primary); }
+.avail-exc-add.btn-secondary {
+    background: linear-gradient(135deg, #467df6, #a855f7);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 4px 14px -6px rgba(70, 125, 246, 0.8);
+}
+.avail-exc-add.btn-secondary:hover:not(:disabled) { filter: brightness(1.08); border-color: transparent; background: linear-gradient(135deg, #467df6, #a855f7); }
+
+/* Exception modal: the "when" controls sit together in one quiet box */
+.exc-when {
+    margin-top: 0.25rem;
+    padding: 0.9rem 1rem 1rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+}
+.exc-when .exc-when-title { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); margin: 0 0 0.6rem; }
+.exc-when .cov-form-grid label:first-child, .exc-when .cov-form-grid label:nth-child(2) { margin-top: 0; }
+.exc-when .exc-allday { margin: 0.8rem 0 0; }
+.exc-when #excTimes { margin-top: 0.6rem; }

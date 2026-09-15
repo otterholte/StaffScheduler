@@ -655,14 +655,17 @@ function openExceptionModal(opts) {
                         <button type="button" class="exc-kind-btn active" data-kind="unavailable">Can't work</button>
                         <button type="button" class="exc-kind-btn" data-kind="available">Can work</button>
                     </div>
-                    <div class="cov-form-grid">
-                        <label>Date<input type="date" id="excDate" class="form-input"></label>
-                        <label>Through (optional)<input type="date" id="excEndDate" class="form-input"></label>
-                    </div>
-                    <label class="exc-allday"><input type="checkbox" id="excAllDay" checked> All day</label>
-                    <div class="cov-form-grid" id="excTimes" hidden>
-                        <label>From<input type="time" id="excStart" class="form-input" step="900"></label>
-                        <label>Until<input type="time" id="excEnd" class="form-input" step="900"></label>
+                    <div class="exc-when">
+                        <p class="exc-when-title">When</p>
+                        <div class="cov-form-grid">
+                            <label>Date<input type="date" id="excDate" class="form-input"></label>
+                            <label>Through (optional)<input type="date" id="excEndDate" class="form-input"></label>
+                        </div>
+                        <label class="exc-allday"><input type="checkbox" id="excAllDay" checked> All day</label>
+                        <div class="cov-form-grid" id="excTimes" hidden>
+                            <label>From<input type="time" id="excStart" class="form-input" step="900"></label>
+                            <label>Until<input type="time" id="excEnd" class="form-input" step="900"></label>
+                        </div>
                     </div>
                     <label class="cov-field">Note (optional)<input type="text" id="excNote" class="form-input" placeholder="Dentist, covering for a friend, …" maxlength="120"></label>
                     <p class="cov-modal-hint">Only these dates change. The usual weekly availability stays the same.</p>
