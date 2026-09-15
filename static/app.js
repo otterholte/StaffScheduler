@@ -348,6 +348,7 @@ async function loadScheduleForCurrentBusiness(renderAfterLoad = true) {
     
     // Load approved PTO for the current week
     await loadApprovedPTOForWeek();
+    if (typeof loadWeekContext === 'function') await loadWeekContext();
 
     // Metrics, notes and per-person hours for whatever we loaded
     if (scheduleLoaded && state.currentSchedule) {
@@ -4626,12 +4627,14 @@ function packIntoLanes(items, dayIdx, roleId, compact = false) {
 function employeeAvailableHours(emp, dayIdx) {
     const set = new Set();
     (emp?.availability || []).forEach(s => { if (parseInt(s.day) === dayIdx) set.add(parseInt(s.hour)); });
+    if (emp && typeof applyExceptionsToHours === 'function') applyExceptionsToHours(emp.id, dayIdx, set);
     return set;
 }
 
 /** True when the employee has approved time off on the given day of the current week. */
 function employeeHasTimeOff(empId, dayIdx) {
     const dayDate = getWeekDates(state.weekOffset)[dayIdx];
+    if (typeof employeeUnavailableAllDayByException === 'function' && employeeUnavailableAllDayByException(empId, dayIdx)) return true;
     return (state.approvedPTO || []).some(pto => {
         if (pto.employee_id !== empId) return false;
         const start = new Date(pto.start_date + 'T00:00:00');
@@ -5097,12 +5100,12 @@ function attachTimelineDropHandlers(lanes, dayIdx, roleId) {
     });
 }
 
-function buildTimelinePtoRow(dayPTO) {
+function buildTimelinePtoRow(dayPTO, dayExceptions = []) {
     const roleRow = document.createElement('div');
     roleRow.className = 'timeline-role-row timeline-pto-role-row';
     const label = document.createElement('div');
     label.className = 'timeline-role-label';
-    label.innerHTML = `<span class="role-dot" style="background:#8b5cf6"></span><span class="role-label-text">Time off</span>`;
+    label.innerHTML = `<span class="role-dot" style="background:#8b5cf6"></span><span class="role-label-text">${dayPTO.length ? 'Time off' : 'Availability'}</span>`;
     const lanes = document.createElement('div');
     lanes.className = 'timeline-role-lanes';
     lanes.style.setProperty('--hours', state.hours.length);
@@ -5118,6 +5121,18 @@ function buildTimelinePtoRow(dayPTO) {
         ptoBlock.innerHTML = `<span class="pto-icon">${getPTOTypeEmoji(pto.pto_type)}</span><span class="pto-label">${escHtml(empName)} - ${escHtml(capitalizeFirst(pto.pto_type))}</span>`;
         ptoBlock.title = `${empName}: ${capitalizeFirst(pto.pto_type)} (${pto.start_date} - ${pto.end_date})`;
         lane.appendChild(ptoBlock);
+    });
+    (dayExceptions || []).forEach(exc => {
+        const block = document.createElement('div');
+        block.className = `timeline-exc-block ${exc.kind}`;
+        const totalHours = state.hours.length;
+        const lo = exc.all_day ? state.startHour : Math.max(state.startHour, Math.floor(exc.start_hour));
+        const hi = exc.all_day ? state.endHour : Math.min(state.endHour, Math.ceil(exc.end_hour));
+        block.style.left = `${(state.hours.indexOf(lo) / totalHours) * 100}%`;
+        block.style.width = `${((hi - lo) / totalHours) * 100}%`;
+        block.innerHTML = `<span class="pto-label">${escHtml(exceptionText(exc))}</span>`;
+        block.title = `${exceptionText(exc)} (this date only)${exc.note ? `\n${exc.note}` : ''}`;
+        lane.appendChild(block);
     });
     lanes.appendChild(lane);
     roleRow.append(label, lanes);
@@ -5208,7 +5223,8 @@ function renderTimelineView(schedule) {
             const ptoEnd = new Date(pto.end_date + 'T00:00:00');
             return dayDate >= ptoStart && dayDate <= ptoEnd;
         });
-        if (dayPTO.length > 0) slotsDiv.appendChild(buildTimelinePtoRow(dayPTO));
+        const dayExceptions = typeof exceptionsForDate === 'function' ? exceptionsForDate(dayIdx) : [];
+        if (dayPTO.length > 0 || dayExceptions.length > 0) slotsDiv.appendChild(buildTimelinePtoRow(dayPTO, dayExceptions));
 
         // Shifts and open hours for the day, grouped by role (search hides other people's bars)
         const segments = buildTimelineSegmentsForDay(slotAssignments, dayIdx).filter(s => personMatches(s.empId));
@@ -5305,7 +5321,7 @@ function renderTimelineView(schedule) {
  * Coverage requirements for this business as a map "day,hour,role" -> {min, max, is_peak}.
  * Uses the shift templates in shifts mode, otherwise the stored requirements.
  */
-function getWeekCoverageRequirements() {
+function getWeekCoverageRequirements(includeOverrides = true) {
     const req = {};
     const add = (d, h, r, min, max, peak) => {
         const key = `${d},${h},${r}`;
@@ -5331,6 +5347,7 @@ function getWeekCoverageRequirements() {
             }
         });
     }
+    if (includeOverrides && typeof applyWeekOverridesToReq === 'function') applyWeekOverridesToReq(req);
     return req;
 }
 
@@ -5973,10 +5990,10 @@ function addShiftToSchedule(empId, dayIdx, startHour, endHour, roleId) {
 }
 
 function checkEmployeeAvailability(emp, day, startHour, endHour) {
-    // Check if employee is available for all hours in the range
+    // Check if employee is available for all hours in the range (date exceptions included)
+    const hours = employeeAvailableHours(emp, day);
     for (let hour = startHour; hour < endHour; hour++) {
-        const isAvailable = emp.availability.some(slot => slot.day === day && slot.hour === hour);
-        if (!isAvailable) return false;
+        if (!hours.has(hour)) return false;
         
         // Check if it's time off
         const isTimeOff = emp.time_off && emp.time_off.some(slot => slot.day === day && slot.hour === hour);
@@ -8219,6 +8236,7 @@ function showAvailabilityPanel(empId) {
 
     // Render table view
     renderManagerAvailabilityTable(emp);
+    if (typeof renderAvailabilityExceptions === 'function') renderAvailabilityExceptions(empId);
 }
 
 function navigateToStaffAndEdit(empId) {

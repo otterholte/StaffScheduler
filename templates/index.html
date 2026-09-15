@@ -272,6 +272,13 @@
                         <h1>Weekly Schedule</h1>
                     </div>
                     <div class="tab-header-right">
+                        <button id="editWeekBtn" class="btn btn-secondary edit-week-btn" type="button" title="Change what this week needs: more or fewer people on a day, a private event, a holiday. Your normal staffing stays the same.">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 20h9"></path>
+                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                            </svg>
+                            <span class="btn-label">Edit This Week</span>
+                        </button>
                         <button id="generateBtn" class="btn btn-primary" title="Create an optimal schedule based on your employees and settings">
                             <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
@@ -366,6 +373,7 @@
                                     </div>
                                 </div>
                                 <div class="toolbar-right">
+                                    <button type="button" class="week-changes-chip" id="weekChangesChip" hidden></button>
                                     <!-- Color Mode Toggle (icons only) -->
                                     <div class="color-mode-toggle color-mode-icons" id="colorModeToggle">
                                         <button class="color-mode-btn active" data-mode="role" title="Color by Role">
@@ -422,6 +430,25 @@
                                     </table>
                                     <!-- Shift blocks overlay -->
                                     <div class="schedule-events" id="scheduleEvents"></div>
+                                </div>
+                            </div>
+
+                            <!-- Edit This Week: staffing needs for this week only -->
+                            <div class="schedule-view schedule-view-editweek" id="scheduleViewEditWeek">
+                                <div class="edit-week-banner">
+                                    <div class="edit-week-banner-text">
+                                        <strong>Editing this week's staffing needs</strong>
+                                        <span id="editWeekCount">No changes yet.</span>
+                                    </div>
+                                    <div class="edit-week-banner-actions">
+                                        <button type="button" class="btn btn-sm btn-ghost" id="editWeekTemplatesBtn">Templates</button>
+                                        <button type="button" class="btn btn-sm btn-ghost" id="editWeekResetBtn" disabled>Reset week to normal</button>
+                                        <button type="button" class="btn btn-sm btn-primary" id="editWeekDoneBtn">Done</button>
+                                    </div>
+                                </div>
+                                <p class="edit-week-help">Each bar is a role that needs people. Click a bar to change how many for this week, add a need to a day, or apply a saved event. Amber means different from normal.</p>
+                                <div class="timeline-wrapper">
+                                    <div class="timeline-grid coverage-editor" id="coverageEditorGrid"></div>
                                 </div>
                             </div>
 
@@ -694,7 +721,17 @@
                                 </div>
                             </div>
                             <div class="availability-details-card" id="availPanelDetails"></div>
-                            <h3 class="availability-section-title">Availability</h3>
+                            <div class="availability-exceptions" id="availExceptions">
+                                <div class="avail-exc-head">
+                                    <div>
+                                        <h3 class="availability-section-title">Specific dates</h3>
+                                        <p class="avail-exc-hint">One-off changes: a day they can't work, or a day they can work that they normally don't. Their weekly availability below stays the same.</p>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary avail-exc-add" id="availAddExceptionBtn">+ Add a date exception</button>
+                                </div>
+                                <div class="avail-exc-list" id="availExceptionsList"></div>
+                            </div>
+                            <h3 class="availability-section-title">Weekly availability</h3>
                             <!-- Table View -->
                             <div class="availability-table-view manager-avail-table" id="managerAvailTableView">
                                 <!-- Dynamically generated -->
@@ -1849,5 +1886,6 @@
         };
     </script>
     <script src="{{ asset('app.js') }}"></script>
+    <script src="{{ asset('week_edit.js') }}"></script>
 </body>
 </html>

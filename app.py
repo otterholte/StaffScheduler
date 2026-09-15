@@ -37,7 +37,7 @@ from werkzeug.exceptions import HTTPException
 from auth import auth_bp
 from config import get_config
 from models import User, init_db
-from routes import employee_api_bp, manager_api_bp, pages_bp, schedule_api_bp
+from routes import employee_api_bp, manager_api_bp, pages_bp, schedule_api_bp, week_api_bp
 
 
 def create_app() -> Flask:
@@ -72,6 +72,7 @@ def create_app() -> Flask:
     app.register_blueprint(manager_api_bp)
     app.register_blueprint(schedule_api_bp)
     app.register_blueprint(employee_api_bp)
+    app.register_blueprint(week_api_bp)
 
     _register_error_handlers(app)
 

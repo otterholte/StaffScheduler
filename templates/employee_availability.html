@@ -242,6 +242,31 @@
                         </div>
                     </div>
 
+                    <!-- Date exceptions: one-off changes for specific dates -->
+                    <div class="exceptions-card panel-card" id="exceptionsCard">
+                        <div class="pto-header">
+                            <h3 class="card-title">
+                                <svg class="card-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                    <path d="M9 16l2 2 4-4"></path>
+                                </svg>
+                                Specific dates
+                            </h3>
+                        </div>
+                        <p class="exceptions-hint">Going to be away one day, or free to pick up a day you normally can't? Add it here. Your weekly availability above stays the same.</p>
+                        <button class="btn btn-primary exceptions-add-btn" id="addExceptionBtn" type="button">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Add a date exception
+                        </button>
+                        <div class="exceptions-list" id="exceptionsList"></div>
+                    </div>
+
                     <!-- PTO Requests Section -->
                     <div class="pto-requests-card panel-card">
                         <div class="pto-header">

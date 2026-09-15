@@ -23,6 +23,7 @@ from services.business_context import (
 )
 from services.common import DAY_NAMES, format_shift_time, json_error, parse_week_start, request_json
 from services.notifications import contact_for, notify_schedule_published
+from services.week_overrides import scenario_for_week
 import db_service
 
 schedule_api_bp = Blueprint('schedule_api', __name__)
@@ -44,8 +45,9 @@ def _start(kind: str):
     week_start = _week_from_request(data)
     is_demo = is_demo_id(scenario.id)
 
-    # The solver works on a copy that has approved time off blocked out
-    working = scenario_with_time_off(scenario, week_start)
+    # The solver works on a copy: time off blocked, date exceptions applied,
+    # and this week's staffing edits merged over the default requirements
+    working = scenario_for_week(scenario, week_start)
 
     owner_id = current_user.id if current_user.is_authenticated else None
     job_id = schedule_jobs.start_job(

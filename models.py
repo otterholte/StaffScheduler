@@ -747,6 +747,99 @@ class PTORequest(db.Model):
         }
 
 
+class WeekOverride(db.Model):
+    """This-week-only changes to staffing needs (see services/week_overrides.py).
+
+    One row per business per week. The JSON is a small document:
+    {"days": {"4": {"clear": false, "entries": [{"mode": "set"|"add", "role_id": ..,
+                    "start_hour": 17, "end_hour": 22, "count": 3, "label": "Game Night"}]}}}
+    Default staffing (shift templates / role coverage) is never modified.
+    """
+    __tablename__ = 'week_overrides'
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False, index=True)
+    week_start_date = db.Column(db.Date, nullable=False)
+    overrides_json = db.Column(db.Text, default='{}')
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('business_db_id', 'week_start_date', name='uq_week_override'),)
+
+    def get_overrides(self):
+        try:
+            data = json.loads(self.overrides_json or '{}')
+        except json.JSONDecodeError:
+            data = {}
+        return data if isinstance(data, dict) else {}
+
+    def set_overrides(self, data):
+        self.overrides_json = json.dumps(data or {})
+
+
+class EventTemplate(db.Model):
+    """A reusable set of staffing needs for a day ("Private Event", "Game Night").
+
+    `mode` is 'add' (on top of the normal day) or 'replace' (instead of it).
+    `items_json`: [{"role_id": .., "start_hour": 16, "end_hour": 23, "count": 6}]
+    """
+    __tablename__ = 'event_templates'
+
+    id = db.Column(db.Integer, primary_key=True)
+    template_id = db.Column(db.String(40), unique=True, nullable=False, default=generate_uuid)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False)
+    mode = db.Column(db.String(10), default='add')
+    items_json = db.Column(db.Text, default='[]')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def get_items(self):
+        try:
+            items = json.loads(self.items_json or '[]')
+        except json.JSONDecodeError:
+            items = []
+        return items if isinstance(items, list) else []
+
+    def set_items(self, items):
+        self.items_json = json.dumps(items or [])
+
+    def to_dict(self):
+        return {'id': self.template_id, 'name': self.name, 'mode': self.mode or 'add', 'items': self.get_items(),
+                'created_at': self.created_at.isoformat() if self.created_at else None}
+
+
+class AvailabilityException(db.Model):
+    """A one-off change to someone's availability on a specific date.
+
+    kind: 'available' (can work that date, optionally only start..end) or
+          'unavailable' (cannot work that date, optionally only start..end).
+    Hours are decimal (17.5 = 5:30pm); both None means the whole day.
+    """
+    __tablename__ = 'availability_exceptions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    exception_id = db.Column(db.String(40), unique=True, nullable=False, default=generate_uuid)
+    business_db_id = db.Column(db.Integer, db.ForeignKey('businesses.id', ondelete='CASCADE'), nullable=False, index=True)
+    employee_id = db.Column(db.String(50), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
+    kind = db.Column(db.String(20), default='unavailable')
+    start_hour = db.Column(db.Float, nullable=True)
+    end_hour = db.Column(db.Float, nullable=True)
+    note = db.Column(db.Text, nullable=True)
+    created_by = db.Column(db.String(20), default='manager')  # 'manager' | 'employee'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.exception_id, 'employee_id': self.employee_id,
+            'date': self.date.isoformat() if self.date else None,
+            'kind': self.kind or 'unavailable',
+            'start_hour': self.start_hour, 'end_hour': self.end_hour,
+            'all_day': self.start_hour is None and self.end_hour is None,
+            'note': self.note or '', 'created_by': self.created_by or 'manager',
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class ScheduleJob(db.Model):
     """A background schedule-generation job.
 

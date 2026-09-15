@@ -1836,6 +1836,142 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+
+// ==================== DATE EXCEPTIONS (My Availability) ====================
+// One-off "can't work" / "can work" for a specific date. The weekly grid stays
+// the recurring truth; these override it for that date only.
+
+function excFormatDate(iso) {
+    return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function excFormatHour(time) {
+    const hour = Math.floor(time), minutes = Math.round((time - hour) * 60);
+    const period = hour >= 12 ? 'pm' : 'am';
+    const h = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return minutes ? `${h}:${String(minutes).padStart(2, '0')}${period}` : `${h}${period}`;
+}
+function excTimeToHours(v) { if (!v) return null; const [h, m] = v.split(':').map(Number); return h + (m || 0) / 60; }
+
+function ensureExceptionModal() {
+    let el = document.getElementById('exceptionModal');
+    if (el) return el;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+        <div class="modal-overlay exc-modal" id="exceptionModal">
+            <div class="modal-content pto-modal">
+                <div class="modal-header"><h2>Add a date exception</h2><button class="modal-close" data-close aria-label="Close">&times;</button></div>
+                <div class="modal-body">
+                    <div class="exc-kind" role="radiogroup">
+                        <button type="button" class="exc-kind-btn active" data-kind="unavailable">Can't work</button>
+                        <button type="button" class="exc-kind-btn" data-kind="available">Can work</button>
+                    </div>
+                    <div class="pto-form-group"><label for="excDate">Date</label><input type="date" id="excDate"></div>
+                    <div class="pto-form-group"><label for="excEndDate">Through (optional)</label><input type="date" id="excEndDate"><span class="form-hint">Leave blank for a single day</span></div>
+                    <label class="exc-allday"><input type="checkbox" id="excAllDay" checked> All day</label>
+                    <div class="exc-times" id="excTimes" hidden>
+                        <div class="pto-form-group"><label for="excStart">From</label><input type="time" id="excStart" step="900"></div>
+                        <div class="pto-form-group"><label for="excEnd">Until</label><input type="time" id="excEnd" step="900"></div>
+                    </div>
+                    <div class="pto-form-group"><label for="excNote">Note (optional)</label><input type="text" id="excNote" placeholder="Dentist, family visit, happy to cover…" maxlength="120"></div>
+                    <p class="exceptions-hint">Only these dates change. Your manager sees it right away.</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-close type="button">Cancel</button>
+                    <button class="btn btn-primary" id="excSave" type="button">Save</button>
+                </div>
+            </div>
+        </div>`;
+    el = wrap.firstElementChild;
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => { if (e.target === el) el.classList.remove('active'); });
+    el.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => el.classList.remove('active')));
+    return el;
+}
+
+function openExceptionModal(onSave) {
+    const el = ensureExceptionModal();
+    let kind = 'unavailable';
+    el.querySelectorAll('.exc-kind-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.kind === kind);
+        b.onclick = () => { kind = b.dataset.kind; el.querySelectorAll('.exc-kind-btn').forEach(x => x.classList.toggle('active', x === b)); };
+    });
+    const dateEl = el.querySelector('#excDate'), endEl = el.querySelector('#excEndDate'), allDay = el.querySelector('#excAllDay');
+    const times = el.querySelector('#excTimes'), startEl = el.querySelector('#excStart'), endTimeEl = el.querySelector('#excEnd'), note = el.querySelector('#excNote');
+    const t = new Date(); const iso = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+    dateEl.min = iso; endEl.min = iso; dateEl.value = ''; endEl.value = ''; allDay.checked = true; times.hidden = true; note.value = '';
+    startEl.value = `${String(employeeState.startHour).padStart(2, '0')}:00`;
+    endTimeEl.value = `${String(Math.min(23, employeeState.endHour)).padStart(2, '0')}:00`;
+    allDay.onchange = () => { times.hidden = allDay.checked; };
+    dateEl.onchange = () => { endEl.min = dateEl.value || iso; };
+    el.querySelector('#excSave').onclick = async () => {
+        if (!dateEl.value) { showToast('Pick a date', 'error'); dateEl.focus(); return; }
+        const payload = { date: dateEl.value, end_date: endEl.value || null, kind, all_day: allDay.checked, note: note.value.trim() };
+        if (!allDay.checked) {
+            payload.start_hour = excTimeToHours(startEl.value); payload.end_hour = excTimeToHours(endTimeEl.value);
+            if (payload.start_hour === null || payload.end_hour === null || payload.end_hour <= payload.start_hour) { showToast('The end time must be after the start time', 'error'); return; }
+        }
+        const ok = await onSave(payload);
+        if (ok !== false) el.classList.remove('active');
+    };
+    el.classList.add('active');
+}
+
+function renderExceptionsList(items) {
+    const list = document.getElementById('exceptionsList');
+    if (!list) return;
+    if (!items.length) {
+        list.innerHTML = '<div class="exceptions-empty">No date exceptions yet.</div>';
+        return;
+    }
+    list.innerHTML = items.map(e => `
+        <div class="exc-item ${escapeHtml(e.kind)}" data-id="${escapeHtml(e.id)}">
+            <div class="exc-item-main">
+                <span class="exc-item-date">${excFormatDate(e.date)}</span>
+                <span class="exc-item-text"><strong>${e.kind === 'available' ? 'Can work' : "Can't work"}</strong> ${e.all_day ? 'all day' : `${excFormatHour(e.start_hour)} – ${excFormatHour(e.end_hour)}`}</span>
+                ${e.note ? `<span class="exc-item-note">${escapeHtml(e.note)}</span>` : ''}
+                ${e.created_by === 'manager' ? '<span class="exc-item-by">added by your manager</span>' : ''}
+            </div>
+            <button type="button" class="exc-item-delete" aria-label="Remove">&times;</button>
+        </div>`).join('');
+    list.querySelectorAll('.exc-item-delete').forEach(btn => btn.addEventListener('click', async () => {
+        const id = btn.closest('.exc-item').dataset.id;
+        const empId = employeeState.employee.db_id;
+        try {
+            const res = await fetch(`/api/employee/${empId}/exceptions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            renderExceptionsList(data.exceptions || []);
+            showToast('Removed', 'success');
+        } catch (err) { showToast(err.message || 'Could not remove', 'error'); }
+    }));
+}
+
+async function loadExceptions() {
+    const empId = employeeState.employee.db_id;
+    try {
+        const res = await fetch(`/api/employee/${empId}/exceptions`);
+        const data = await res.json();
+        renderExceptionsList(data.exceptions || []);
+    } catch (err) { renderExceptionsList([]); }
+}
+
+function initDateExceptions() {
+    const btn = document.getElementById('addExceptionBtn');
+    if (!btn) return;
+    btn.addEventListener('click', () => openExceptionModal(async (payload) => {
+        const empId = employeeState.employee.db_id;
+        try {
+            const res = await fetch(`/api/employee/${empId}/exceptions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            renderExceptionsList(data.exceptions || []);
+            showToast(payload.kind === 'available' ? 'Saved. Your manager can now schedule you then.' : 'Saved. You won\'t be scheduled then.', 'success');
+            return true;
+        } catch (err) { showToast(err.message || 'Could not save', 'error'); return false; }
+    }));
+    loadExceptions();
+}
+
 // ==================== AVAILABILITY EDITOR ====================
 const DAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -4835,6 +4971,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (availabilityCardsView) {
         initAvailabilityEditor();
         initPTORequests();
+        initDateExceptions();
         initPTONotifications(); // Also show PTO notifications on availability page
     }
 });
