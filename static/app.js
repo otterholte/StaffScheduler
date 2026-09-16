@@ -2391,6 +2391,7 @@ async function switchBusiness(businessId, updateHistory = true) {
                 state.business.slug = data.slug;
             }
             
+            if (typeof updateOpenHoursLabel === 'function') updateOpenHoursLabel();
             buildLookups();
             rebuildScheduleGrid();
             renderEmployeeHoursList();
@@ -9564,6 +9565,143 @@ function renderCoverageUI() {
     renderShiftTemplates();
 }
 
+// ==================== OPEN HOURS ====================
+// The business's opening/closing hours and open days drive every schedule
+// view, the Add Shift time lists, and which shift hours the solver sees.
+
+function describeDaysOpen(days) {
+    const d = [...(days || [])].sort((a, b) => a - b);
+    if (d.length === 7) return 'every day';
+    if (!d.length) return 'no days';
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const contiguous = d.every((v, i) => i === 0 || v === d[i - 1] + 1);
+    return contiguous && d.length > 2 ? `${names[d[0]]}–${names[d[d.length - 1]]}` : d.map(v => names[v]).join(', ');
+}
+
+function updateOpenHoursLabel() {
+    const label = document.getElementById('openHoursLabel');
+    if (label) label.textContent = `Open ${formatHour(state.startHour)} – ${formatHour(state.endHour)} · ${describeDaysOpen(state.daysOpen)}`;
+}
+
+/** Re-draw whichever schedule view is showing (after hours, days, or data change). */
+function rerenderCurrentScheduleView() {
+    const sched = state.currentSchedule;
+    if (state.scheduleViewMode === 'grid') {
+        rebuildScheduleGrid();
+        if (sched) renderSchedule(sched);
+    } else if (state.scheduleViewMode === 'table') {
+        renderSimpleTableView(sched || { slot_assignments: {} });
+    } else {
+        renderTimelineView(sched || {});
+    }
+}
+
+/** Apply new opening/closing hours and open days everywhere they are used. */
+function applyOperatingHours(hours, daysOpen) {
+    if (hours) {
+        state.startHour = parseInt(hours.start_hour);
+        state.endHour = parseInt(hours.end_hour);
+    }
+    if (Array.isArray(daysOpen)) state.daysOpen = daysOpen.map(Number).sort((a, b) => a - b);
+    state.hours = [];
+    for (let h = state.startHour; h < state.endHour; h++) state.hours.push(h);
+    if (state.business) {
+        state.business.start_hour = state.startHour;
+        state.business.end_hour = state.endHour;
+        state.business.days_open = state.daysOpen;
+    }
+    updateOpenHoursLabel();
+    // Requirements calendar follows the business-hours range
+    if (typeof calendarState !== 'undefined') {
+        calendarState.viewStartHour = calendarState.timeRange === 'full' ? 0 : state.startHour;
+        calendarState.viewEndHour = calendarState.timeRange === 'full' ? 24 : state.endHour;
+        const grid = document.getElementById('calendarGrid');
+        const container = document.getElementById('calendarContainer');
+        if (grid) buildCalendarGrid(grid, container);
+        renderShiftTemplates();
+    }
+    if (typeof renderStaffingGrid === 'function') renderStaffingGrid();
+    if (typeof renderRoleCoverageEditor === 'function') renderRoleCoverageEditor();
+    // Schedule page
+    rebuildScheduleGrid();
+    if (state.currentSchedule && state.currentSchedule.slot_assignments && typeof recomputeCoverageGaps === 'function') {
+        recomputeCoverageGaps();
+        try { updateMetrics(state.currentSchedule); updateEmployeeHours(state.currentSchedule); } catch (err) { /* panel may be closed */ }
+    }
+    rerenderCurrentScheduleView();
+    if (state.editWeekMode && typeof renderCoverageEditor === 'function') renderCoverageEditor();
+}
+
+function openOpenHoursModal() {
+    const startSel = document.getElementById('openHoursStart');
+    const endSel = document.getElementById('openHoursEnd');
+    const daysEl = document.getElementById('openHoursDays');
+    if (!startSel || !endSel || !daysEl) return;
+    startSel.innerHTML = '';
+    endSel.innerHTML = '';
+    for (let h = 0; h <= 24; h++) {
+        if (h < 24) startSel.appendChild(new Option(formatHour(h), h));
+        if (h > 0) endSel.appendChild(new Option(h === 24 ? '12am (midnight)' : formatHour(h), h));
+    }
+    startSel.value = String(state.startHour);
+    endSel.value = String(state.endHour);
+    const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    daysEl.innerHTML = names.map((n, i) => `<button type="button" class="open-day${state.daysOpen.includes(i) ? ' active' : ''}" data-day="${i}">${n}</button>`).join('');
+    daysEl.querySelectorAll('.open-day').forEach(b => b.addEventListener('click', () => { b.classList.toggle('active'); updateOpenHoursWarning(); }));
+    startSel.onchange = updateOpenHoursWarning;
+    endSel.onchange = updateOpenHoursWarning;
+    updateOpenHoursWarning();
+    openModal('openHoursModal');
+}
+
+function updateOpenHoursWarning() {
+    const warn = document.getElementById('openHoursWarning');
+    if (!warn) return;
+    const start = parseInt(document.getElementById('openHoursStart').value);
+    const end = parseInt(document.getElementById('openHoursEnd').value);
+    const days = [...document.querySelectorAll('#openHoursDays .open-day.active')].map(b => parseInt(b.dataset.day));
+    const clipped = (state.shiftTemplates || []).filter(s => s.start_hour < start || s.end_hour > end || !(s.days || []).some(d => days.includes(d)));
+    if (end <= start) {
+        warn.hidden = false; warn.textContent = 'Closing time must be after opening time.';
+    } else if (clipped.length) {
+        warn.hidden = false;
+        warn.textContent = `Heads up: ${clipped.map(s => `"${s.name}"`).join(', ')} would fall outside these hours and would not be scheduled.`;
+    } else {
+        warn.hidden = true; warn.textContent = '';
+    }
+}
+
+async function saveOpenHours() {
+    const start = parseInt(document.getElementById('openHoursStart').value);
+    const end = parseInt(document.getElementById('openHoursEnd').value);
+    const days = [...document.querySelectorAll('#openHoursDays .open-day.active')].map(b => parseInt(b.dataset.day));
+    if (end <= start) { showToast('Closing time must be after opening time', 'error'); return; }
+    if (!days.length) { showToast('Choose at least one open day', 'error'); return; }
+    try {
+        const res = await fetch('/api/settings', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ businessId: state.business.id, hours: { start_hour: start, end_hour: end }, days_open: days }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Could not save');
+        applyOperatingHours(data.settings.hours, data.settings.days_open);
+        closeAllModals();
+        showToast(`Open ${formatHour(state.startHour)} – ${formatHour(state.endHour)}, ${describeDaysOpen(state.daysOpen)}`, 'success');
+        if (data.clipped_shifts && data.clipped_shifts.length) {
+            showToast(`${data.clipped_shifts.join(', ')} now falls outside your open hours and won't be scheduled`, 'warning');
+        }
+    } catch (err) {
+        showToast(err.message || 'Could not save open hours', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateOpenHoursLabel();
+    document.getElementById('openHoursBtn')?.addEventListener('click', openOpenHoursModal);
+    document.getElementById('openHoursSave')?.addEventListener('click', saveOpenHours);
+    document.querySelectorAll('#openHoursModal [data-close]').forEach(b => b.addEventListener('click', closeAllModals));
+});
+
 // ==================== CALENDAR WEEK VIEW ====================
 
 // Calendar state
@@ -9691,6 +9829,8 @@ function buildCalendarGrid(gridElement, containerElement) {
 }
 
 function setupCalendarDrag(gridElement, eventsElement, containerElement) {
+    if (gridElement._dragBound) return; // the grid is rebuilt in place; bind its listeners once
+    gridElement._dragBound = true;
     let startDay, startHour, currentDay, currentHour;
     let selectionEl = containerElement?.querySelector('.calendar-selection');
     
@@ -10320,6 +10460,10 @@ async function handleShiftSubmit(e) {
             renderShiftTemplates();
             closeAllModals();
             showToast(isNew ? 'Shift added' : 'Shift updated', 'success');
+            if (data.hours_changed && data.hours) {
+                applyOperatingHours(data.hours, data.days_open);
+                showToast(`Open hours are now ${formatHour(state.startHour)} – ${formatHour(state.endHour)} so this shift fits`, 'info');
+            }
         } else {
             showToast(data.message || 'Failed to save shift', 'error');
         }

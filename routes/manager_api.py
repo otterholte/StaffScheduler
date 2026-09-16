@@ -597,7 +597,11 @@ def update_settings():
         business.has_completed_setup = bool(data['has_completed_setup'])
     business.coverage_requirements = business.generate_coverage_requirements()
     persist(business)
-    return jsonify({'success': True, 'message': 'Settings saved',
+    # Shifts that now fall outside the hours are clipped, so tell the manager
+    clipped = [s.name for s in business.shift_templates
+               if s.start_hour < business.start_hour or s.end_hour > business.end_hour
+               or not any(d in business.days_open for d in s.days)]
+    return jsonify({'success': True, 'message': 'Settings saved', 'clipped_shifts': clipped,
                     'settings': {'hours': {'start_hour': business.start_hour, 'end_hour': business.end_hour},
                                  'days_open': business.days_open}})
 
@@ -694,6 +698,11 @@ def set_coverage_mode():
                     'coverage_count': len(business.coverage_requirements), 'message': f'Switched to {mode} mode'})
 
 
+def _hours_payload(business) -> dict:
+    return {'hours': {'start_hour': business.start_hour, 'end_hour': business.end_hour},
+            'days_open': business.days_open}
+
+
 def _shift_roles(items):
     out = []
     for req in items or []:
@@ -727,9 +736,11 @@ def add_shift_template():
         color=(data.get('color') or '#6366f1')[:20],
     )
     business.shift_templates.append(shift)
+    hours_changed = business.expand_hours_to_shifts()
     business.coverage_requirements = business.generate_coverage_requirements()
     persist(business)
-    return jsonify({'success': True, 'shift': shift.to_dict(), 'message': 'Shift added'})
+    return jsonify({'success': True, 'shift': shift.to_dict(), 'message': 'Shift added',
+                    'hours_changed': hours_changed, **_hours_payload(business)})
 
 
 @manager_api_bp.route('/api/settings/shifts/<shift_id>', methods=['PUT'])
@@ -753,9 +764,11 @@ def update_shift_template(shift_id):
         shift.color = str(data['color'])[:20]
     if 'roles' in data:
         shift.roles = _shift_roles(data['roles'])
+    hours_changed = business.expand_hours_to_shifts()
     business.coverage_requirements = business.generate_coverage_requirements()
     persist(business)
-    return jsonify({'success': True, 'shift': shift.to_dict(), 'message': 'Shift updated'})
+    return jsonify({'success': True, 'shift': shift.to_dict(), 'message': 'Shift updated',
+                    'hours_changed': hours_changed, **_hours_payload(business)})
 
 
 @manager_api_bp.route('/api/settings/shifts/<shift_id>', methods=['DELETE'])

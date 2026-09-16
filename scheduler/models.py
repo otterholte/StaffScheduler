@@ -667,6 +667,30 @@ class BusinessScenario:
 
     def get_operating_hours(self) -> range:
         return range(self.start_hour, self.end_hour)
+
+    def expand_hours_to_shifts(self) -> bool:
+        """Widen operating hours and open days so every shift template fits.
+
+        The shifts a manager draws on the Requirements calendar are the source
+        of truth for when the business needs people. Without this, a shift
+        drawn past closing time was silently clipped and nobody was scheduled
+        for those hours. Never narrows; returns True when something changed.
+        """
+        changed = False
+        for shift in self.shift_templates:
+            if shift.start_hour < self.start_hour:
+                self.start_hour = max(0, int(shift.start_hour))
+                changed = True
+            if shift.end_hour > self.end_hour:
+                self.end_hour = min(24, int(shift.end_hour))
+                changed = True
+            for day in shift.days:
+                if 0 <= int(day) <= 6 and int(day) not in self.days_open:
+                    self.days_open.append(int(day))
+                    changed = True
+        if changed:
+            self.days_open = sorted(set(self.days_open))
+        return changed
     
     def get_role_by_id(self, role_id: str) -> Optional[Role]:
         for role in self.roles:

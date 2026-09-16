@@ -751,6 +751,12 @@
                         <h1>Requirements</h1>
                         <p class="tab-subtitle">Define locations, qualifications, and shift coverage needs</p>
                     </div>
+                    <div class="tab-header-right">
+                        <button type="button" class="btn btn-secondary open-hours-btn" id="openHoursBtn" title="When the business is open. Shifts drawn on the calendar widen this automatically.">
+                            <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            <span id="openHoursLabel">Open hours</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Sub-tabs for Requirements -->
@@ -1269,6 +1275,39 @@
     </div>
 
     <!-- Confirm Dialog -->
+    <!-- Open hours + days -->
+    <div id="openHoursModal" class="modal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2>Open hours</h2>
+                <button class="modal-close" data-close="openHoursModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="section-hint" style="margin-top:0">The hours and days the schedule covers. Drawing a shift outside these hours widens them automatically; use this to narrow them.</p>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="openHoursStart">Opens</label>
+                        <select id="openHoursStart" class="time-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="openHoursEnd">Closes</label>
+                        <select id="openHoursEnd" class="time-select"></select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Days open</label>
+                    <div class="open-days" id="openHoursDays"></div>
+                </div>
+                <p class="section-hint" id="openHoursWarning" hidden></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-close="openHoursModal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="openHoursSave">Save</button>
+            </div>
+        </div>
+    </div>
+
     <div id="confirmModal" class="modal">
         <div class="modal-backdrop"></div>
         <div class="modal-content modal-sm">

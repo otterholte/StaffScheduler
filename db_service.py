@@ -140,6 +140,18 @@ def load_business_from_db(db_business: DBBusiness) -> BusinessScenario:
         emoji=db_business.emoji or '🏢',
         color=db_business.color or '#6366f1',
     )
+    # Shifts drawn past the stored opening/closing hours used to be clipped.
+    # Widen the hours to fit them and store the fix so every page agrees.
+    if scenario.expand_hours_to_shifts():
+        try:
+            db_business.start_hour = scenario.start_hour
+            db_business.end_hour = scenario.end_hour
+            db_business.set_days_open_list(scenario.days_open)
+            db.session.commit()
+            print(f"[DB] Widened hours for {scenario.id} to {scenario.start_hour}-{scenario.end_hour}, days {scenario.days_open}", flush=True)
+        except Exception as e:  # never block loading over this
+            db.session.rollback()
+            print(f"[DB] Could not store widened hours for {scenario.id}: {e}", flush=True)
     scenario.coverage_requirements = scenario.generate_coverage_requirements()
     return scenario
 

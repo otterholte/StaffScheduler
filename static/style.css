@@ -12914,3 +12914,13 @@ body[data-theme="light"] .simple-schedule-table .emp-row.expanded .emp-name-text
 .exc-when .cov-form-grid label:first-child, .exc-when .cov-form-grid label:nth-child(2) { margin-top: 0; }
 .exc-when .exc-allday { margin: 0.8rem 0 0; }
 .exc-when #excTimes { margin-top: 0.6rem; }
+
+/* Open hours control on the Requirements page (Sep 2026) */
+.open-hours-btn { white-space: nowrap; }
+.open-days { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.open-day {
+    min-width: 46px; padding: 0.45rem 0.6rem; border-radius: 8px; font: inherit; font-size: 0.8rem; font-weight: 600;
+    border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-secondary); cursor: pointer;
+}
+.open-day.active { background: var(--accent-primary); border-color: var(--accent-primary); color: #fff; }
+#openHoursWarning { color: var(--warning); margin-top: 0.75rem; }
