@@ -142,7 +142,7 @@ def load_business_from_db(db_business: DBBusiness) -> BusinessScenario:
     )
     # Shifts drawn past the stored opening/closing hours used to be clipped.
     # Widen the hours to fit them and store the fix so every page agrees.
-    if scenario.expand_hours_to_shifts():
+    if scenario.expand_hours_to_shifts(snap=True):
         try:
             db_business.start_hour = scenario.start_hour
             db_business.end_hour = scenario.end_hour

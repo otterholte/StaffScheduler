@@ -668,15 +668,26 @@ class BusinessScenario:
     def get_operating_hours(self) -> range:
         return range(self.start_hour, self.end_hour)
 
-    def expand_hours_to_shifts(self) -> bool:
-        """Widen operating hours and open days so every shift template fits.
+    def expand_hours_to_shifts(self, snap: bool = False) -> bool:
+        """Make operating hours and open days fit every shift template.
 
         The shifts a manager draws on the Requirements calendar are the source
         of truth for when the business needs people. Without this, a shift
         drawn past closing time was silently clipped and nobody was scheduled
-        for those hours. Never narrows; returns True when something changed.
+        for those hours. Returns True when something changed.
+
+        Default: only widen (a manager editing one shift should not see the
+        hours they set shrink). ``snap=True``: when any shift falls outside the
+        stored hours, those hours are clearly stale, so set them to exactly the
+        span of the shifts (used when repairing businesses saved before the fix).
         """
         changed = False
+        if snap and self.shift_templates:
+            lo = min(int(s.start_hour) for s in self.shift_templates)
+            hi = max(int(s.end_hour) for s in self.shift_templates)
+            if lo < self.start_hour or hi > self.end_hour:
+                self.start_hour, self.end_hour = max(0, lo), min(24, hi)
+                changed = True
         for shift in self.shift_templates:
             if shift.start_hour < self.start_hour:
                 self.start_hour = max(0, int(shift.start_hour))
